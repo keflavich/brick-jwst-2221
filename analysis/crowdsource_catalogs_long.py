@@ -39,6 +39,7 @@ for filtername in ('F405N', 'F410M', 'F466N'):
 
         im1 = fh
         data = im1[1].data
+        err = im1[2].data
         instrument = im1[0].header['INSTRUME']
         telescope = im1[0].header['TELESCOP']
         filt = im1[0].header['FILTER']
@@ -60,13 +61,13 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         cen = ww.pixel_to_world(im1[1].shape[1]/2, im1[1].shape[0]/2) 
         reg = regions.RectangleSkyRegion(center=cen, width=1.5*u.arcmin, height=1.5*u.arcmin)
         preg = reg.to_pixel(ww)
-        mask = preg.to_mask()
-        cutout = mask.cutout(im1[1].data)
-        errcutout = mask.cutout(im1[2].data)
+        #mask = preg.to_mask()
+        #cutout = mask.cutout(im1[1].data)
+        #err = mask.cutout(im1[2].data)
 
-        weight = errcutout**-2
-        weight[errcutout < 1e-5] = 0
-        weight[errcutout == 0] = np.nanmedian(weight)
+        weight = err**-2
+        weight[err < 1e-5] = 0
+        weight[err == 0] = np.nanmedian(weight)
 
         maxweight = np.nanpercentile(weight, 99)
         minweight = np.nanpercentile(weight, 1)
@@ -80,7 +81,7 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         stars, modsky, skymsky, psf = results_unweighted
 
         fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits", overwrite=True)
-        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits")
+        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
 
         pl.figure(figsize=(12,12))
@@ -93,7 +94,7 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
         pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_F444W-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
                    bbox_inches='tight')
 
         pl.figure(figsize=(12,12))
@@ -107,7 +108,7 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
         pl.axis([0,128,0,128])
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_F444W-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
                    bbox_inches='tight')
 
         # pl.figure(figsize=(10,5))
@@ -131,23 +132,23 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         pl.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar();
 
 
-        results_blur  = fit_im(cutout, psf_model_blur, weight=weight,
+        results_blur  = fit_im(data, psf_model_blur, weight=weight,
                             nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_blur
         fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
-        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits")
+        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits", overwrite=True)
 
 
 
         stars, modsky, skymsky, psf = results_blur
         pl.figure(figsize=(12,12))
-        pl.subplot(2,2,1).imshow(cutout[:128,:128], norm=simple_norm(cutout[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,1).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("Data")
         pl.subplot(2,2,2).imshow(modsky[:128,:128], norm=simple_norm(modsky[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-        pl.subplot(2,2,3).imshow((cutout-modsky)[:128,:128], norm=simple_norm((cutout-modsky)[:256,:256], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+        pl.subplot(2,2,3).imshow((data-modsky)[:128,:128], norm=simple_norm((data-modsky)[:256,:256], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
-        pl.subplot(2,2,4).imshow(cutout[:128,:128], norm=simple_norm(cutout[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,4).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
         pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
         pl.axis([0,128,0,128])
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
