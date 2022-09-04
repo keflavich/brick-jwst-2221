@@ -1,3 +1,4 @@
+import numpy as np
 import crowdsource
 import regions
 import numpy as np
@@ -39,7 +40,7 @@ for filtername in ('F405N', 'F410M', 'F466N'):
 
         im1 = fh
         data = im1[1].data
-        err = im1[2].data
+        weight = im1['WHT'].data
         instrument = im1[0].header['INSTRUME']
         telescope = im1[0].header['TELESCOP']
         filt = im1[0].header['FILTER']
@@ -65,14 +66,15 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         #cutout = mask.cutout(im1[1].data)
         #err = mask.cutout(im1[2].data)
 
-        weight = err**-2
-        weight[err < 1e-5] = 0
-        weight[err == 0] = np.nanmedian(weight)
+        # weight = err**-2
+        # weight[err < 1e-5] = 0
+        # weight[err == 0] = np.nanmedian(weight)
+        # weight[np.isnan(weight)] = 0
 
-        maxweight = np.nanpercentile(weight, 99)
-        minweight = np.nanpercentile(weight, 1)
-        weight[weight > maxweight] = maxweight
-        weight[weight < minweight] = minweight
+        # maxweight = np.nanpercentile(weight, 99)
+        # minweight = np.nanpercentile(weight, 1)
+        # weight[weight > maxweight] = maxweight
+        # weight[weight < minweight] = minweight
 
 
         results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
@@ -130,6 +132,8 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         psf_model_blur = crowdsource.psf.SimplePSF(stamp=gpsf3)
 
         pl.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar();
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_weights.png',
+                   bbox_inches='tight')
 
 
         results_blur  = fit_im(data, psf_model_blur, weight=weight,
@@ -137,6 +141,8 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         stars, modsky, skymsky, psf = results_blur
         fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
         fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits", overwrite=True)
+        fits.PrimaryHDU(data=data-modsky,
+                        header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_data-modsky.fits", overwrite=True)
 
 
 
