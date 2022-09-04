@@ -36,7 +36,7 @@ for filtername in ('F212N', 'F182M', 'F187N'):
 
             im1 = fh
             data = im1[1].data
-            err = im1[2].data
+            weight = im1['WHT'].data
             instrument = im1[0].header['INSTRUME']
             telescope = im1[0].header['TELESCOP']
             filt = im1[0].header['FILTER']
@@ -62,14 +62,15 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             #cutout = mask.cutout(im1[1].data)
             #err = mask.cutout(im1[2].data)
 
-            weight = err**-2
-            weight[err < 1e-5] = 0
-            weight[err == 0] = np.nanmedian(weight)
+            # weight = err**-2
+            # weight[err < 1e-5] = 0
+            # weight[err == 0] = np.nanmedian(weight)
+            # weight[np.isnan(weight)] = 0
 
-            maxweight = np.nanpercentile(weight, 99)
-            minweight = np.nanpercentile(weight, 1)
-            weight[weight > maxweight] = maxweight
-            weight[weight < minweight] = minweight
+            # maxweight = np.nanpercentile(weight, 99)
+            # minweight = np.nanpercentile(weight, 1)
+            # weight[weight > maxweight] = maxweight
+            # weight[weight < minweight] = minweight
 
 
             results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
@@ -127,7 +128,11 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             gpsf3 = convolve(gpsf2, Gaussian2DKernel(smoothing_scale))
             psf_model_blur = crowdsource.psf.SimplePSF(stamp=gpsf3)
 
+            fig = pl.figure(0, figsize=(10,10))
+            fig.clf()
             pl.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar();
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_weights.png',
+                    bbox_inches='tight')
 
 
             results_blur  = fit_im(data, psf_model_blur, weight=weight,
