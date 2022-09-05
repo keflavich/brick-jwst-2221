@@ -9,6 +9,8 @@ from astropy import wcs
 from astropy import table
 from astropy import units as u
 from astropy.io import fits
+import urllib3.exceptions
+import requests
 
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
@@ -28,7 +30,7 @@ import webbpsf
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-for filtername in ('F212N', 'F182M', 'F187N'):
+for filtername in ('F212N', 'F182M', 'F187N')[::-1]:
     for module in ('nrca', 'nrcb'):
         for detector in range(1,5):
             pupil = 'clear'
@@ -36,7 +38,8 @@ for filtername in ('F212N', 'F182M', 'F187N'):
 
             im1 = fh
             data = im1[1].data
-            weight = im1['WHT'].data
+            wht = im1['WHT'].data
+            err = im1['ERR'].data
             instrument = im1[0].header['INSTRUME']
             telescope = im1[0].header['TELESCOP']
             filt = im1[0].header['FILTER']
@@ -44,11 +47,17 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
             obsdate = im1[0].header['DATE-OBS']
 
-            nrc = webbpsf.NIRCam()
-            nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
-            nrc.filter = filt
-            nrc.detector = f'{module.upper()}{detector}'
-            grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+            success = False
+            while not success:
+                try:
+                    nrc = webbpsf.NIRCam()
+                    nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+                    nrc.filter = filt
+                    nrc.detector = f'{module.upper()}{detector}'
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+                    success = True
+                except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout) as ex:
+                    print(f"Failed to build PSF: {ex}")
 
             yy, xx = np.indices([31,31], dtype=float)
             grid.x_0 = grid.y_0 = 15.5
@@ -62,15 +71,15 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             #cutout = mask.cutout(im1[1].data)
             #err = mask.cutout(im1[2].data)
 
-            # weight = err**-2
-            # weight[err < 1e-5] = 0
-            # weight[err == 0] = np.nanmedian(weight)
-            # weight[np.isnan(weight)] = 0
+            weight = err**-2
+            maxweight = np.percentile(weight[np.isinfite(weight)], 95)
+            minweight = np.percentile(weight[np.isinfite(weight)], 5)
+            weight[err < 1e-5] = 0
+            weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
+            weight[np.isnan(weight)] = 0
 
-            # maxweight = np.nanpercentile(weight, 99)
-            # minweight = np.nanpercentile(weight, 1)
-            # weight[weight > maxweight] = maxweight
-            # weight[weight < minweight] = minweight
+            weight[weight > maxweight] = maxweight
+            weight[weight < minweight] = minweight
 
 
             results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
@@ -78,8 +87,8 @@ for filtername in ('F212N', 'F182M', 'F187N'):
                                             nskyx=1, nskyy=1, refit_psf=False, verbose=True)
             stars, modsky, skymsky, psf = results_unweighted
 
-            fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits", overwrite=True)
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits", overwrite=True)
+            fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits", overwrite=True)
+            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
 
             pl.figure(figsize=(12,12))
@@ -92,7 +101,7 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
 
             pl.figure(figsize=(12,12))
@@ -106,7 +115,7 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}_catalog_diagnostics_zoom_unweighted.png',
                     bbox_inches='tight')
 
             # pl.figure(figsize=(10,5))
@@ -130,16 +139,17 @@ for filtername in ('F212N', 'F182M', 'F187N'):
 
             fig = pl.figure(0, figsize=(10,10))
             fig.clf()
-            pl.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar();
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_weights.png',
+            ax = fig.gca()
+            im = ax.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar(mappable=im);
+            fig.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_weights.png',
                     bbox_inches='tight')
 
 
             results_blur  = fit_im(data, psf_model_blur, weight=weight,
                                 nskyx=1, nskyy=1, refit_psf=False, verbose=True)
             stars, modsky, skymsky, psf = results_blur
-            fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits", overwrite=True)
+            fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource.fits", overwrite=True)
+            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_skymodel.fits", overwrite=True)
 
 
 
@@ -157,7 +167,7 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.suptitle("Using WebbPSF model blurred a little")
             pl.tight_layout()
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_catalog_diagnostics_zoom.png',
                     bbox_inches='tight')
 
             pl.figure(figsize=(12,12))
@@ -170,5 +180,5 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_catalog_diagnostics.png',
                     bbox_inches='tight')
