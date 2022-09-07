@@ -67,9 +67,10 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         #cutout = mask.cutout(im1[1].data)
         #err = mask.cutout(im1[2].data)
 
-        weight = err**-2
-        maxweight = np.percentile(weight[np.isinfite(weight)], 95)
-        minweight = np.percentile(weight[np.isinfite(weight)], 5)
+        # crowdsource uses inverse-sigma, not inverse-variance
+        weight = err**-1
+        maxweight = np.percentile(weight[np.isfinite(weight)], 95)
+        minweight = np.percentile(weight[np.isfinite(weight)], 5)
         weight[err < 1e-5] = 0
         weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
         weight[np.isnan(weight)] = 0
