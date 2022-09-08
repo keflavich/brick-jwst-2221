@@ -294,6 +294,9 @@ def main():
             asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
             if len(asn_file_search) == 1:
                 asn_file = asn_file_search[0]
+            elif len(asn_file_search) > 1:
+                asn_file = sorted(asn_file_search)[-1]
+                print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
             else:
                 raise ValueError("Mismatch")
 
