@@ -326,8 +326,50 @@ def main():
                 for par in tweakreg_parameters:
                     setattr(image3.tweakreg, par, tweakreg_parameters[par])
 
+                image3.tweakreg.fit_geometry = 'general'
+                image3.tweakreg.brightest = 10000
+
                 image3.run(asn_file_each)
                 print(f"DONE running {asn_file_each}")
+
+
+        # try merging all frames & modules
+
+        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
+        if len(asn_file_search) == 1:
+            asn_file = asn_file_search[0]
+        elif len(asn_file_search) > 1:
+            asn_file = sorted(asn_file_search)[-1]
+            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+        else:
+            raise ValueError("Mismatch")
+
+        mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+        tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if x[1] == filtername][0][4]
+        tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
+        tweakreg_parameters = tweakreg_asdf.tree['parameters']
+        print(f'Filter {filtername}: {tweakreg_parameters}')
+
+        with open(asn_file) as f_obj:
+            asn_data = json.load(f_obj)
+        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
+        asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
+        with open(asn_file_merged, 'w') as fh:
+            json.dump(asn_data, fh)
+
+        image3 = calwebb_image3.Image3Pipeline()
+
+        image3.output_dir = output_dir
+        image3.save_results = True
+        for par in tweakreg_parameters:
+            setattr(image3.tweakreg, par, tweakreg_parameters[par])
+
+        image3.tweakreg.fit_geometry = 'general'
+        image3.tweakreg.brightest = 10000
+
+        image3.run(asn_file_merged)
+        print(f"DONE running {asn_file_merged}")
+
 
     globals().update(locals())
     return locals()
