@@ -322,6 +322,9 @@ def main():
             for par in tweakreg_parameters:
                 setattr(image3.tweakreg, par, tweakreg_parameters[par])
 
+            image3.tweakreg.fit_geometry = 'general'
+            image3.tweakreg.brightest = 10000
+
             image3.run(asn_file_each)
             print(f"DONE running {asn_file_each}")
 
