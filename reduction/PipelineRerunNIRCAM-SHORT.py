@@ -33,6 +33,29 @@ print(jwst.__version__)
 
 
 
+def destreak(frame, percentile=5, overwrite=True):
+    assert frame.endswith('_cal.fits')
+    hdu = fits.open(frame)
+    data = hdu[('SCI', 1)].data
+
+    for start in range(0, 2048, 512):
+        chunk = data[:, slice(start, start+512)]
+        pct = np.percentile(chunk, percentile, axis=1)
+        data[:, slice(start, start+512)] = chunk - pct[:,None] + np.median(pct)
+    
+    hdu[('SCI', 1)].data = data
+    
+    outname = frame.replace("_cal.fits", "_destreak.fits")
+    hdu.writeto(outname, overwrite=overwrite)
+
+    return outname
+        
+        
+    
+    
+
+
+
 def main():
 
 
@@ -172,6 +195,11 @@ def main():
             asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}'
             asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                                 if f'{module}' in row['expname']]
+
+            for member in asn_data['products'][0]['members']:
+                outname = destreak(member['expname'])
+                member['expname'] = outname
+
             asn_file_each = asn_file.replace("_asn.json", f"_{module}_alldetectors_asn.json")
             with open(asn_file_each, 'w') as fh:
                 json.dump(asn_data, fh)
@@ -203,50 +231,51 @@ def main():
             print(f"DONE running {asn_file_each}")
 
 
-        # try merging all frames & modules
+        if False:
+            # try merging all frames & modules
 
-        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
-        if len(asn_file_search) == 1:
-            asn_file = asn_file_search[0]
-        elif len(asn_file_search) > 1:
-            asn_file = sorted(asn_file_search)[-1]
-            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
-        else:
-            raise ValueError("Mismatch")
+            asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
+            if len(asn_file_search) == 1:
+                asn_file = asn_file_search[0]
+            elif len(asn_file_search) > 1:
+                asn_file = sorted(asn_file_search)[-1]
+                print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+            else:
+                raise ValueError("Mismatch")
 
-        mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
-        tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if x[1] == filtername][0][4]
-        tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
-        tweakreg_parameters = tweakreg_asdf.tree['parameters']
-        print(f'Filter {filtername}: {tweakreg_parameters}')
+            mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+            tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if x[1] == filtername][0][4]
+            tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
+            tweakreg_parameters = tweakreg_asdf.tree['parameters']
+            print(f'Filter {filtername}: {tweakreg_parameters}')
 
-        with open(asn_file) as f_obj:
-            asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
-        asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
-        with open(asn_file_merged, 'w') as fh:
-            json.dump(asn_data, fh)
+            with open(asn_file) as f_obj:
+                asn_data = json.load(f_obj)
+            asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
+            asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
+            with open(asn_file_merged, 'w') as fh:
+                json.dump(asn_data, fh)
 
-        image3 = calwebb_image3.Image3Pipeline()
+            image3 = calwebb_image3.Image3Pipeline()
 
-        image3.output_dir = output_dir
-        image3.save_results = True
-        for par in tweakreg_parameters:
-            setattr(image3.tweakreg, par, tweakreg_parameters[par])
+            image3.output_dir = output_dir
+            image3.save_results = True
+            for par in tweakreg_parameters:
+                setattr(image3.tweakreg, par, tweakreg_parameters[par])
 
-        # try .... something else?
-        image3.tweakreg.brightest = 2000
-        image3.tweakreg.snr_threshold = 15
-        image3.tweakreg.nclip = 7
-        image3.tweakreg.peakmax = 1400
+            # try .... something else?
+            image3.tweakreg.brightest = 2000
+            image3.tweakreg.snr_threshold = 15
+            image3.tweakreg.nclip = 7
+            image3.tweakreg.peakmax = 1400
 
-        image3.tweakreg.searchrad = 1 # 1 arcsec instead of 2
-        image3.tweakreg.separation = 0.4 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
-        image3.tweakreg.tolerance = 0.2 # max tolerance 0.2 instead of 0.7
+            image3.tweakreg.searchrad = 1 # 1 arcsec instead of 2
+            image3.tweakreg.separation = 0.4 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
+            image3.tweakreg.tolerance = 0.2 # max tolerance 0.2 instead of 0.7
 
 
-        image3.run(asn_file_merged)
-        print(f"DONE running {asn_file_merged}")
+            image3.run(asn_file_merged)
+            print(f"DONE running {asn_file_merged}")
 
 
     globals().update(locals())
