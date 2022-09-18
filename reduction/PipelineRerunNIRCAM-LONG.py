@@ -203,3 +203,13 @@ def main():
 
 if __name__ == "__main__":
     results = main()
+
+    from run_notebook import run_notebook
+    basepath = '/orange/adamginsburg/jwst/brick/'
+    run_notebook(f'{basepath}/notebooks/BrA_separation_nrca.ipynb')
+    run_notebook(f'{basepath}/notebooks/BrA_separation_nrcb.ipynb')
+    run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
+    run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
+    run_notebook(f'{basepath}/notebooks/StarKILLER_nrca.ipynb')
+    run_notebook(f'{basepath}/notebooks/StarKILLER_nrcb.ipynb')
+    run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
