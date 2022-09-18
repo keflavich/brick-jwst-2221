@@ -35,6 +35,10 @@ import pprint
 import jwst
 print(jwst.__version__)
 
+# see 'destreak410.ipynb' for tests of this
+medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
+
+
 def main():
 
 
@@ -120,7 +124,7 @@ def main():
                                                         if f'{module}' in row['expname']]
 
                 for member in asn_data['products'][0]['members']:
-                    outname = destreak(member['expname'])
+                    outname = destreak(member['expname'], median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
 
 
@@ -171,7 +175,7 @@ def main():
             asn_data = json.load(f_obj)
 
         for member in asn_data['products'][0]['members']:
-            outname = destreak(member['expname'])
+            outname = destreak(member['expname'], median_filter_size=medfilt_size[filtername])
             member['expname'] = outname
 
         asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'

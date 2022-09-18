@@ -34,11 +34,13 @@ import pprint
 import jwst
 print(jwst.__version__)
 
-
+# see 'destreak187.ipynb' for tests of this
+# really this is just eyeballed; probably the 1/f noise is present at the same level in all of these, but you can't see it as well on
+# the medium-band filters.
+medfilt_size = {'F182M': 55, 'F187N': 256, 'F212N': 512}
 
 
 def main():
-
 
     os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds-pub.stsci.edu"
@@ -178,7 +180,7 @@ def main():
                                                 if f'{module}' in row['expname']]
 
             for member in asn_data['products'][0]['members']:
-                outname = destreak(member['expname'])
+                outname = destreak(member['expname'], median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
 
             asn_file_each = asn_file.replace("_asn.json", f"_{module}_alldetectors_asn.json")
