@@ -25,6 +25,8 @@ from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from destreak import destreak
 
+from align_to_catalogs import realign_to_vvv
+
 import crds
 
 import pprint
@@ -208,6 +210,7 @@ def main():
 
             image3.run(asn_file_each)
             print(f"DONE running {asn_file_each}")
+            realign_to_vvv(filtername=filtername.lower(), module=module)
 
 
         if False:
@@ -255,6 +258,8 @@ def main():
 
             image3.run(asn_file_merged)
             print(f"DONE running {asn_file_merged}")
+
+            realign_to_vvv(filtername=filtername.lower(), module=module)
 
 
     globals().update(locals())
