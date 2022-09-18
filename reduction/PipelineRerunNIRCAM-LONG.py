@@ -24,6 +24,10 @@ from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
+from align_to_catalogs import realign_to_vvv
+
+from destreak import destreak
+
 import crds
 
 import pprint
@@ -90,7 +94,7 @@ def main():
                 print(f"Failed to move file with error {ex}")
 
 
-        if False:
+        if True:
             for module in ('nrca', 'nrcb'):
                 print(f"Filter {filtername} module {module}")
                 print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json')}")
@@ -114,6 +118,12 @@ def main():
                 asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}'
                 asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                                         if f'{module}' in row['expname']]
+
+                for member in asn_data['products'][0]['members']:
+                    outname = destreak(member['expname'])
+                    member['expname'] = outname
+
+
                 asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
                 with open(asn_file_each, 'w') as fh:
                     json.dump(asn_data, fh)
@@ -132,6 +142,8 @@ def main():
 
                 image3.run(asn_file_each)
                 print(f"DONE running {asn_file_each}")
+
+                realign_to_vvv(filtername=filtername.lower(), module=module)
 
         # try merging all frames & modules
 
@@ -157,6 +169,11 @@ def main():
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
+
+        for member in asn_data['products'][0]['members']:
+            outname = destreak(member['expname'])
+            member['expname'] = outname
+
         asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
         with open(asn_file_merged, 'w') as fh:
@@ -176,6 +193,8 @@ def main():
 
         image3.run(asn_file_merged)
         print(f"DONE running {asn_file_merged}")
+
+        realign_to_vvv(filtername=filtername.lower(), module='merged')
 
 
 

@@ -23,6 +23,7 @@ from jwst.source_catalog import SourceCatalogStep
 from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
+from destreak import destreak
 
 import crds
 
@@ -33,28 +34,6 @@ print(jwst.__version__)
 
 
 
-def destreak(frame, percentile=5, overwrite=True):
-    assert frame.endswith('_cal.fits')
-    hdu = fits.open(frame)
-    data = hdu[('SCI', 1)].data
-
-    for start in range(0, 2048, 512):
-        chunk = data[:, slice(start, start+512)]
-        pct = np.percentile(chunk, percentile, axis=1)
-        data[:, slice(start, start+512)] = chunk - pct[:,None] + np.median(pct)
-    
-    hdu[('SCI', 1)].data = data
-    
-    outname = frame.replace("_cal.fits", "_destreak.fits")
-    hdu.writeto(outname, overwrite=overwrite)
-
-    return outname
-        
-        
-    
-    
-
-
 
 def main():
 
@@ -63,7 +42,7 @@ def main():
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds-pub.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
-    
+
     with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     Mast.login(api_token.strip())
