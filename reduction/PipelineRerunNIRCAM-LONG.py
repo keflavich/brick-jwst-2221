@@ -210,8 +210,8 @@ if __name__ == "__main__":
 
     from run_notebook import run_notebook
     basepath = '/orange/adamginsburg/jwst/brick/'
-    run_notebook(f'{basepath}/notebooks/BrA_separation_nrca.ipynb')
-    run_notebook(f'{basepath}/notebooks/BrA_separation_nrcb.ipynb')
+    run_notebook(f'{basepath}/notebooks/BrA_Separation_nrca.ipynb')
+    run_notebook(f'{basepath}/notebooks/BrA_Separation_nrcb.ipynb')
     run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
     run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
     run_notebook(f'{basepath}/notebooks/StarKILLER_nrca.ipynb')

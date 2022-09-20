@@ -32,7 +32,8 @@ basepath = '/orange/adamginsburg/jwst/brick/'
 
 for filtername in ('F212N', 'F182M', 'F187N')[::-1]:
     for module in ('nrca', 'nrcb'):
-        for detector in range(1,5):
+        for detector in ("", ):  # or range(1,5)
+            # detector="" is for the merged version, which should be OK
             pupil = 'clear'
             fh = fits.open(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_i2d.fits')
 
@@ -53,8 +54,19 @@ for filtername in ('F212N', 'F182M', 'F187N')[::-1]:
                     nrc = webbpsf.NIRCam()
                     nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                     nrc.filter = filt
-                    nrc.detector = f'{module.upper()}{detector}'
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+                    # TODO: figure out whether a blank detector works here (i.e., if it's possible to specify only the module)
+                    if detector:
+                        nrc.detector = f'{module.upper()}{detector}'
+                        all_detectors = False
+                    else:
+                        # should be "A" or "B"
+                        # https://github.com/spacetelescope/webbpsf/blob/ad994bf6619a483061c5e7f8f8c2e327eb4d6145/webbpsf/webbpsf_core.py#L1969
+                        # nrc.module = module.upper()[-1]
+                        # "NIRCam module is not directly settable; set detector instead."
+                        # I tried using 'all detectors' but that changes the returned data structure
+                        all_detectors = False
+                        pass
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=all_detectors)
                     success = True
                 except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout) as ex:
                     print(f"Failed to build PSF: {ex}")

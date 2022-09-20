@@ -37,7 +37,7 @@ print(jwst.__version__)
 # see 'destreak187.ipynb' for tests of this
 # really this is just eyeballed; probably the 1/f noise is present at the same level in all of these, but you can't see it as well on
 # the medium-band filters.
-medfilt_size = {'F182M': 55, 'F187N': 256, 'F212N': 512}
+medfilt_size = {'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 
 def main():
