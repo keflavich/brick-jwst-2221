@@ -46,7 +46,7 @@ def main():
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds-pub.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
-    
+
     with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     Mast.login(api_token.strip())
@@ -124,7 +124,9 @@ def main():
                                                         if f'{module}' in row['expname']]
 
                 for member in asn_data['products'][0]['members']:
-                    outname = destreak(member['expname'], median_filter_size=medfilt_size[filtername])
+                    outname = destreak(member['expname'],
+                                       use_background_map=True,
+                                       median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
 
 
@@ -175,7 +177,9 @@ def main():
             asn_data = json.load(f_obj)
 
         for member in asn_data['products'][0]['members']:
-            outname = destreak(member['expname'], median_filter_size=medfilt_size[filtername])
+            outname = destreak(member['expname'],
+                               use_background_map=True,
+                               median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
             member['expname'] = outname
 
         asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'

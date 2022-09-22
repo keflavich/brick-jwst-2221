@@ -180,7 +180,9 @@ def main():
                                                 if f'{module}' in row['expname']]
 
             for member in asn_data['products'][0]['members']:
-                outname = destreak(member['expname'], median_filter_size=medfilt_size[filtername])
+                # changed filter size to be maximal now that we're using the background
+                outname = destreak(member['expname'], median_filter_size=2048,
+                                   use_background_map=True)  # medfilt_size[filtername])
                 member['expname'] = outname
 
             asn_file_each = asn_file.replace("_asn.json", f"_{module}_alldetectors_asn.json")
