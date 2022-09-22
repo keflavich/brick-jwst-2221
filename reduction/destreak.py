@@ -16,7 +16,8 @@ background_mapping = {
 }
 
 
-def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128, percentile=10):
+def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
+                                       percentile=10, regs=None):
     """
     Use a local, large-scale percentile to estimate the "zero spacing"
     background level across the image.
@@ -25,6 +26,17 @@ def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128, percent
     the destreaking process.
     """
     img = fits.getdata(filename, ext=ext)
+    header = fits.getheader(filename, ext=ext)
+    ww = WCS(header)
+
+    img[img == 0] = np.nan
+
+    if regs is not None:
+        for reg in regs:
+            preg = reg.to_pixel(ww)
+            mask = preg.to_mask()
+            slcs,smslcs = mask.get_overlap_slices(img.shape)
+            img[slcs][mask.data.astype('bool')[smslcs]] = np.nan
 
     # the bottom-left pixel will now be centered at (dx/2 + 1) in FITS coordinates
     chunks = [[img[(slice(sty, sty+dx), slice(stx, stx+dx))]
@@ -32,15 +44,12 @@ def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128, percent
             for sty in range(0, img.shape[0], dx//2)
             ]
 
-    # only include positive values
+    # only include positive values (actually no that didn't work)
     arr = np.array(
-        [[np.percentile(ch[ch > 0], percentile) if np.any(ch > 0) else 0
+        [[np.nanpercentile(ch, percentile)  # if np.any(ch > 0) else 0
           for ch in row]
          for row in chunks]
     )
-
-    header = fits.getheader(filename, ext=ext)
-    ww = WCS(header)
 
     # I can never remember how to do this, but I'm *certain* this is wrong (independent of what this next line says:)
     # but empirically I'm _pretty_ sure dx/4 + 0.5 looks like it matches maybe
