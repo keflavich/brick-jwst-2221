@@ -218,6 +218,6 @@ if __name__ == "__main__":
     run_notebook(f'{basepath}/notebooks/BrA_Separation_nrcb.ipynb')
     run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
     run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
-    run_notebook(f'{basepath}/notebooks/StarKILLER_nrca.ipynb')
-    run_notebook(f'{basepath}/notebooks/StarKILLER_nrcb.ipynb')
+    run_notebook(f'{basepath}/notebooks/StarDestroyer_nrca.ipynb')
+    run_notebook(f'{basepath}/notebooks/StarDestroyer_nrcb.ipynb')
     run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
