@@ -17,7 +17,7 @@ background_mapping = {
 
 
 def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
-                                       percentile=10, regs=None):
+                                       percentile=10, regs=None, progressbar=lambda x: x):
     """
     Use a local, large-scale percentile to estimate the "zero spacing"
     background level across the image.
@@ -38,22 +38,27 @@ def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
             slcs,smslcs = mask.get_overlap_slices(img.shape)
             img[slcs][mask.data.astype('bool')[smslcs]] = np.nan
 
-    # the bottom-left pixel will now be centered at (dx/2 + 1) in FITS coordinates
-    chunks = [[img[(slice(sty, sty+dx), slice(stx, stx+dx))]
-            for stx in range(0, img.shape[1], dx//2)]
-            for sty in range(0, img.shape[0], dx//2)
+    # the bottom-left pixel will be centered at (dx/2 + 1) in FITS coordinates if we start at 0
+    # so we start at -dx/4 so that the bottom-left pixel is centered at 1,1
+    # (BLC of image is at -0.5, -0.5 in FITS, pixel size is dx/2, so offset is dx/4)
+    # we don't want to wrap, so we use max(pixel, 0)
+    # the percentile will be over a smaller region, but that should be OK
+    chunks = [[img[(slice(max(sty, 0), sty+dx), slice(max(stx, 0), stx+dx))]
+            for stx in range(-dx//4, img.shape[1]+dx//2, dx//2)]
+            for sty in range(-dx//4, img.shape[0]+dx//2, dx//2)
             ]
 
     # only include positive values (actually no that didn't work)
     arr = np.array(
         [[np.nanpercentile(ch, percentile)  # if np.any(ch > 0) else 0
           for ch in row]
-         for row in chunks]
+         for row in progressbar(chunks)]
     )
 
     # I can never remember how to do this, but I'm *certain* this is wrong (independent of what this next line says:)
     # but empirically I'm _pretty_ sure dx/4 + 0.5 looks like it matches maybe
-    wwsl = ww[dx/4+0.5::dx//2, dx/4+0.5::dx//2]
+    # with revised version, we drop the shift
+    wwsl = ww[::dx//2, ::dx//2]
 
     return fits.PrimaryHDU(data=arr, header=wwsl.to_header())
 
@@ -105,7 +110,7 @@ def add_background_map(data, hdu, background_mapping=background_mapping,
     for start in range(0, 2048, 512):
         # pixel coordinates (px)
         pxy = np.arange(2048)
-        pxx = np.ones(2048) * (start + 512) / 2
+        pxx = np.ones(2048) * (start + 256)
         crds = ww.pixel_to_world(pxx, pxy)
 
         wwbg = WCS(fits.getheader(bgfile))
@@ -144,13 +149,15 @@ def destreak(frame, percentile=10, median_filter_size=256, overwrite=True, write
 
     data = hdu[('SCI', 1)].data
 
-    hdu[('SCI', 1)].data = destreak_data(data, percentile=percentile,
-                                         median_filter_size=median_filter_size,
-                                         add_smoothed=not use_background_map
+    data = destreak_data(data, percentile=percentile,
+                         median_filter_size=median_filter_size,
+                         add_smoothed=not use_background_map
                                          )
 
     if use_background_map:
-        hdu[('SCI', 1)].data = add_background_map(data, hdu, background_mapping=background_mapping)
+        data = add_background_map(data, hdu, background_mapping=background_mapping)
+
+    hdu[('SCI', 1)].data = data
 
     if write:
         outname = frame.replace("_cal.fits", "_destreak.fits")

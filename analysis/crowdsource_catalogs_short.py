@@ -195,3 +195,62 @@ for filtername in ('F212N', 'F182M', 'F187N')[::-1]:
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_catalog_diagnostics.png',
                     bbox_inches='tight')
+
+
+
+            filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
+            filter_table.add_index('filterID')
+            instrument = 'NIRCam'
+            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filt}']['WavelengthEff'] * u.AA
+
+            fwhm = (1.22 * eff_wavelength / (6.5*u.m)).to(u.arcsec, u.dimensionless_angles())
+
+            pixscale = ww.proj_plane_pixel_area()**0.5
+            fwhm_pix = (fwhm / pixscale).decompose().value
+
+            daogroup = DAOGroup(2 * fwhm_pix)
+            mmm_bkg = MMMBackground()
+
+            filtered_errest = stats.mad_std(data, ignore_nan=True)
+            print(f'Error estimate for DAO: {filtered_errest}')
+
+            daofind_fin = DAOStarFinder(threshold=10 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+                                        sharplo=0.30, sharphi=1.40)
+            finstars = daofind_fin(data)
+
+            grid.x_0 = 0
+            grid.y_0 = 0
+            def evaluate(x, y, flux, x_0, y_0):
+                """
+                Evaluate the `GriddedPSFModel` for the input parameters.
+                """
+                # Get the local PSF at the (x_0,y_0)
+                psfmodel = grid._compute_local_model(x_0+slcs[1].start, y_0+slcs[0].start)
+
+                # now evaluate the PSF at the (x_0, y_0) subpixel position on
+                # the input (x, y) values
+                return psfmodel.evaluate(x, y, flux, x_0, y_0)
+            grid.evaluate = evaluate
+
+            phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
+                                      group_maker=daogroup,
+                                      bkg_estimator=None, # must be none or it un-saturates pixels
+                                      psf_model=grid,
+                                      fitter=LevMarLSQFitter(),
+                                      fitshape=(11, 11),
+                                      aperture_radius=5*fwhm_pix)
+
+            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
+                                                       bkg_estimator=mmm_bkg,
+                                                       psf_model=grid,
+                                                       fitter=LevMarLSQFitter(),
+                                                       niters=2, fitshape=(11, 11),
+                                                       aperture_radius=2*fwhm_pix)
+
+            result = phot(data)
+            result['skycoord_centroid'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+            result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
+
+            result2 = phot_(data)
+            result2['skycoord_centroid'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
