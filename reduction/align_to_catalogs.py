@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astroquery.gaia import Gaia
@@ -33,8 +34,14 @@ def realign_to_vvv(
     width = fov[0].width
     height, width = width, height # CARTA wrote it wrong
 
-    Vizier.ROW_LIMIT = 5e4
-    vvvdr2 = Vizier.query_region(coordinates=coord, width=width, height=height, catalog=['II/348/vvv2'])[0]
+    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
+
+    if os.path.exists(vvvdr2filename):
+        vvvdr2 = Table.read(vvvdr2filename)
+    else:
+        Vizier.ROW_LIMIT = 5e4
+        vvvdr2 = Vizier.query_region(coordinates=coord, width=width, height=height, catalog=['II/348/vvv2'])[0]
+        vvvdr2.write(vvvdr2filename, overwrite=True)
 
     # FK5 because it says 'J2000' on the Vizier page (same as twomass)
     vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
@@ -73,6 +80,10 @@ def realign_to_vvv(
         hdulist[1].header.update(ww.to_header())
         print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
 
+    # re-load the WCS to make sure it worked
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
     idx, sidx, sep, sep3d = vvvdr2_crds.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
@@ -80,6 +91,8 @@ def realign_to_vvv(
     ddec = (skycrds_cat_new[sel][idx].dec - vvvdr2_crds[sidx].dec).to(u.arcsec)
 
     print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+
+    return hdulist
 
 def mihais_versin():
     """
