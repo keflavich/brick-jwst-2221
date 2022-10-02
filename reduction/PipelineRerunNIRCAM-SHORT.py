@@ -7,6 +7,7 @@ import numpy as np
 import json
 # import requests
 import asdf
+from astropy import log
 from astropy.io import ascii, fits
 from astropy.utils.data import download_file
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
@@ -42,6 +43,7 @@ medfilt_size = {'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 def main():
 
+    basepath = '/orange/adamginsburg/jwst/brick/'
     os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds-pub.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
@@ -214,10 +216,11 @@ def main():
 
             image3.run(asn_file_each)
             print(f"DONE running {asn_file_each}")
-            realign_to_vvv(filtername=filtername.lower(), module=module)
+            realigned = realign_to_vvv(filtername=filtername.lower(), module=module)
 
 
-        if False:
+        if True:
+            log.info("Running merged frames")
             # try merging all frames & modules
 
             asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
@@ -238,6 +241,13 @@ def main():
             with open(asn_file) as f_obj:
                 asn_data = json.load(f_obj)
             asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
+
+            for member in asn_data['products'][0]['members']:
+                # changed filter size to be maximal now that we're using the background
+                outname = destreak(member['expname'], median_filter_size=2048,
+                                   use_background_map=True)  # medfilt_size[filtername])
+                member['expname'] = outname
+
             asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
             with open(asn_file_merged, 'w') as fh:
                 json.dump(asn_data, fh)
@@ -248,6 +258,14 @@ def main():
             image3.save_results = True
             for par in tweakreg_parameters:
                 setattr(image3.tweakreg, par, tweakreg_parameters[par])
+
+            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+            print(vvvdr2fn)
+            if os.path.exists(vvvdr2fn):
+                image3.tweakreg.abs_refcat = vvvdr2fn
+                image3.tweakreg.abs_searchrad = 1
+            else:
+                print(f"Did not find VVV catalog {vvvdr2fn}")
 
             # try .... something else?
             image3.tweakreg.brightest = 2000
@@ -263,7 +281,7 @@ def main():
             image3.run(asn_file_merged)
             print(f"DONE running {asn_file_merged}")
 
-            realign_to_vvv(filtername=filtername.lower(), module=module)
+            realign_to_vvv(filtername=filtername.lower(), module='merged')
 
 
     globals().update(locals())

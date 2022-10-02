@@ -6,10 +6,16 @@ from astropy.convolution import convolve, Gaussian2DKernel
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 from astropy.visualization import simple_norm
+from astropy.modeling.fitting import LevMarLSQFitter
 from astropy import wcs
 from astropy import table
+from astropy import stats
 from astropy import units as u
 from astropy.io import fits
+
+from photutils.detection import DAOStarFinder, IRAFStarFinder
+from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
+from photutils.background import MMMBackground, MADStdBackgroundRMS
 
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
@@ -30,6 +36,11 @@ import webbpsf
 basepath = '/orange/adamginsburg/jwst/brick/'
 
 for filtername in ('F405N', 'F410M', 'F466N'):
+    fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
+    row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
+    fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
+    fwhm_pix = float(row['PSF FWHM (pixel)'][0])
+
     for module in ('nrca', 'nrcb'):
         try:
             pupil = 'clear'
@@ -79,12 +90,79 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         weight[weight < minweight] = minweight
 
 
+
+        filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
+        filter_table.add_index('filterID')
+        instrument = 'NIRCam'
+        eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filt}']['WavelengthEff'] * u.AA
+
+        #fwhm = (1.22 * eff_wavelength / (6.5*u.m)).to(u.arcsec, u.dimensionless_angles())
+
+        pixscale = ww.proj_plane_pixel_area()**0.5
+        #fwhm_pix = (fwhm / pixscale).decompose().value
+
+        daogroup = DAOGroup(2 * fwhm_pix)
+        mmm_bkg = MMMBackground()
+
+        filtered_errest = stats.mad_std(data, ignore_nan=True)
+        print(f'Error estimate for DAO: {filtered_errest}')
+
+        daofind_fin = DAOStarFinder(threshold=10 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+                                    sharplo=0.30, sharphi=1.40)
+        finstars = daofind_fin(data)
+
+        #grid.x_0 = 0
+        #grid.y_0 = 0
+        # not needed? def evaluate(x, y, flux, x_0, y_0):
+        # not needed?     """
+        # not needed?     Evaluate the `GriddedPSFModel` for the input parameters.
+        # not needed?     """
+        # not needed?     # Get the local PSF at the (x_0,y_0)
+        # not needed?     psfmodel = grid._compute_local_model(x_0+slcs[1].start, y_0+slcs[0].start)
+
+        # not needed?     # now evaluate the PSF at the (x_0, y_0) subpixel position on
+        # not needed?     # the input (x, y) values
+        # not needed?     return psfmodel.evaluate(x, y, flux, x_0, y_0)
+        # not needed? grid.evaluate = evaluate
+
+        phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
+                                    group_maker=daogroup,
+                                    bkg_estimator=None, # must be none or it un-saturates pixels
+                                    psf_model=grid,
+                                    fitter=LevMarLSQFitter(),
+                                    fitshape=(11, 11),
+                                    aperture_radius=5*fwhm_pix)
+
+        phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
+                                                    bkg_estimator=mmm_bkg,
+                                                    psf_model=grid,
+                                                    fitter=LevMarLSQFitter(),
+                                                    niters=2, fitshape=(11, 11),
+                                                    aperture_radius=2*fwhm_pix)
+
+        result = phot(data)
+        coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+        print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}')
+        result['skycoord_centroid'] = coords
+        detector = "" # no detector #'s for long
+        result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
+
+        result2 = phot_(data)
+        coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
+        result2['skycoord_centroid'] = coords2
+        print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}')
+        result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
+
+
+
         results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
                                         #psfderiv=np.gradient(-psf_initial[0].data),
                                         nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_unweighted
 
-        fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits", overwrite=True)
+        tbl = fits.BinTableHDU(data=stars)
+        hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
+        hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits", overwrite=True)
         fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
 
@@ -144,7 +222,9 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         results_blur  = fit_im(data, psf_model_blur, weight=weight,
                             nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_blur
-        fits.BinTableHDU(data=stars).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
+        tbl = fits.BinTableHDU(data=stars)
+        hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
+        hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
         fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits", overwrite=True)
         fits.PrimaryHDU(data=data-modsky,
                         header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_data-modsky.fits", overwrite=True)
@@ -180,3 +260,4 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics.png',
                    bbox_inches='tight')
+

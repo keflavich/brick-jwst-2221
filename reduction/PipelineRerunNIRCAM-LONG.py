@@ -194,6 +194,15 @@ def main():
         for par in tweakreg_parameters:
             setattr(image3.tweakreg, par, tweakreg_parameters[par])
 
+
+        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        print(vvvdr2fn)
+        if os.path.exists(vvvdr2fn):
+            image3.tweakreg.abs_refcat = vvvdr2fn
+            image3.tweakreg.abs_searchrad = 1
+        else:
+            print(f"Did not find VVV catalog {vvvdr2fn}")
+
         image3.tweakreg.fit_geometry = 'general'
         image3.tweakreg.brightest = 10000
         image3.tweakreg.snr_threshold = 5
@@ -221,3 +230,19 @@ if __name__ == "__main__":
     run_notebook(f'{basepath}/notebooks/StarDestroyer_nrca.ipynb')
     run_notebook(f'{basepath}/notebooks/StarDestroyer_nrcb.ipynb')
     run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
+
+
+"""
+await app.openFile("/jwst/brick/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits")
+await app.appendFile("/jwst/brick/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits")
+await app.appendFile("/jwst/brick/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrcb_i2d.fits")
+await app.appendFile("/jwst/brick/F182M/pipeline/jw02221-o001_t001_nircam_clear-f182m-merged_i2d.fits")
+await app.appendFile("/jwst/brick/F182M/pipeline/jw02221-o001_t001_nircam_clear-f182m-nrca_i2d.fits")
+await app.appendFile("/jwst/brick/F182M/pipeline/jw02221-o001_t001_nircam_clear-f182m-nrcb_i2d.fits")
+await app.appendFile("/jwst/brick/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-merged_i2d.fits")
+await app.appendFile("/jwst/brick/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-nrca_i2d.fits")
+await app.appendFile("/jwst/brick/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-nrcb_i2d.fits")
+await app.appendFile("/jwst/brick/F466N/pipeline/jw02221-o001_t001_nircam_clear-f466n-merged_i2d.fits")
+await app.appendFile("/jwst/brick/F466N/pipeline/jw02221-o001_t001_nircam_clear-f466n-nrca_i2d.fits")
+await app.appendFile("/jwst/brick/F466N/pipeline/jw02221-o001_t001_nircam_clear-f466n-nrcb_i2d.fits")
+"""
