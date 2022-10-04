@@ -60,11 +60,19 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
         obsdate = im1[0].header['DATE-OBS']
 
-        nrc = webbpsf.NIRCam()
-        nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
-        nrc.filter = filt
-        nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
-        grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+        has_downloaded = False
+        while not has_downloaded:
+            try:
+                nrc = webbpsf.NIRCam()
+                nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+                nrc.filter = filt
+                nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
+                grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+            except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout) as ex:
+                print(f"Failed to build PSF: {ex}")
+            except Exception as ex:
+                print(ex)
+                continue
 
         yy, xx = np.indices([31,31], dtype=float)
         grid.x_0 = grid.y_0 = 15.5
