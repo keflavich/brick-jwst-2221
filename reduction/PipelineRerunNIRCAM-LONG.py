@@ -38,11 +38,13 @@ print(jwst.__version__)
 # see 'destreak410.ipynb' for tests of this
 medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
+basepath = '/orange/adamginsburg/jwst/brick/'
 
 def main():
 
 
-    os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
+    basepath = '/orange/adamginsburg/jwst/brick/'
+    os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds-pub.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80

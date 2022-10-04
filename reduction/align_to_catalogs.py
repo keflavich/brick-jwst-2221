@@ -52,13 +52,13 @@ def realign_to_vvv(
         imfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_i2d.fits'
 
     cat = Table.read(catfile)
-    
+
     # HACKETY HACK HACK filtering by flux
     flux = (cat['aper30_abmag'].value * u.ABmag).to(u.Jy)
     # 7e-8 is the empirical MJy/sr in one pixel-to-ABmag-flux conversion
     # it seems to hold for all of the fields, kinda?
     sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
-    
+
     skycrds_cat_orig = cat['sky_centroid']
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
