@@ -26,7 +26,7 @@ from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from destreak import destreak
 
-from align_to_catalogs import realign_to_vvv
+from align_to_catalogs import realign_to_vvv, merge_a_plus_b
 
 import crds
 
@@ -218,6 +218,9 @@ def main():
             print(f"DONE running {asn_file_each}")
             realigned = realign_to_vvv(filtername=filtername.lower(), module=module)
 
+        print("Merging already-combined nrca + nrcb modules")
+        merge_a_plus_b(filtername)
+        print("DONE Merging already-combined nrca + nrcb modules")
 
         if True:
             log.info("Running merged frames")
