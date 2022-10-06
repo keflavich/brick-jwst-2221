@@ -92,7 +92,51 @@ def realign_to_vvv(
 
     print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)}')
 
+    ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
+
+    with fits.open(imfile, mode='update') as hdulist:
+        print("CRVAL before", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
+        hdulist[1].header['OMCRVAL1'] = hdulist[1].header['CRVAL1']
+        hdulist[1].header['OMCRVAL2'] = hdulist[1].header['CRVAL2']
+        hdulist[1].header.update(ww.to_header())
+        print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
+
+    # re-load the WCS to make sure it worked
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        ww =  WCS(hdulist['SCI'].header)
+    skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+
+    idx, sidx, sep, sep3d = vvvdr2_crds.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
+    dra = (skycrds_cat_new[sel][idx].ra - vvvdr2_crds[sidx].ra).to(u.arcsec)
+    ddec = (skycrds_cat_new[sel][idx].dec - vvvdr2_crds[sidx].dec).to(u.arcsec)
+
+    print(f'After re-realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+
     return hdulist
+
+def merge_a_plus_b(filtername, 
+    basepath = '/orange/adamginsburg/jwst/brick/',
+    parallel=True,
+    ):
+    import reproject
+    from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
+    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-nrca_i2d.fits'
+    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-nrcb_i2d.fits'
+    files = [filename_nrca, filename_nrcb]
+
+    hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
+    weights = [fits.open(fn)[('WHT', 1)] for fn in files]
+
+    target_wcs, target_shape = find_optimal_celestial_wcs(hdus)
+    merged, weightmap = reproject_and_coadd(hdus, output_projection=target_wcs,
+                                            input_weights=weights,
+                                            shape_out=target_shape,
+                                            parallel=parallel,
+                                            reproject_function=reproject.reproject_exact)
+    hdul = fits.HDUList([fits.PrimaryHDU(data=merged, header=target_wcs.to_header()),
+                         fits.ImageHDU(data=weightmap, header=target_wcs.to_header())])
+    hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
 
 def mihais_versin():
     """
