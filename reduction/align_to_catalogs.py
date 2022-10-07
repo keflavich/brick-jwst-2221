@@ -134,8 +134,11 @@ def merge_a_plus_b(filtername,
                                             shape_out=target_shape,
                                             parallel=parallel,
                                             reproject_function=reproject.reproject_exact)
-    hdul = fits.HDUList([fits.PrimaryHDU(data=merged, header=target_wcs.to_header()),
-                         fits.ImageHDU(data=weightmap, header=target_wcs.to_header())])
+    header = fits.getheader(filename_nrca)
+    header.update(target_wcs.to_header())
+    hdul = fits.HDUList([fits.PrimaryHDU(header=header),
+                         fits.ImageHDU(data=merged, name='SCI', header=header),
+                         fits.ImageHDU(data=weightmap, name='WHT', header=header),]
     hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
 
 def mihais_versin():
