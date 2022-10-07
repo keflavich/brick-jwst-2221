@@ -41,7 +41,7 @@ for filtername in ('F405N', 'F410M', 'F466N'):
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
     fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
-    for module in ('nrca', 'nrcb'):
+    for module in ('merged-reproject', 'nrca', 'nrcb'):
         try:
             pupil = 'clear'
             fh = fits.open(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits')
@@ -141,13 +141,6 @@ for filtername in ('F405N', 'F410M', 'F466N'):
                                     fitshape=(11, 11),
                                     aperture_radius=5*fwhm_pix)
 
-        phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
-                                                    bkg_estimator=mmm_bkg,
-                                                    psf_model=grid,
-                                                    fitter=LevMarLSQFitter(),
-                                                    niters=2, fitshape=(11, 11),
-                                                    aperture_radius=2*fwhm_pix)
-
         result = phot(data)
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}')
@@ -155,11 +148,20 @@ for filtername in ('F405N', 'F410M', 'F466N'):
         detector = "" # no detector #'s for long
         result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
 
-        result2 = phot_(data)
-        coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
-        result2['skycoord_centroid'] = coords2
-        print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}')
-        result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
+        if False:
+            # iterative takes for-ev-er
+            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
+                                                        bkg_estimator=mmm_bkg,
+                                                        psf_model=grid,
+                                                        fitter=LevMarLSQFitter(),
+                                                        niters=2, fitshape=(11, 11),
+                                                        aperture_radius=2*fwhm_pix)
+
+            result2 = phot_(data)
+            coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
+            result2['skycoord_centroid'] = coords2
+            print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}')
+            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
 
 
 

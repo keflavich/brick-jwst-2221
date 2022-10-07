@@ -36,13 +36,13 @@ import webbpsf
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-for filtername in ('F212N', 'F182M', 'F187N')[::-1]:
+for filtername in ('F212N', 'F182M', 'F187N'):
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
     fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
-    for module in ('nrca', 'nrcb'):
+    for module in ('merged-reproject', 'nrca', 'nrcb', ):
         for detector in ("", ):  # or range(1,5)
             # detector="" is for the merged version, which should be OK
             pupil = 'clear'
@@ -255,17 +255,19 @@ for filtername in ('F212N', 'F182M', 'F187N')[::-1]:
                                       fitshape=(11, 11),
                                       aperture_radius=5*fwhm_pix)
 
-            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
-                                                       bkg_estimator=mmm_bkg,
-                                                       psf_model=grid,
-                                                       fitter=LevMarLSQFitter(),
-                                                       niters=2, fitshape=(11, 11),
-                                                       aperture_radius=2*fwhm_pix)
-
             result = phot(data)
             result['skycoord_centroid'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
             result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
 
-            result2 = phot_(data)
-            result2['skycoord_centroid'] = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
-            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
+            if False:
+                # iterative takes too long
+                phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
+                                                        bkg_estimator=mmm_bkg,
+                                                        psf_model=grid,
+                                                        fitter=LevMarLSQFitter(),
+                                                        niters=2, fitshape=(11, 11),
+                                                        aperture_radius=2*fwhm_pix)
+
+                result2 = phot_(data)
+                result2['skycoord_centroid'] = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
+                result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
