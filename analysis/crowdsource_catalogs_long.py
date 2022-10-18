@@ -12,7 +12,9 @@ from astropy import table
 from astropy import stats
 from astropy import units as u
 from astropy.io import fits
-
+import requests
+import urllib3
+import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
 from photutils.background import MMMBackground, MADStdBackgroundRMS
@@ -35,13 +37,13 @@ import webbpsf
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-for filtername in ('F405N', 'F410M', 'F466N'):
-    fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
-    row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
-    fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
-    fwhm_pix = float(row['PSF FWHM (pixel)'][0])
+for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
+    for filtername in ('F405N', 'F410M', 'F466N'):
+        fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
+        row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
+        fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
+        fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
-    for module in ('merged-reproject', 'nrca', 'nrcb'):
         try:
             pupil = 'clear'
             fh = fits.open(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits')
@@ -66,8 +68,11 @@ for filtername in ('F405N', 'F410M', 'F466N'):
                 nrc = webbpsf.NIRCam()
                 nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                 nrc.filter = filt
-                nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
-                grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+                if module in ('nrca', 'nrcb'):
+                    nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+                else:
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=True)
             except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout) as ex:
                 print(f"Failed to build PSF: {ex}")
             except Exception as ex:
