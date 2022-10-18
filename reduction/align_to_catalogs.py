@@ -126,6 +126,7 @@ def merge_a_plus_b(filtername,
     files = [filename_nrca, filename_nrcb]
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
+    ehdus = [fits.open(fn)[('ERR', 1)] for fn in files]
     weights = [fits.open(fn)[('WHT', 1)] for fn in files]
 
     target_wcs, target_shape = find_optimal_celestial_wcs(hdus)
@@ -134,11 +135,19 @@ def merge_a_plus_b(filtername,
                                             shape_out=target_shape,
                                             parallel=parallel,
                                             reproject_function=reproject.reproject_exact)
+    merged_err, weightmap_ = reproject_and_coadd(ehdus,
+                                                 output_projection=target_wcs,
+                                                 input_weights=weights,
+                                                 shape_out=target_shape,
+                                                 parallel=parallel,
+                                                 reproject_function=reproject.reproject_exact)
     header = fits.getheader(filename_nrca)
     header.update(target_wcs.to_header())
     hdul = fits.HDUList([fits.PrimaryHDU(header=header),
                          fits.ImageHDU(data=merged, name='SCI', header=header),
-                         fits.ImageHDU(data=weightmap, name='WHT', header=header),])
+                         fits.ImageHDU(data=merged_err, name='ERR', header=header),
+                         fits.ImageHDU(data=weightmap, name='WHT', header=header),
+                        ])
     hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
 
 def mihais_versin():
