@@ -120,7 +120,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         filtered_errest = stats.mad_std(data, ignore_nan=True)
         print(f'Error estimate for DAO: {filtered_errest}')
 
-        daofind_fin = DAOStarFinder(threshold=10 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+        daofind_fin = DAOStarFinder(threshold=7 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                     sharplo=0.30, sharphi=1.40)
         finstars = daofind_fin(data)
 
