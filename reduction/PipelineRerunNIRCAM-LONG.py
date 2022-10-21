@@ -25,6 +25,7 @@ from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
 from align_to_catalogs import realign_to_vvv, merge_a_plus_b
+from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
 
 from destreak import destreak
 
@@ -218,6 +219,8 @@ def main():
         print(f"DONE running {asn_file_merged}")
 
         realign_to_vvv(filtername=filtername.lower(), module='merged')
+
+        remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
 
 
