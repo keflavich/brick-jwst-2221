@@ -70,7 +70,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=20, min_flux=500,
         sizes = sum_labels(saturated, sources, np.arange(nsources)+1)
         msfe = min_sep_from_edge
 
-        sizes_ok = (sizes < max_size) & (sizes > min_size)
+        sizes_ok = (sizes < max_size) & (sizes >= min_size)
         coms_finite = np.isfinite(coms).all(axis=1)
         coms_inbounds = (
             (coms[:,1] > msfe) & (coms[:,0] > msfe) &
@@ -94,12 +94,12 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=20, min_flux=500,
     return saturated_finder
 
 def iteratively_remove_saturated_stars(data, header,
-                                       fit_sizes=[351,351,201,201,101],
-                                       nsaturated=[(100,500), (50, 100), (25,50), (10,25), (5,10), (0,5)],
+                                       fit_sizes=[351, 351, 201, 201, 101, 101], 
+                                       nsaturated=[(100, 500), (50, 100), (25, 50), (10, 25), (5, 10), (0, 5)],
                                        min_flux=[1000, 1000, 1000, 1000, 500, 250],
                                        ap_rad=[15, 15, 15, 15, 10, 5],
                                        require_gradient=[False, False, False, False, True, True],
-                                       dilations=[3,3,3,2,2,1],
+                                       dilations=[3, 3, 3, 2, 2, 1], 
                                        path_prefix='.',
                                        verbose=False
                                       ):
@@ -125,8 +125,18 @@ def iteratively_remove_saturated_stars(data, header,
         The aperture radius in which to perform aperture photometry.  It's not
         clear that this parameter is at all important.
     require_gradient : list of booleans
-
-    
+        Check that the "star" pixels around the saturated pixels are brighter
+        than those inside.  This can be used to reject "fake" saturated stars
+        caused by other problems in the image.  It's not clear that this parameter
+        should ever be set, but it should likely be limited to the smallest
+        (~few saturated pixel) sources, since those are the only ones likely to
+        be fake sources.  I think these usually arise from places where the dither
+        failed to fill in bad pixels.
+    dilations : list of integers
+        Dilate the mask to be used when calculating photometry?
+        This masks out pixels around the saturated pixels, which are themselves
+        often unreliable.  This is probably most important for aperture
+        photometry, but it likely also affects PSF fitting.
     """
 
     assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
