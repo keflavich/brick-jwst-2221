@@ -1,17 +1,27 @@
 from scipy.ndimage import label, find_objects, center_of_mass, sum_labels
 from astropy.modeling.fitting import LevMarLSQFitter
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry 
+from photutils.psf.utils import subtract_psf
 from tqdm.notebook import tqdm
 import numpy as np
 from scipy import ndimage
-from astropy.table import Table
+from astropy.table import Table, QTable
 from astropy import table
 from astropy import log
 from filtering import get_filtername, get_fwhm
+import functools
+
+def debug_wrap(function):
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        print(function.__name__)
+        return function(*args, **kwargs)
+    return wrapper
 
 import os
 os.environ['WEBBPSF_PATH'] = '/orange/adamginsburg/jwst/webbpsf-data/'
 import webbpsf
+from webbpsf.utils import to_griddedpsfmodel
 
 def is_star(data, sources, srcid, slc, rindsize=3, min_flux=500, require_gradient=False):
     """
@@ -36,19 +46,21 @@ def is_star(data, sources, srcid, slc, rindsize=3, min_flux=500, require_gradien
     return ((rind1sum > rind2sum) or not require_gradient) and rind3sum > min_flux
 
 def finder_maker(max_size=100, min_size=0, min_sep_from_edge=20, min_flux=500,
-                 rindsize=3, require_gradient=False, *args, **kwargs):
+                 rindsize=3, require_gradient=False, raise_for_nosources=True, *args, **kwargs):
     """
     Create a saturated star finder that can select on the number of saturated pixels and the
     distance from the edge of the image
     """
     # criteria are based on examining some plots; they probably don't hold universally
-    def saturated_finder(data,  *args, **kwargs):
+    def saturated_finder(data, *args, raise_for_nosources=raise_for_nosources, **kwargs):
         """
         Wrap the star finder to reject bad stars
         """
         saturated = (data==0)
+        if not np.any(saturated):
+            raise ValueError("No saturated (data==0) pixels found")
         sources, nsources = label(saturated)
-        if nsources == 0:
+        if raise_for_nosources and nsources == 0:
             raise ValueError("No saturated sources found")
         slices = find_objects(sources)
 
@@ -69,8 +81,8 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=20, min_flux=500,
         is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
                                for srcid, (szok, slcs) in enumerate(tqdm(zip(all_ok, slices)))])
         all_ok &= is_star_ok
-        print(f"is_star={is_star_ok.sum()}, ", end="")
-        print(f"sizes={sizes_ok.sum()}, coms_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates")
+        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="")
+        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates")
 
 
         tbl = Table()
@@ -82,14 +94,42 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=20, min_flux=500,
     return saturated_finder
 
 def iteratively_remove_saturated_stars(data, header,
-                                       fit_sizes=[251,101,101,51],
-                                       nsaturated=[(100,500), (50,100), (30,50), (0,30)],
-                                       min_flux=[1000, 1000, 1000, 1000],
-                                       ap_rad=[15, 15, 15, 5],
-                                       require_gradient=[False, False, False, True],
-                                       dilations=[1,1,1,0],
-                                       path_prefix='.'
+                                       fit_sizes=[351,351,201,201,101],
+                                       nsaturated=[(100,500), (50, 100), (25,50), (10,25), (5,10), (0,5)],
+                                       min_flux=[1000, 1000, 1000, 1000, 500, 250],
+                                       ap_rad=[15, 15, 15, 15, 10, 5],
+                                       require_gradient=[False, False, False, False, True, True],
+                                       dilations=[3,3,3,2,2,1],
+                                       path_prefix='.',
+                                       verbose=False
                                       ):
+    """
+    Iteratively remove the most saturated down to the least saturated stars until all such stars are fitted & subtracted.
+    
+    Parameters
+    ----------
+    fit_sizes : list of integers
+        The size along each axis to cut out around the bright star to fit the
+        PSF and subtract it.  Bigger ``fit_sizes`` are _much_ more expensive,
+        but they are also needed for the brightest sources that affect large
+        areas on the image
+    nsaturated : list of tuples of integer pairs
+        The minimum and maximum number of saturated pixels for stars included in
+        each iteration.
+        For example, the range 100-500 will include all saturated sources with
+        100 < npixels < 500 contiguous saturated pixels.
+    min_flux : list of floats
+        The minimum flux value to consider an object a star.  This is to reject
+        regions that are set to zero but are not saturated.
+    ap_rad : list of integers
+        The aperture radius in which to perform aperture photometry.  It's not
+        clear that this parameter is at all important.
+    require_gradient : list of booleans
+
+    
+    """
+
+    assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
 
     if header['INSTRUME'].lower() == 'nircam':
         psfgen = webbpsf.NIRCam()
@@ -107,15 +147,18 @@ def iteratively_remove_saturated_stars(data, header,
     npsf = 16
     oversample = 2
     fov_pixels = 512
-    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
+    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}_nrca5.fits'
     if os.path.exists(psf_fn):
         # As a file
+        log.info(f"Loading grid from psf_fn={psf_fn}")
         big_grid = to_griddedpsfmodel(psf_fn)  # file created 2 cells above
     else:
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
         big_grid = psfgen.psf_grid(num_psfs=npsf, oversample=oversample,
-                                   all_detectors=False, fov_pixels=fov_pixels,
+                                   all_detectors=True, fov_pixels=fov_pixels,
                                    save=True, outfile=psf_fn)
+        # now the PSF should be written
+        assert os.path.exists(psf_fn)
 
     # We force the centroid to be fixed b/c the fitter doesn't do a great job with this...
     # ....this is not optimal...
@@ -128,31 +171,69 @@ def iteratively_remove_saturated_stars(data, header,
 
     results = []
 
+    lmfitter = LevMarLSQFitter()
+    # def levmarverbosewrapper(self, *args, **kwargs):
+    #     print("Running lmfitter")
+    #     log.info(f"Running lmfitter with args {args} and kwargs {kwargs}")
+    #     return self(*args, **kwargs)
+    # #lmfitter.__call__ = levmarverbosewrapper
+    # lmfitter._run_fitter = levmarverbosewrapper
+
+    satpix = data == 0
+
     for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations):
         finder = finder_maker(min_size=minsz, max_size=maxsz, require_gradient=grad, min_flux=minflx)
 
-        sources = finder(data, mask=ndimage.binary_dilation(data==0, iterations=1))
+        # do the search on data b/c PSF subtraction can change zeros to non-zeros
+        if np.any(resid == 0):
+            sources = finder(resid, mask=ndimage.binary_dilation(resid==0, iterations=1), raise_for_nosources=False)
+        else:
+            log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
+            continue
+
         if len(sources) == 0:
             log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz}")
             continue
 
-        phot = BasicPSFPhotometry(finder=finder,
-                              group_maker=daogroup,
-                              bkg_estimator=None, # must be none or it un-saturates pixels
-                              #psf_model=epsf_model,
-                              psf_model=big_grid,
-                              fitter=LevMarLSQFitter(),
-                              fitshape=fitsz,
-                              aperture_radius=apsz*fwhm_pix)
-        if diliter > 0:
-            mask = ndimage.binary_dilation(data==0, iterations=diliter)
-        else:
-            mask = data==0
+        if verbose:
+            print(f"Befor BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}")
 
+        phot = BasicPSFPhotometry(finder=finder,
+                                  group_maker=daogroup,
+                                  bkg_estimator=None, # must be none or it un-saturates pixels
+                                  #psf_model=epsf_model,
+                                  psf_model=big_grid,
+                                  fitter=lmfitter,
+                                  fitshape=fitsz,
+                                  aperture_radius=apsz*fwhm_pix)
+        if diliter > 0:
+            mask = ndimage.binary_dilation(resid==0, iterations=diliter)
+        else:
+            mask = resid==0
+
+        #phot.nstar = debug_wrap(phot.nstar)
+        # phot.fitter(1,2,3,4,)
+
+        # DEBUG log.info("groups:")
+        # DEBUG groups = phot.group_maker(QTable(names=['x_0', 'y_0', 'flux_0'],
+        # DEBUG                               data=[sources['xcentroid'],
+        # DEBUG                                     sources['ycentroid'],
+        # DEBUG                                     sources['xcentroid']*0]))
+        # DEBUG print(groups)
+
+        #log.info("Doing photometry")
         result = phot(resid, mask=mask)
         results.append(result)
+        #log.info(f"Done; len(result) = {len(result)})")
+        print(result)
 
-        resid = phot.get_residual_image()
+        resid = debug_wrap(subtract_psf)(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
+
+        # reset saturated pixels back to zero
+        resid[satpix] = 0
+
+        #resid = phot.get_residual_image()
+        #print(f"Difference^2 between data and residual: {((data-resid)**2).sum():0.3g}")
 
     final_table = table.vstack(results)
 
