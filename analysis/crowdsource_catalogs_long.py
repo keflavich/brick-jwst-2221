@@ -120,7 +120,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         filtered_errest = stats.mad_std(data, ignore_nan=True)
         print(f'Error estimate for DAO: {filtered_errest}')
 
-        daofind_fin = DAOStarFinder(threshold=7 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+        daofind_fin = DAOStarFinder(threshold=10 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                     sharplo=0.30, sharphi=1.40)
         finstars = daofind_fin(data)
 
@@ -174,6 +174,11 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
                                         #psfderiv=np.gradient(-psf_initial[0].data),
                                         nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_unweighted
+        # crowdsource explicitly inverts x & y from the numpy convention:
+        # https://github.com/schlafly/crowdsource/issues/11
+        coords = ww.pixel_to_world(stars['y'], stars['x'])
+        stars['skycoord'] = coords
+        stars['x'], stars['y'] = stars['y'], stars['x']
 
         tbl = fits.BinTableHDU(data=stars)
         hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
@@ -237,6 +242,13 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         results_blur  = fit_im(data, psf_model_blur, weight=weight,
                             nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_blur
+
+        # crowdsource explicitly inverts x & y from the numpy convention:
+        # https://github.com/schlafly/crowdsource/issues/11
+        coords = ww.pixel_to_world(stars['y'], stars['x'])
+        stars['skycoord'] = coords
+        stars['x'], stars['y'] = stars['y'], stars['x']
+
         tbl = fits.BinTableHDU(data=stars)
         hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
         hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
@@ -244,9 +256,6 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         fits.PrimaryHDU(data=data-modsky,
                         header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_data-modsky.fits", overwrite=True)
 
-
-
-        stars, modsky, skymsky, psf = results_blur
         pl.figure(figsize=(12,12))
         pl.subplot(2,2,1).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("Data")
