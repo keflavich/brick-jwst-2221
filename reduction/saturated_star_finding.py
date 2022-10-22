@@ -123,10 +123,11 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
 def iteratively_remove_saturated_stars(data, header,
                                        fit_sizes=[351, 351, 201, 201, 101, 51],
                                        nsaturated=[(100, 500), (50, 100), (25, 50), (10, 25), (5, 10), (0, 5)],
-                                       min_flux=[1000, 1000, 1000, 1000, 500, 250],
+                                       min_flux=[1000, 750, 500, 250, 200, 150],
                                        ap_rad=[15, 15, 15, 15, 10, 5],
-                                       require_gradient=[False, False, False, False, True, True],
+                                       require_gradient=[False, False, False, False, False, True],
                                        dilations=[3, 3, 3, 2, 2, 1],
+                                       rindsize=[6, 5, 5, 4, 4, 3],
                                        path_prefix='.',
                                        verbose=False
                                       ):
@@ -197,6 +198,7 @@ def iteratively_remove_saturated_stars(data, header,
     if module == 'MULTIPLE':
         # this is a disaster and we're just giving up becauase it would be days of development to account for this
         # WHY!?!?!? I'm so angry.  The modules are independent, FINE, but that's NOT HOW THE DATA ARE USED.
+        # https://github.com/spacetelescope/webbpsf/blob/stable/notebooks/Gridded_PSF_Library.ipynb
         psf_fn = glob.glob(psf_fn.replace(".fits", "*"))
         if len(psf_fn) >= 1:
             psf_fn = psf_fn[0]
@@ -222,6 +224,10 @@ def iteratively_remove_saturated_stars(data, header,
         if isinstance(big_grid, list):
             print(f"PSF FROM PSF_GEN IS A LIST OF GRIDS!!!")
             big_grid = big_grid[0]
+            # if we really want to get this right, we need to create a new grid of PSF models
+            # that is some sort of average of the PSF model grid.
+            # There's no way to do it _right_ right without going back to the original data,
+            # which is untenable with this approach.  It's a huge project.
 
     # We force the centroid to be fixed b/c the fitter doesn't do a great job with this...
     # ....this is not optimal...
@@ -244,12 +250,12 @@ def iteratively_remove_saturated_stars(data, header,
 
     satpix = data == 0
 
-    for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations):
+    for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter, rsz in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations, rindsize):
         finder = finder_maker(min_size=minsz, max_size=maxsz, require_gradient=grad, min_flux=minflx)
 
         # do the search on data b/c PSF subtraction can change zeros to non-zeros
         if np.any(resid == 0):
-            sources = finder(resid, mask=ndimage.binary_dilation(resid==0, iterations=1), raise_for_nosources=False)
+            sources = finder(resid, mask=ndimage.binary_dilation(resid==0, iterations=1), raise_for_nosources=False, rindsize=rsz)
         else:
             log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
             continue
@@ -269,24 +275,16 @@ def iteratively_remove_saturated_stars(data, header,
                                   fitter=lmfitter,
                                   fitshape=fitsz,
                                   aperture_radius=apsz*fwhm_pix)
+
+        # Mask out the inner portion of the PSF when fitting it
         if diliter > 0:
             mask = ndimage.binary_dilation(resid==0, iterations=diliter)
         else:
             mask = resid==0
 
-        #phot.nstar = debug_wrap(phot.nstar)
-        # phot.fitter(1,2,3,4,)
-
-        # DEBUG log.info("groups:")
-        # DEBUG groups = phot.group_maker(QTable(names=['x_0', 'y_0', 'flux_0'],
-        # DEBUG                               data=[sources['xcentroid'],
-        # DEBUG                                     sources['ycentroid'],
-        # DEBUG                                     sources['xcentroid']*0]))
-        # DEBUG print(groups)
-
         #log.info("Doing photometry")
         try:
-            print(f'Before trying with progrssbar: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}')
             result = phot(resid, mask=mask, progressbar=tqdm)
         except TypeError:
             print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}')
@@ -302,8 +300,9 @@ def iteratively_remove_saturated_stars(data, header,
         # reset saturated pixels back to zero
         resid[satpix] = 0
 
-        #resid = phot.get_residual_image()
-        #print(f"Difference^2 between data and residual: {((data-resid)**2).sum():0.3g}")
+        # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
+        # pixels with the values from the fitted model.  This will be tricky.
+
 
     final_table = table.vstack(results)
 
