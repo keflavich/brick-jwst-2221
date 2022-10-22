@@ -73,7 +73,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
                 else:
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=True)
-            except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout) as ex:
+            except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
                 print(f"Failed to build PSF: {ex}")
             except Exception as ex:
                 print(ex)
@@ -174,6 +174,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
                                         #psfderiv=np.gradient(-psf_initial[0].data),
                                         nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_unweighted
+        stars = Table(stars)
         # crowdsource explicitly inverts x & y from the numpy convention:
         # https://github.com/schlafly/crowdsource/issues/11
         coords = ww.pixel_to_world(stars['y'], stars['x'])
@@ -242,6 +243,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         results_blur  = fit_im(data, psf_model_blur, weight=weight,
                             nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_blur
+        stars = Table(stars)
 
         # crowdsource explicitly inverts x & y from the numpy convention:
         # https://github.com/schlafly/crowdsource/issues/11

@@ -79,8 +79,11 @@ for filtername in ('F212N', 'F182M', 'F187N'):
                         pass
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=all_detectors)
                     success = True
-                except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout) as ex:
+                except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
                     print(f"Failed to build PSF: {ex}")
+                except Exception as ex:
+                    print(ex)
+                    continue
 
             yy, xx = np.indices([31,31], dtype=float)
             grid.x_0 = grid.y_0 = 15.5
@@ -105,13 +108,28 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
 
+            unweight = np.ones_like(data)*np.nanmedian(weight)
+            assert np.all(np.isfinite(unweight))
 
-            results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
-                                            #psfderiv=np.gradient(-psf_initial[0].data),
-                                            nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+            """
+            This error has repeatedly occurred.  My only guess is that it's
+            coming from NaNs in the data, so I'm trying `nan_to_num`, even
+            though I don't know if that's correct.
+
+            Traceback (most recent call last):
+              File "/orange/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_short.py", line 109, in <module>
+                results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
+              File "/blue/adamginsburg/adamginsburg/repos/crowdsource/crowdsource/crowdsource_base.py", line 836, in fit_im
+                raise ValueError("Model is all NaNs")
+            ValueError: Model is all NaNs
+            """
+            results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=unweight,
+                                         #psfderiv=np.gradient(-psf_initial[0].data),
+                                         nskyx=1, nskyy=1, refit_psf=False, verbose=True)
             stars, modsky, skymsky, psf = results_unweighted
             # crowdsource explicitly inverts x & y from the numpy convention:
             # https://github.com/schlafly/crowdsource/issues/11
+            stars = Table(stars)
             coords = ww.pixel_to_world(stars['y'], stars['x'])
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
@@ -176,9 +194,11 @@ for filtername in ('F212N', 'F182M', 'F187N'):
                     bbox_inches='tight')
 
 
-            results_blur  = fit_im(data, psf_model_blur, weight=weight,
-                                nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+            # see note above about NaN models
+            results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
+                                   nskyx=1, nskyy=1, refit_psf=False, verbose=True)
             stars, modsky, skymsky, psf = results_blur
+            stars = Table(stars)
 
             # crowdsource explicitly inverts x & y from the numpy convention:
             # https://github.com/schlafly/crowdsource/issues/11
