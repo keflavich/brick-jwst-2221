@@ -129,8 +129,13 @@ def merge_a_plus_b(filtername,
     ehdus = [fits.open(fn)[('ERR', 1)] for fn in files]
     weights = [fits.open(fn)[('WHT', 1)] for fn in files]
 
+    # headers are only attached to the SCI frame for some reason!?
+    for ehdu, hdu in zip(ehdus, hdus):
+        ehdu.header.update(WCS(hdu).to_header())
+
     target_wcs, target_shape = find_optimal_celestial_wcs(hdus)
-    merged, weightmap = reproject_and_coadd(hdus, output_projection=target_wcs,
+    merged, weightmap = reproject_and_coadd(hdus,
+                                            output_projection=target_wcs,
                                             input_weights=weights,
                                             shape_out=target_shape,
                                             parallel=parallel,

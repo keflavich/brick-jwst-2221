@@ -2,9 +2,10 @@ import glob
 from astropy.io import fits
 from scipy.ndimage import label, find_objects, center_of_mass, sum_labels
 from astropy.modeling.fitting import LevMarLSQFitter
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry 
+from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
 from photutils.psf.utils import subtract_psf
 from tqdm.notebook import tqdm
+from tqdm import tqdm
 import numpy as np
 from scipy import ndimage
 from astropy.table import Table, QTable
@@ -12,6 +13,7 @@ from astropy import table
 from astropy import log
 from filtering import get_filtername, get_fwhm
 import functools
+import requests
 
 def debug_wrap(function):
     @functools.wraps(function)
@@ -94,7 +96,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
             pb = tqdm
         else:
             pb = lambda x: x
-        
+
         sizes_ok = (sizes < max_size) & (sizes >= min_size)
         coms_finite = np.isfinite(coms).all(axis=1)
         coms_inbounds = (
@@ -119,18 +121,18 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
     return saturated_finder
 
 def iteratively_remove_saturated_stars(data, header,
-                                       fit_sizes=[351, 351, 201, 201, 101, 51], 
+                                       fit_sizes=[351, 351, 201, 201, 101, 51],
                                        nsaturated=[(100, 500), (50, 100), (25, 50), (10, 25), (5, 10), (0, 5)],
                                        min_flux=[1000, 1000, 1000, 1000, 500, 250],
                                        ap_rad=[15, 15, 15, 15, 10, 5],
                                        require_gradient=[False, False, False, False, True, True],
-                                       dilations=[3, 3, 3, 2, 2, 1], 
+                                       dilations=[3, 3, 3, 2, 2, 1],
                                        path_prefix='.',
                                        verbose=False
                                       ):
     """
     Iteratively remove the most saturated down to the least saturated stars until all such stars are fitted & subtracted.
-    
+
     Parameters
     ----------
     fit_sizes : list of integers
@@ -180,7 +182,13 @@ def iteratively_remove_saturated_stars(data, header,
 
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
-    psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+    loaded_psfgen = False
+    while not loaded_psfgen:
+        try:
+            psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+            loaded_psfgen = True
+        except requests.HTTPError as ex:
+            print(ex)
 
     npsf = 16
     oversample = 2
@@ -192,10 +200,15 @@ def iteratively_remove_saturated_stars(data, header,
         psf_fn = glob.glob(psf_fn.replace(".fits", "*"))
         if len(psf_fn) >= 1:
             psf_fn = psf_fn[0]
-    if os.path.exists(psf_fn):
+        else:
+            psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
+    if os.path.exists(str(psf_fn)):
         # As a file
         log.info(f"Loading grid from psf_fn={psf_fn}")
         big_grid = to_griddedpsfmodel(psf_fn)  # file created 2 cells above
+        if isinstance(big_grid, list):
+            print(f"PSF IS A LIST OF GRIDS!!!")
+            big_grid = big_grid[0]
     else:
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
         # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/webbpsf_core.py#L640
@@ -206,6 +219,9 @@ def iteratively_remove_saturated_stars(data, header,
                                    save=True, outfile=psf_fn, overwrite=True)
         # now the PSF should be written
         assert glob.glob(psf_fn.replace(".fits", "*"))
+        if isinstance(big_grid, list):
+            print(f"PSF FROM PSF_GEN IS A LIST OF GRIDS!!!")
+            big_grid = big_grid[0]
 
     # We force the centroid to be fixed b/c the fitter doesn't do a great job with this...
     # ....this is not optimal...
@@ -270,8 +286,10 @@ def iteratively_remove_saturated_stars(data, header,
 
         #log.info("Doing photometry")
         try:
+            print(f'Before trying with progrssbar: resid shape={resid.shape}, mask shape={mask.shape}')
             result = phot(resid, mask=mask, progressbar=tqdm)
         except TypeError:
+            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}')
             result = phot(resid, mask=mask)
         results.append(result)
         #log.info(f"Done; len(result) = {len(result)})")
@@ -300,7 +318,7 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=True)
     fh['SCI'].data = satstar_resid
     fh.writeto(filename.replace(".fits", save_suffix+".fits"), overwrite=True)
-    
+
 def main():
     for fn in glob.glob("/orange/adamginsburg/jwst/brick/F*/pipeline/*-merged_i2d.fits"):
         remove_saturated_stars(fn)
