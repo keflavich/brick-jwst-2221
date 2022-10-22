@@ -14,6 +14,7 @@ from astropy import log
 from filtering import get_filtername, get_fwhm
 import functools
 import requests
+import urllib3
 
 def debug_wrap(function):
     @functools.wraps(function)
@@ -188,8 +189,11 @@ def iteratively_remove_saturated_stars(data, header,
         try:
             psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
             loaded_psfgen = True
-        except requests.HTTPError as ex:
+        except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
+            print(f"Failed to build PSF: {ex}")
+        except Exception as ex:
             print(ex)
+                continue
 
     npsf = 16
     oversample = 2
