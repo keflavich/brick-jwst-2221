@@ -56,7 +56,7 @@ def main():
     Observations.login(api_token)
 
 
-    for filtername in ('F187N', 'F182M', 'F212N'):
+    for filtername in ('F212N', 'F187N', 'F182M', ):
         # Files created in this notebook will be saved
         # in a subdirectory of the base directory called `Stage3`
         output_dir = f'/orange/adamginsburg/jwst/brick/{filtername}/pipeline/'
