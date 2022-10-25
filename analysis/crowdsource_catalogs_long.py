@@ -38,7 +38,8 @@ import webbpsf
 basepath = '/orange/adamginsburg/jwst/brick/'
 
 for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
-    for filtername in ('F405N', 'F410M', 'F466N'):
+    for filtername in ('F466N', 'F405N', 'F410M', ):
+        print(f"Starting filter {filtername}")
         fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
         row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
         fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -46,10 +47,13 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
 
         try:
             pupil = 'clear'
-            fh = fits.open(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits')
+            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
+            fh = fits.open(filename)
         except Exception:
             pupil = 'F444W'
-            fh = fits.open(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits')
+            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
+            fh = fits.open(filename)
+        print(f"Starting on {filename}")
 
         im1 = fh
         data = im1[1].data
@@ -181,9 +185,11 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         stars['skycoord'] = coords
         stars['x'], stars['y'] = stars['y'], stars['x']
 
-        tbl = fits.BinTableHDU(data=stars)
-        hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
-        hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits", overwrite=True)
+        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits"
+        stars.write(tblfilename, overwrite=True)
+        # add WCS-containing header
+        with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+            fh[0].header.update(im1[1].header)
         fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
 
@@ -251,9 +257,12 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         stars['skycoord'] = coords
         stars['x'], stars['y'] = stars['y'], stars['x']
 
-        tbl = fits.BinTableHDU(data=stars)
-        hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
-        hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits", overwrite=True)
+        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits"
+        stars.write(tblfilename, overwrite=True)
+        # add WCS-containing header
+        with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+            fh[0].header.update(im1[1].header)
+
         fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits", overwrite=True)
         fits.PrimaryHDU(data=data-modsky,
                         header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_data-modsky.fits", overwrite=True)

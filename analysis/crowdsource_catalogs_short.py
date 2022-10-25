@@ -33,10 +33,12 @@ with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
     os.environ['MAST_API_TOKEN'] = fh.read().strip()
 import webbpsf
 
+print("Completed imports")
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
 for filtername in ('F212N', 'F182M', 'F187N'):
+    print(f"Starting filter {filtername}")
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -46,7 +48,10 @@ for filtername in ('F212N', 'F182M', 'F187N'):
         for detector in ("", ):  # or range(1,5)
             # detector="" is for the merged version, which should be OK
             pupil = 'clear'
-            fh = fits.open(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_i2d.fits')
+            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_i2d.fits'
+            fh = fits.open(filename)
+
+            print(f"Starting {filename}")
 
             im1 = fh
             data = im1[1].data
@@ -134,9 +139,12 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
 
-            tbl = fits.BinTableHDU(data=stars)
-            hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
-            hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits", overwrite=True)
+            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits"
+            stars.write(tblfilename, overwrite=True)
+            # add WCS-containing header
+            with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+                fh[0].header.update(im1[1].header)
+
             fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
 
@@ -154,13 +162,13 @@ for filtername in ('F212N', 'F182M', 'F187N'):
                     bbox_inches='tight')
 
             pl.figure(figsize=(12,12))
-            pl.subplot(2,2,1).imshow(data[:128,:128], norm=simple_norm(data[:128,:128], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,1).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[512:512+128,512:512+128], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
-            pl.subplot(2,2,2).imshow(modsky[:128,:128], norm=simple_norm(modsky[:128,:128], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,2).imshow(modsky[512:512+128,512:512+128], norm=simple_norm(modsky[512:512+128,512:512+128], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-            pl.subplot(2,2,3).imshow(skymsky[:128,:128], norm=simple_norm(skymsky[:128,:128], stretch='asinh'), cmap='gray')
+            pl.subplot(2,2,3).imshow(skymsky[512:512+128,512:512+128], norm=simple_norm(skymsky[512:512+128,512:512+128], stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-            pl.subplot(2,2,4).imshow(data[:128,:128], norm=simple_norm(data[:128,:128], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[512:512+128,512:512+128], stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
@@ -206,21 +214,23 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
 
-            tbl = fits.BinTableHDU(data=stars)
-            hdu = fits.HDUList([fits.PrimaryHDU(header=im1[1].header), tbl])
-            hdu.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource.fits", overwrite=True)
+            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource.fits"
+            stars.write(tblfilename, overwrite=True)
+            # add WCS-containing header
+            with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+                fh[0].header.update(im1[1].header)
             fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_skymodel.fits", overwrite=True)
 
 
 
             pl.figure(figsize=(12,12))
-            pl.subplot(2,2,1).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,1).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
-            pl.subplot(2,2,2).imshow(modsky[:128,:128], norm=simple_norm(modsky[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,2).imshow(modsky[512:512+128,512:512+128], norm=simple_norm(modsky[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-            pl.subplot(2,2,3).imshow((data-modsky)[:128,:128], norm=simple_norm((data-modsky)[:256,:256], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+            pl.subplot(2,2,3).imshow((data-modsky)[512:512+128,512:512+128], norm=simple_norm((data-modsky)[:256,:256], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
-            pl.subplot(2,2,4).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
