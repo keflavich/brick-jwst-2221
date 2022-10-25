@@ -6,6 +6,8 @@ from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, Iterat
 from photutils.psf.utils import subtract_psf
 from tqdm.notebook import tqdm
 from tqdm import tqdm
+from astropy import wcs
+from astropy.wcs import WCS
 import numpy as np
 from scipy import ndimage
 from astropy.table import Table, QTable
@@ -193,7 +195,6 @@ def iteratively_remove_saturated_stars(data, header,
             print(f"Failed to build PSF: {ex}")
         except Exception as ex:
             print(ex)
-                continue
 
     npsf = 16
     oversample = 2
@@ -309,6 +310,8 @@ def iteratively_remove_saturated_stars(data, header,
 
 
     final_table = table.vstack(results)
+    ww = wcs.WCS(header)
+    final_table['skycoord_fit'] = ww.pixel_to_world(final_table['x_fit'], final_table['y_fit'])
 
     return final_table, resid
 
@@ -316,7 +319,10 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh = fits.open(filename)
     data = fh['SCI'].data
     header = fh[0].header
+    if 'CRPIX1' not in header:
+        header.update(wcs.WCS(fh['SCI'].header).to_header())
     satstar_table, satstar_resid = iteratively_remove_saturated_stars(data, header, **kwargs)
+    satstar_table.meta.update(header)
 
     satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=True)
     fh['SCI'].data = satstar_resid
