@@ -184,6 +184,9 @@ def iteratively_remove_saturated_stars(data, header,
     filtername = get_filtername(header)
     module = header['MODULE']
 
+    ww = wcs.WCS(header)
+    assert ww.wcs.cdelt[1] != 1
+
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
     loaded_psfgen = False
@@ -294,6 +297,8 @@ def iteratively_remove_saturated_stars(data, header,
         except TypeError:
             print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}')
             result = phot(resid, mask=mask)
+
+        result['skycoord_fit'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         results.append(result)
         #log.info(f"Done; len(result) = {len(result)})")
         print(result)
@@ -308,16 +313,18 @@ def iteratively_remove_saturated_stars(data, header,
         # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
         # pixels with the values from the fitted model.  This will be tricky.
 
-
     final_table = table.vstack(results)
-    ww = wcs.WCS(header)
-    final_table['skycoord_fit'] = ww.pixel_to_world(final_table['x_fit'], final_table['y_fit'])
 
     return final_table, resid
 
 def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh = fits.open(filename)
     data = fh['SCI'].data
+
+    # there are examples, especially in F405, where the variance is NaN but the value
+    # is negative
+    data[np.isnan(fh['VAR_POISSON'].data)] == 0
+
     header = fh[0].header
     if 'CRPIX1' not in header:
         header.update(wcs.WCS(fh['SCI'].header).to_header())

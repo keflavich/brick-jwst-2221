@@ -1,3 +1,4 @@
+print("Starting long-wavelength cataloging", flush=True)
 import numpy as np
 import crowdsource
 import regions
@@ -29,17 +30,19 @@ pl.rcParams['figure.facecolor'] = 'w'
 pl.rcParams['image.origin'] = 'lower'
 
 import os
-os.environ['WEBBPSF_PATH'] = '/orange/adamginsburg/jwst/webbpsf-data/'
+print("Importing webbpsf", flush=True)
+os.environ['WEBBPSF_PATH'] = '/blue/adamginsburg/adamginsburg/jwst/webbpsf-data/'
 with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
     os.environ['MAST_API_TOKEN'] = fh.read().strip()
 import webbpsf
 
+print("Done with imports", flush=True)
 
-basepath = '/orange/adamginsburg/jwst/brick/'
+basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
 for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
     for filtername in ('F466N', 'F405N', 'F410M', ):
-        print(f"Starting filter {filtername}")
+        print(f"Starting filter {filtername}", flush=True)
         fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
         row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
         fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -53,7 +56,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
             pupil = 'F444W'
             filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
             fh = fits.open(filename)
-        print(f"Starting on {filename}")
+        print(f"Starting on {filename}", flush=True)
 
         im1 = fh
         data = im1[1].data
@@ -69,6 +72,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         has_downloaded = False
         while not has_downloaded:
             try:
+                print("Attempting to download WebbPSF data", flush=True)
                 nrc = webbpsf.NIRCam()
                 nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                 nrc.filter = filt
@@ -78,9 +82,9 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
                 else:
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=True)
             except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-                print(f"Failed to build PSF: {ex}")
+                print(f"Failed to build PSF: {ex}", flush=True)
             except Exception as ex:
-                print(ex)
+                print(ex, flush=True)
                 continue
 
         yy, xx = np.indices([31,31], dtype=float)
@@ -122,10 +126,11 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         mmm_bkg = MMMBackground()
 
         filtered_errest = stats.mad_std(data, ignore_nan=True)
-        print(f'Error estimate for DAO: {filtered_errest}')
+        print(f'Error estimate for DAO: {filtered_errest}', flush=True)
 
         daofind_fin = DAOStarFinder(threshold=10 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                     sharplo=0.30, sharphi=1.40)
+        print("Finding stars", flush=True)
         finstars = daofind_fin(data)
 
         #grid.x_0 = 0
@@ -142,6 +147,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         # not needed?     return psfmodel.evaluate(x, y, flux, x_0, y_0)
         # not needed? grid.evaluate = evaluate
 
+        print("Starting basic PSF photometry", flush=True)
         phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
                                     group_maker=daogroup,
                                     bkg_estimator=None, # must be none or it un-saturates pixels
@@ -152,7 +158,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
 
         result = phot(data)
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
-        print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}')
+        print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
         result['skycoord_centroid'] = coords
         detector = "" # no detector #'s for long
         result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
@@ -169,7 +175,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
             result2 = phot_(data)
             coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
             result2['skycoord_centroid'] = coords2
-            print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}')
+            print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
             result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
 
 
