@@ -35,9 +35,19 @@ import webbpsf
 
 print("Completed imports")
 
-basepath = '/orange/adamginsburg/jwst/brick/'
+basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
-for filtername in ('F212N', 'F182M', 'F187N'):
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option("-f", "--filternames", dest="filternames",
+                  default='F212N,F182M,F187N',
+                  help="filter name list", metavar="filternames")
+(options, args) = parser.parse_args()
+
+filternames = options.filternames.split(",")
+
+
+for filtername in filternames:
     print(f"Starting filter {filtername}")
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -109,9 +119,12 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             weight[err < 1e-5] = 0
             weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
             weight[np.isnan(weight)] = 0
+            bad = np.isnan(weight) | (data == 0) | np.isnan(data)
 
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
+            weight[bad] = 0
+
 
             unweight = np.ones_like(data)*np.nanmedian(weight)
             assert np.all(np.isfinite(unweight))
@@ -138,6 +151,11 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             coords = ww.pixel_to_world(stars['y'], stars['x'])
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
+
+            stars.meta['filename'] = filename
+            stars.meta['filter'] = filtername
+            stars.meta['module'] = module
+            stars.meta['detector'] = detector
 
             tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits"
             stars.write(tblfilename, overwrite=True)
@@ -270,7 +288,7 @@ for filtername in ('F212N', 'F182M', 'F187N'):
             filtered_errest = stats.mad_std(data, ignore_nan=True)
             print(f'Error estimate for DAO: {filtered_errest}')
 
-            daofind_fin = DAOStarFinder(threshold=7 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+            daofind_fin = DAOStarFinder(threshold=5 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                         sharplo=0.30, sharphi=1.40)
             finstars = daofind_fin(data)
 

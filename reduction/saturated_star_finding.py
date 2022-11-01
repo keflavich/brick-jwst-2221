@@ -323,7 +323,7 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
 
     # there are examples, especially in F405, where the variance is NaN but the value
     # is negative
-    data[np.isnan(fh['VAR_POISSON'].data)] == 0
+    data[np.isnan(fh['VAR_POISSON'].data)] = 0
 
     header = fh[0].header
     if 'CRPIX1' not in header:
