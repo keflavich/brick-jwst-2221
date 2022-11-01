@@ -35,13 +35,23 @@ os.environ['WEBBPSF_PATH'] = '/blue/adamginsburg/adamginsburg/jwst/webbpsf-data/
 with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
     os.environ['MAST_API_TOKEN'] = fh.read().strip()
 import webbpsf
+from webbpsf.utils import to_griddedpsfmodel
 
 print("Done with imports", flush=True)
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option("-f", "--filternames", dest="filternames",
+                  default='F466N,F405N,F410M',
+                  help="filter name list", metavar="filternames")
+(options, args) = parser.parse_args()
+
+filternames = options.filternames.split(",")
+
 for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
-    for filtername in ('F466N', 'F405N', 'F410M', ):
+    for filtername in filternames:
         print(f"Starting filter {filtername}", flush=True)
         fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
         row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -64,10 +74,20 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         err = im1['ERR'].data
         instrument = im1[0].header['INSTRUME']
         telescope = im1[0].header['TELESCOP']
-        filt = im1[0].header['FILTER']
+        #filt = im1[0].header['FILTER']
+        filt = filtername
 
         wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
         obsdate = im1[0].header['DATE-OBS']
+
+        # psf_fn = f'{basepath}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
+        # if os.path.exists(str(psf_fn)):
+        #     # As a file
+        #     print(f"Loading grid from psf_fn={psf_fn}", flush=True)
+        #     grid = to_griddedpsfmodel(psf_fn)  # file created 2 cells above
+        #     if isinstance(big_grid, list):
+        #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
+        #         grid = grid[0]
 
         has_downloaded = False
         while not has_downloaded:
@@ -76,17 +96,25 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
                 nrc = webbpsf.NIRCam()
                 nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                 nrc.filter = filt
+                print(f"Running {module}")
                 if module in ('nrca', 'nrcb'):
                     nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False)
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
                 else:
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=True)
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True)
+                has_downloaded = True
             except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
                 print(f"Failed to build PSF: {ex}", flush=True)
             except Exception as ex:
                 print(ex, flush=True)
                 continue
 
+        # there's no way to use a grid across all detectors.
+        # the right way would be to use this as a grid of grids, but that apparently isn't supported.
+        if isinstance(grid, list):
+            grid = grid[0]
+
+        print("Done with WebbPSF downloading; now building model", flush=True)
         yy, xx = np.indices([31,31], dtype=float)
         grid.x_0 = grid.y_0 = 15.5
         psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
@@ -106,9 +134,11 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         weight[err < 1e-5] = 0
         weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
         weight[np.isnan(weight)] = 0
+        bad = np.isnan(weight) | (data == 0) | np.isnan(data)
 
         weight[weight > maxweight] = maxweight
         weight[weight < minweight] = minweight
+        weight[bad] = 0
 
 
 
@@ -128,7 +158,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         filtered_errest = stats.mad_std(data, ignore_nan=True)
         print(f'Error estimate for DAO: {filtered_errest}', flush=True)
 
-        daofind_fin = DAOStarFinder(threshold=10 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+        daofind_fin = DAOStarFinder(threshold=5 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                     sharplo=0.30, sharphi=1.40)
         print("Finding stars", flush=True)
         finstars = daofind_fin(data)
@@ -147,37 +177,6 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         # not needed?     return psfmodel.evaluate(x, y, flux, x_0, y_0)
         # not needed? grid.evaluate = evaluate
 
-        print("Starting basic PSF photometry", flush=True)
-        phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
-                                    group_maker=daogroup,
-                                    bkg_estimator=None, # must be none or it un-saturates pixels
-                                    psf_model=grid,
-                                    fitter=LevMarLSQFitter(),
-                                    fitshape=(11, 11),
-                                    aperture_radius=5*fwhm_pix)
-
-        result = phot(data)
-        coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
-        print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
-        result['skycoord_centroid'] = coords
-        detector = "" # no detector #'s for long
-        result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
-
-        if False:
-            # iterative takes for-ev-er
-            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
-                                                        bkg_estimator=mmm_bkg,
-                                                        psf_model=grid,
-                                                        fitter=LevMarLSQFitter(),
-                                                        niters=2, fitshape=(11, 11),
-                                                        aperture_radius=2*fwhm_pix)
-
-            result2 = phot_(data)
-            coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
-            result2['skycoord_centroid'] = coords2
-            print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
-            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
-
 
 
         results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
@@ -190,6 +189,11 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         coords = ww.pixel_to_world(stars['y'], stars['x'])
         stars['skycoord'] = coords
         stars['x'], stars['y'] = stars['y'], stars['x']
+
+        stars.meta['filename'] = filename
+        stars.meta['filter'] = filtername
+        stars.meta['module'] = module
+        stars.meta['detector'] = detector
 
         tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits"
         stars.write(tblfilename, overwrite=True)
@@ -253,7 +257,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
 
 
         results_blur  = fit_im(data, psf_model_blur, weight=weight,
-                            nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+                               nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_blur
         stars = Table(stars)
 
@@ -302,3 +306,34 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics.png',
                    bbox_inches='tight')
 
+
+        print("Starting basic PSF photometry", flush=True)
+        phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
+                                  group_maker=daogroup,
+                                  bkg_estimator=None, # must be none or it un-saturates pixels
+                                  psf_model=grid,
+                                  fitter=LevMarLSQFitter(),
+                                  fitshape=(11, 11),
+                                  aperture_radius=5*fwhm_pix)
+
+        result = phot(data)
+        coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+        print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
+        result['skycoord_centroid'] = coords
+        detector = "" # no detector #'s for long
+        result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
+
+        if True:
+            # iterative takes for-ev-er
+            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
+                                                        bkg_estimator=mmm_bkg,
+                                                        psf_model=grid,
+                                                        fitter=LevMarLSQFitter(),
+                                                        niters=2, fitshape=(11, 11),
+                                                        aperture_radius=2*fwhm_pix)
+
+            result2 = phot_(data)
+            coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
+            result2['skycoord_centroid'] = coords2
+            print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
+            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
