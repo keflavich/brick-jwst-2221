@@ -51,6 +51,7 @@ parser.add_option("-f", "--filternames", dest="filternames",
 filternames = options.filternames.split(",")
 
 for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
+    detector = module # no sub-detectors for long-NIRCAM
     for filtername in filternames:
         print(f"Starting filter {filtername}", flush=True)
         fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
@@ -131,14 +132,18 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         weight = err**-1
         maxweight = np.percentile(weight[np.isfinite(weight)], 95)
         minweight = np.percentile(weight[np.isfinite(weight)], 5)
+        badweight =  np.percentile(weight[np.isfinite(weight)], 1)
         weight[err < 1e-5] = 0
         weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
         weight[np.isnan(weight)] = 0
-        bad = np.isnan(weight) | (data == 0) | np.isnan(data)
+        bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0)
 
         weight[weight > maxweight] = maxweight
         weight[weight < minweight] = minweight
-        weight[bad] = 0
+        # it seems that crowdsource doesn't like zero weights
+        weight[bad] = badweight
+        weight[bad] = minweight
+
 
 
 
@@ -155,13 +160,15 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         daogroup = DAOGroup(2 * fwhm_pix)
         mmm_bkg = MMMBackground()
 
-        filtered_errest = stats.mad_std(data, ignore_nan=True)
-        print(f'Error estimate for DAO: {filtered_errest}', flush=True)
+        filtered_errest = stats.sigma_clipped_stats(data, stdfunc='mad_std')
+        print(f'Error estimate for DAO from stats.: {filtered_errest}', flush=True)
+        filtered_errest = np.nanmedian(err)
+        print(f'Error estimate for DAO from median(err): {filtered_errest}', flush=True)
 
-        daofind_fin = DAOStarFinder(threshold=5 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+        daofind_tuned = DAOStarFinder(threshold=5 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                     sharplo=0.30, sharphi=1.40)
-        print("Finding stars", flush=True)
-        finstars = daofind_fin(data)
+        print("Finding stars with daofind_tuned", flush=True)
+        finstars = daofind_tuned(np.nan_to_num(data))
 
         #grid.x_0 = 0
         #grid.y_0 = 0
@@ -179,7 +186,8 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
 
 
 
-        results_unweighted  = fit_im(data, psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
+        print("starting crowdsource unweighted", flush=True)
+        results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
                                         #psfderiv=np.gradient(-psf_initial[0].data),
                                         nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_unweighted
@@ -202,33 +210,38 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
             fh[0].header.update(im1[1].header)
         fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
+        zoomcut = slice(128, 256), slice(128, 256)
 
-        pl.figure(figsize=(12,12))
-        pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-        pl.xticks([]); pl.yticks([]); pl.title("Data")
-        pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
-        pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-        pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
-        pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-        pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-        pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
-        pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
-                   bbox_inches='tight')
+        try:
+            pl.figure(figsize=(12,12))
+            pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+            pl.xticks([]); pl.yticks([]); pl.title("Data")
+            pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
+            pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+            pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
+            pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+            pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=5, linewidth=0.5)
+            pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
+                    bbox_inches='tight')
 
-        pl.figure(figsize=(12,12))
-        pl.subplot(2,2,1).imshow(data[:128,:128], norm=simple_norm(data[:128,:128], stretch='log', max_percent=99.95), cmap='gray')
-        pl.xticks([]); pl.yticks([]); pl.title("Data")
-        pl.subplot(2,2,2).imshow(modsky[:128,:128], norm=simple_norm(modsky[:128,:128], stretch='log', max_percent=99.95), cmap='gray')
-        pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-        pl.subplot(2,2,3).imshow(skymsky[:128,:128], norm=simple_norm(skymsky[:128,:128], stretch='asinh'), cmap='gray')
-        pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-        pl.subplot(2,2,4).imshow(data[:128,:128], norm=simple_norm(data[:128,:128], stretch='log', max_percent=99.95), cmap='gray')
-        pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
-        pl.axis([0,128,0,128])
-        pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
-                   bbox_inches='tight')
+
+            pl.figure(figsize=(12,12))
+            pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.xticks([]); pl.yticks([]); pl.title("Data")
+            pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+            pl.subplot(2,2,3).imshow(skymsky[zoomcut], norm=simple_norm(skymsky[zoomcut], stretch='asinh'), cmap='gray')
+            pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+            pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
+            pl.axis([0,128,0,128])
+            pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
+                    bbox_inches='tight')
+        except Exception as ex:
+            print(f'FAILURE: {ex}')
 
         # pl.figure(figsize=(10,5))
         # pl.subplot(1,2,1).imshow(psf_model(30,30), norm=simple_norm(psf_model(30,30), stretch='log'), cmap='cividis')
@@ -255,8 +268,10 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_weights.png',
                    bbox_inches='tight')
 
+        print("Running crowdsource fit_im with weights")
+        print(f"psf_model_blur={psf_model_blur}")
 
-        results_blur  = fit_im(data, psf_model_blur, weight=weight,
+        results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                nskyx=1, nskyy=1, refit_psf=False, verbose=True)
         stars, modsky, skymsky, psf = results_blur
         stars = Table(stars)
@@ -277,15 +292,17 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         fits.PrimaryHDU(data=data-modsky,
                         header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_data-modsky.fits", overwrite=True)
 
+        zoomcut = slice(128, 256), slice(128, 256)
+
         pl.figure(figsize=(12,12))
-        pl.subplot(2,2,1).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("Data")
-        pl.subplot(2,2,2).imshow(modsky[:128,:128], norm=simple_norm(modsky[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-        pl.subplot(2,2,3).imshow((data-modsky)[:128,:128], norm=simple_norm((data-modsky)[:256,:256], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+        pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
-        pl.subplot(2,2,4).imshow(data[:128,:128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
-        pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
+        pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
         pl.axis([0,128,0,128])
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
         pl.suptitle("Using WebbPSF model blurred a little")
@@ -301,14 +318,14 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
         pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-        pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
+        pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=5, linewidth=0.5)
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics.png',
                    bbox_inches='tight')
 
 
         print("Starting basic PSF photometry", flush=True)
-        phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
+        phot = BasicPSFPhotometry(finder=daofind_tuned,#finder_maker(),
                                   group_maker=daogroup,
                                   bkg_estimator=None, # must be none or it un-saturates pixels
                                   psf_model=grid,
@@ -316,7 +333,9 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
                                   fitshape=(11, 11),
                                   aperture_radius=5*fwhm_pix)
 
-        result = phot(data)
+        print("About to do BASIC photometry....")
+        result = phot(np.nan_to_num(data))
+        print("Done with BASIC photometry")
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
         result['skycoord_centroid'] = coords
@@ -325,7 +344,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
 
         if True:
             # iterative takes for-ev-er
-            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
+            phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_tuned, group_maker=daogroup,
                                                         bkg_estimator=mmm_bkg,
                                                         psf_model=grid,
                                                         fitter=LevMarLSQFitter(),

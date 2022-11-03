@@ -35,19 +35,9 @@ import webbpsf
 
 print("Completed imports")
 
-basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
+basepath = '/orange/adamginsburg/jwst/brick/'
 
-from optparse import OptionParser
-parser = OptionParser()
-parser.add_option("-f", "--filternames", dest="filternames",
-                  default='F212N,F182M,F187N',
-                  help="filter name list", metavar="filternames")
-(options, args) = parser.parse_args()
-
-filternames = options.filternames.split(",")
-
-
-for filtername in filternames:
+for filtername in ('F212N', 'F182M', 'F187N'):
     print(f"Starting filter {filtername}")
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -116,15 +106,15 @@ for filtername in filternames:
             weight = err**-1
             maxweight = np.percentile(weight[np.isfinite(weight)], 95)
             minweight = np.percentile(weight[np.isfinite(weight)], 5)
+            badweight =  np.percentile(weight[np.isfinite(weight)], 1)
             weight[err < 1e-5] = 0
             weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
             weight[np.isnan(weight)] = 0
-            bad = np.isnan(weight) | (data == 0) | np.isnan(data)
+            bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0)
 
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
-            weight[bad] = 0
-
+            weight[bad] = badweight
 
             unweight = np.ones_like(data)*np.nanmedian(weight)
             assert np.all(np.isfinite(unweight))
@@ -140,6 +130,8 @@ for filtername in filternames:
               File "/blue/adamginsburg/adamginsburg/repos/crowdsource/crowdsource/crowdsource_base.py", line 836, in fit_im
                 raise ValueError("Model is all NaNs")
             ValueError: Model is all NaNs
+
+            On further inspection, it seemed to come up when there were any zero weights
             """
             results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=unweight,
                                          #psfderiv=np.gradient(-psf_initial[0].data),
@@ -151,11 +143,6 @@ for filtername in filternames:
             coords = ww.pixel_to_world(stars['y'], stars['x'])
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
-
-            stars.meta['filename'] = filename
-            stars.meta['filter'] = filtername
-            stars.meta['module'] = module
-            stars.meta['detector'] = detector
 
             tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits"
             stars.write(tblfilename, overwrite=True)
@@ -174,20 +161,21 @@ for filtername in filternames:
             pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-            pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
+            pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
 
+            zoomcut = slice(512, 512+128), slice(512, 512+128)
             pl.figure(figsize=(12,12))
-            pl.subplot(2,2,1).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[512:512+128,512:512+128], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
-            pl.subplot(2,2,2).imshow(modsky[512:512+128,512:512+128], norm=simple_norm(modsky[512:512+128,512:512+128], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-            pl.subplot(2,2,3).imshow(skymsky[512:512+128,512:512+128], norm=simple_norm(skymsky[512:512+128,512:512+128], stretch='asinh'), cmap='gray')
+            pl.subplot(2,2,3).imshow(skymsky[zoomcut], norm=simple_norm(skymsky[zoomcut], stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-            pl.subplot(2,2,4).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[512:512+128,512:512+128], stretch='log', max_percent=99.95), cmap='gray')
-            pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
+            pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}_catalog_diagnostics_zoom_unweighted.png',
@@ -242,14 +230,14 @@ for filtername in filternames:
 
 
             pl.figure(figsize=(12,12))
-            pl.subplot(2,2,1).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
-            pl.subplot(2,2,2).imshow(modsky[512:512+128,512:512+128], norm=simple_norm(modsky[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
-            pl.subplot(2,2,3).imshow((data-modsky)[512:512+128,512:512+128], norm=simple_norm((data-modsky)[:256,:256], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+            pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
-            pl.subplot(2,2,4).imshow(data[512:512+128,512:512+128], norm=simple_norm(data[:256,:256], stretch='log', max_percent=99.95), cmap='gray')
-            pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=8, linewidth=0.5)
+            pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.suptitle("Using WebbPSF model blurred a little")
@@ -265,7 +253,7 @@ for filtername in filternames:
             pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-            pl.subplot(2,2,4).scatter(stars['y'], stars['x'], marker='x', color='r', s=5, linewidth=0.5)
+            pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_catalog_diagnostics.png',
                     bbox_inches='tight')
@@ -288,7 +276,7 @@ for filtername in filternames:
             filtered_errest = stats.mad_std(data, ignore_nan=True)
             print(f'Error estimate for DAO: {filtered_errest}')
 
-            daofind_fin = DAOStarFinder(threshold=5 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
+            daofind_fin = DAOStarFinder(threshold=7 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                         sharplo=0.30, sharphi=1.40)
             finstars = daofind_fin(data)
 
