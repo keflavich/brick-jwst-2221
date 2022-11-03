@@ -31,9 +31,10 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f410m',
                    max_offset=0.25*u.arcsec):
     basetable = master_tbl = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
-    basecrds = basetable['skycoords']
+    basecrds = basetable['skycoord']
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
     flag_near_saturated(basetable, filtername=ref_filter)
+    print(f"filter {basetable.meta['filter']} has {len(basetable)} rows")
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -42,8 +43,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
         for tbl in tbls[1:]:
             wl = tbl.meta['filter']
-            print(wl, len(tbl))
-            crds = tbl['skycoords']
+            print(f"filter {wl} has {len(tbl)} rows")
+            crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
             # do one iteration of bulk offset measurement
@@ -54,7 +55,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             tbl.meta[f'ra_offset_from_{ref_filter}'] = medsep_ra
             tbl.meta[f'dec_offset_from_{ref_filter}'] = medsep_dec
             newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
-            tbl['skycoords'] = newcrds
+            tbl['skycoord'] = newcrds
 
             flag_near_saturated(tbl, filtername=wl)
 
@@ -123,7 +124,7 @@ def merge_crowdsource(module='nrca', suffix=""):
     for tbl, ww in zip(tbls, wcses):
         # Now done in the original catalog making step tbl['y'],tbl['x'] = tbl['x'],tbl['y']
         crds = ww.pixel_to_world(tbl['x'], tbl['y'])
-        tbl.add_column(crds, name='skycoords')
+        tbl.add_column(crds, name='skycoord')
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
         flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
@@ -164,7 +165,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic'):
             crds = ww.pixel_to_world(tbl['x_fit'], tbl['y_fit'])
         else:
             crds = ww.pixel_to_world(tbl['x_0'], tbl['y_0'])
-        tbl.add_column(crds, name='skycoords')
+        tbl.add_column(crds, name='skycoord')
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
         flux = tbl['flux_fit'] if 'flux_fit' in tbl.colnames else tbl['flux_0']
@@ -176,8 +177,9 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic'):
         tbl.meta['fwhm_arcsec'] = fwhm
         tbl.meta['fwhm_pix'] = fwhm_pix
 
-        flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
-        abmag = flux_jy.to(u.ABmag)
+        with np.errstate(all='ignore'):
+            flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+            abmag = flux_jy.to(u.ABmag)
         tbl.add_column(flux_jy, name='flux_jy')
         tbl.add_column(abmag, name='mag_ab')
 
@@ -189,7 +191,7 @@ def flag_near_saturated(cat, filtername, radius=None):
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
-    cat_coords = cat['skycoords']
+    cat_coords = cat['skycoord']
 
     if radius is None:
         radius = {'f466n': 0.3*u.arcsec,
@@ -209,11 +211,18 @@ def flag_near_saturated(cat, filtername, radius=None):
 
 def main():
     for module in ('nrca', 'nrcb', 'merged',):
-        print(module)
+        print(f'crowdsource {module}')
         merge_crowdsource(module=module)
+        print(f'crowdsource unweighted {module}')
         merge_crowdsource(module=module, suffix='_unweighted')
+        print(f'daophot basic {module}')
         merge_daophot(daophot_type='basic', module=module)
         try:
+            print(f'daophot iterative {module}')
             merge_daophot(daophot_type='iterative', module=module)
         except Exception as ex:
             print(ex)
+        print()
+
+if __name__ == "__main__":
+    main()
