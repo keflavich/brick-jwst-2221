@@ -123,8 +123,11 @@ def merge_crowdsource(module='nrca', suffix=""):
 
     for tbl, ww in zip(tbls, wcses):
         # Now done in the original catalog making step tbl['y'],tbl['x'] = tbl['x'],tbl['y']
-        crds = ww.pixel_to_world(tbl['x'], tbl['y'])
-        tbl.add_column(crds, name='skycoord')
+        if 'skycoord' not in tbl.colnames:
+            crds = ww.pixel_to_world(tbl['x'], tbl['y'])
+            tbl.add_column(crds, name='skycoord')
+        else:
+            crds = tbl['skycoord']
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
         flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
@@ -165,7 +168,8 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic'):
             crds = ww.pixel_to_world(tbl['x_fit'], tbl['y_fit'])
         else:
             crds = ww.pixel_to_world(tbl['x_0'], tbl['y_0'])
-        tbl.add_column(crds, name='skycoord')
+        if 'skycoord' not in tbl.colnames:
+            tbl.add_column(crds, name='skycoord')
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
         flux = tbl['flux_fit'] if 'flux_fit' in tbl.colnames else tbl['flux_0']

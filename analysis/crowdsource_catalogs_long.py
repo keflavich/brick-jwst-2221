@@ -141,8 +141,10 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         weight[weight > maxweight] = maxweight
         weight[weight < minweight] = minweight
         # it seems that crowdsource doesn't like zero weights
-        weight[bad] = badweight
+        # may have caused broked f466n? weight[bad] = badweight
         weight[bad] = minweight
+        # crowdsource explicitly handles weight=0, so this _should_ work.
+        weight[bad] = 0
 
 
 
