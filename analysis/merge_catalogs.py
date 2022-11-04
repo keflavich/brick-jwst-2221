@@ -131,9 +131,13 @@ def merge_crowdsource(module='nrca', suffix=""):
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
         flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+        eflux_jy = (tbl['dflux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
         abmag = flux_jy.to(u.ABmag)
+        abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy
         tbl.add_column(flux_jy, name='flux_jy')
+        tbl.add_column(eflux_jy, name='eflux_jy')
         tbl.add_column(abmag, name='mag_ab')
+        tbl.add_column(abmag_err, name='emag_ab')
 
     merge_catalogs(tbls, catalog_type=f'crowdsource{suffix}', module=module)
 

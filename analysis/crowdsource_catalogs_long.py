@@ -50,7 +50,7 @@ parser.add_option("-f", "--filternames", dest="filternames",
 
 filternames = options.filternames.split(",")
 
-for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
+for module in ('nrca', 'nrcb', 'merged', 'merged-reproject', ):
     detector = module # no sub-detectors for long-NIRCAM
     for filtername in filternames:
         print(f"Starting filter {filtername}", flush=True)
@@ -223,7 +223,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
             pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-            pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=5, linewidth=0.5)
+            pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
@@ -237,7 +237,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
             pl.subplot(2,2,3).imshow(skymsky[zoomcut], norm=simple_norm(skymsky[zoomcut], stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
             pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
-            pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
+            pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
@@ -304,7 +304,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
         pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
-        pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
+        pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
         pl.axis([0,128,0,128])
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
         pl.suptitle("Using WebbPSF model blurred a little")
@@ -320,7 +320,7 @@ for module in ('merged', 'nrca', 'nrcb', 'merged-reproject', ):
         pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
         pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
-        pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=5, linewidth=0.5)
+        pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics.png',
                    bbox_inches='tight')
