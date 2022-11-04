@@ -44,7 +44,7 @@ for filtername in ('F212N', 'F182M', 'F187N'):
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
     fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
-    for module in ('merged-reproject', 'nrca', 'nrcb', ):
+    for module in ('nrca', 'nrcb', 'merged-reproject', 'merged'):
         for detector in ("", ):  # or range(1,5)
             # detector="" is for the merged version, which should be OK
             pupil = 'clear'
