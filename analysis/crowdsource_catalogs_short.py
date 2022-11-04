@@ -46,7 +46,8 @@ parser.add_option("-m", "--modules", dest="modules",
                   default='nrca,nrcb,merged,merged-reproject',
                   help="module list", metavar="modules")
 parser.add_option("-d", "--desaturated", dest="desaturated",
-                  default=True,
+                  default=False,
+                  action='store_true',
                   help="use image with saturated stars removed?", metavar="desaturated")
 (options, args) = parser.parse_args()
 
