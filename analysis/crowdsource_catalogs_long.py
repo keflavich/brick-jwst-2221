@@ -49,10 +49,14 @@ parser.add_option("-f", "--filternames", dest="filternames",
 parser.add_option("-m", "--modules", dest="modules",
                   default='nrca,nrcb,merged,merged-reproject',
                   help="module list", metavar="modules")
+parser.add_option("-d", "--desaturated", dest="desaturated",
+                  default=True,
+                  help="use image with saturated stars removed?", metavar="desaturated")
 (options, args) = parser.parse_args()
 
 filternames = options.filternames.split(",")
 modules = options.modules.split(",")
+use_desaturated = options.desaturated
 
 for module in modules:
     detector = module # no sub-detectors for long-NIRCAM
@@ -63,13 +67,15 @@ for module in modules:
         fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
         fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
+        desat = '_unsatstar' if use_desaturated else ''
+
         try:
             pupil = 'clear'
-            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
+            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
             fh = fits.open(filename)
         except Exception:
             pupil = 'F444W'
-            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
+            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
             fh = fits.open(filename)
         print(f"Starting on {filename}", flush=True)
 

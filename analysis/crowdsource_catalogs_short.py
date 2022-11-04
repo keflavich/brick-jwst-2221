@@ -157,6 +157,11 @@ for filtername in filternames:
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
 
+            stars.meta['filename'] = filename
+            stars.meta['filter'] = filtername
+            stars.meta['module'] = module
+            stars.meta['detector'] = detector
+
             tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits"
             stars.write(tblfilename, overwrite=True)
             # add WCS-containing header
@@ -226,6 +231,11 @@ for filtername in filternames:
                                    nskyx=1, nskyy=1, refit_psf=False, verbose=True)
             stars, modsky, skymsky, psf = results_blur
             stars = Table(stars)
+
+            stars.meta['filename'] = filename
+            stars.meta['filter'] = filtername
+            stars.meta['module'] = module
+            stars.meta['detector'] = detector
 
             # crowdsource explicitly inverts x & y from the numpy convention:
             # https://github.com/schlafly/crowdsource/issues/11
