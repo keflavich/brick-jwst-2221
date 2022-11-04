@@ -35,16 +35,29 @@ import webbpsf
 
 print("Completed imports")
 
-basepath = '/orange/adamginsburg/jwst/brick/'
+basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
-for filtername in ('F212N', 'F182M', 'F187N'):
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option("-f", "--filternames", dest="filternames",
+                  default='F212N,F182M,F187N',
+                  help="filter name list", metavar="filternames")
+parser.add_option("-m", "--modules", dest="modules",
+                  default='nrca,nrcb,merged,merged-reproject',
+                  help="module list", metavar="modules")
+(options, args) = parser.parse_args()
+
+filternames = options.filternames.split(",")
+modules = options.modules.split(",")
+
+for filtername in filternames:
     print(f"Starting filter {filtername}")
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
     fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
-    for module in ('nrca', 'nrcb', 'merged-reproject', 'merged'):
+    for module in modules:
         for detector in ("", ):  # or range(1,5)
             # detector="" is for the merged version, which should be OK
             pupil = 'clear'
