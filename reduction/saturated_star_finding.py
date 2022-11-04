@@ -336,8 +336,9 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh.writeto(filename.replace(".fits", save_suffix+".fits"), overwrite=True)
 
 def main():
-    for fn in glob.glob("/orange/adamginsburg/jwst/brick/F*/pipeline/*-merged_i2d.fits"):
-        remove_saturated_stars(fn)
+    for module in ('nrca', 'nrcb', 'merged'):
+        for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
+            remove_saturated_stars(fn)
 
 if __name__ == "__main__":
     main()
