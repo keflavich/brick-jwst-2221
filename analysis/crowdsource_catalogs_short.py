@@ -45,10 +45,16 @@ parser.add_option("-f", "--filternames", dest="filternames",
 parser.add_option("-m", "--modules", dest="modules",
                   default='nrca,nrcb,merged,merged-reproject',
                   help="module list", metavar="modules")
+parser.add_option("-d", "--desaturated", dest="desaturated",
+                  default=True,
+                  help="use image with saturated stars removed?", metavar="desaturated")
 (options, args) = parser.parse_args()
 
 filternames = options.filternames.split(",")
 modules = options.modules.split(",")
+use_desaturated = options.desaturated
+
+desat = '_unsatstar' if use_desaturated else ''
 
 for filtername in filternames:
     print(f"Starting filter {filtername}")
@@ -61,7 +67,7 @@ for filtername in filternames:
         for detector in ("", ):  # or range(1,5)
             # detector="" is for the merged version, which should be OK
             pupil = 'clear'
-            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_i2d.fits'
+            filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_i2d{desat}.fits'
             fh = fits.open(filename)
 
             print(f"Starting {filename}")
@@ -162,13 +168,13 @@ for filtername in filternames:
             stars.meta['module'] = module
             stars.meta['detector'] = detector
 
-            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_unweighted.fits"
+            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_crowdsource_unweighted.fits"
             stars.write(tblfilename, overwrite=True)
             # add WCS-containing header
             with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
                 fh[0].header.update(im1[1].header)
 
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_skymodel_unweighted.fits", overwrite=True)
+            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
 
             pl.figure(figsize=(12,12))
@@ -181,7 +187,7 @@ for filtername in filternames:
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}_catalog_diagnostics_unweighted.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}{desat}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
 
             zoomcut = slice(512, 512+128), slice(512, 512+128)
@@ -196,7 +202,7 @@ for filtername in filternames:
             pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}_catalog_diagnostics_zoom_unweighted.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}{desat}_catalog_diagnostics_zoom_unweighted.png',
                     bbox_inches='tight')
 
             # pl.figure(figsize=(10,5))
@@ -222,7 +228,7 @@ for filtername in filternames:
             fig.clf()
             ax = fig.gca()
             im = ax.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar(mappable=im);
-            fig.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_weights.png',
+            fig.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}{desat}_weights.png',
                     bbox_inches='tight')
 
 
@@ -243,12 +249,12 @@ for filtername in filternames:
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
 
-            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource.fits"
+            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_crowdsource.fits"
             stars.write(tblfilename, overwrite=True)
             # add WCS-containing header
             with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
                 fh[0].header.update(im1[1].header)
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_crowdsource_skymodel.fits", overwrite=True)
+            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_crowdsource_skymodel.fits", overwrite=True)
 
 
 
@@ -265,7 +271,7 @@ for filtername in filternames:
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.suptitle("Using WebbPSF model blurred a little")
             pl.tight_layout()
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_catalog_diagnostics_zoom.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}{desat}_catalog_diagnostics_zoom.png',
                     bbox_inches='tight')
 
             pl.figure(figsize=(12,12))
@@ -278,7 +284,7 @@ for filtername in filternames:
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_catalog_diagnostics.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}{desat}_catalog_diagnostics.png',
                     bbox_inches='tight')
 
 
@@ -327,7 +333,7 @@ for filtername in filternames:
 
             result = phot(data)
             result['skycoord_centroid'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
-            result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
+            result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_basic.fits", overwrite=True)
 
             if False:
                 # iterative takes too long
@@ -340,4 +346,4 @@ for filtername in filternames:
 
                 result2 = phot_(data)
                 result2['skycoord_centroid'] = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
-                result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
+                result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_iterative.fits", overwrite=True)
