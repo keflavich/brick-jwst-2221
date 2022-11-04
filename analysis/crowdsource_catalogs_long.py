@@ -46,11 +46,15 @@ parser = OptionParser()
 parser.add_option("-f", "--filternames", dest="filternames",
                   default='F466N,F405N,F410M',
                   help="filter name list", metavar="filternames")
+parser.add_option("-m", "--modules", dest="modules",
+                  default='nrca,nrcb,merged,merged-reproject',
+                  help="module list", metavar="modules")
 (options, args) = parser.parse_args()
 
 filternames = options.filternames.split(",")
+modules = options.modules.split(",")
 
-for module in ('nrca', 'nrcb', 'merged', 'merged-reproject', ):
+for module in modules:
     detector = module # no sub-detectors for long-NIRCAM
     for filtername in filternames:
         print(f"Starting filter {filtername}", flush=True)
