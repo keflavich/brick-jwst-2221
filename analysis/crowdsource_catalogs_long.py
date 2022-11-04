@@ -50,7 +50,8 @@ parser.add_option("-m", "--modules", dest="modules",
                   default='nrca,nrcb,merged,merged-reproject',
                   help="module list", metavar="modules")
 parser.add_option("-d", "--desaturated", dest="desaturated",
-                  default=True,
+                  default=False,
+                  action='store_true',
                   help="use image with saturated stars removed?", metavar="desaturated")
 (options, args) = parser.parse_args()
 
@@ -144,9 +145,9 @@ for module in modules:
         minweight = np.percentile(weight[np.isfinite(weight)], 5)
         badweight =  np.percentile(weight[np.isfinite(weight)], 1)
         weight[err < 1e-5] = 0
-        weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
+        #weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
         weight[np.isnan(weight)] = 0
-        bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0)
+        bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (err == 0) | (wht == 0)
 
         weight[weight > maxweight] = maxweight
         weight[weight < minweight] = minweight
@@ -228,13 +229,17 @@ for module in modules:
             pl.figure(figsize=(12,12))
             pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
+            pl.colorbar()
             pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+            pl.colorbar()
             pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+            pl.colorbar()
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+            pl.colorbar()
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
 
@@ -242,14 +247,18 @@ for module in modules:
             pl.figure(figsize=(12,12))
             pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
+            pl.colorbar()
             pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+            pl.colorbar()
             pl.subplot(2,2,3).imshow(skymsky[zoomcut], norm=simple_norm(skymsky[zoomcut], stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+            pl.colorbar()
             pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+            pl.colorbar()
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_unweighted.png',
                     bbox_inches='tight')
         except Exception as ex:
@@ -309,15 +318,19 @@ for module in modules:
         pl.figure(figsize=(12,12))
         pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("Data")
+        pl.colorbar()
         pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+        pl.colorbar()
         pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
+        pl.colorbar()
         pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
         pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
         pl.axis([0,128,0,128])
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-        pl.suptitle("Using WebbPSF model blurred a little")
+        pl.colorbar()
+        pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}")
         pl.tight_layout()
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom.png',
                    bbox_inches='tight')
@@ -325,15 +338,87 @@ for module in modules:
         pl.figure(figsize=(12,12))
         pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("Data")
+        pl.colorbar()
         pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+        pl.colorbar()
         pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
         pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+        pl.colorbar()
         pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
         pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+        pl.colorbar()
+        pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}")
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics.png',
                    bbox_inches='tight')
+
+
+        print("Running crowdsource fit_im with weights & nskyx=nskyy=15")
+
+        results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
+                               nskyx=15, nskyy=15, refit_psf=False, verbose=True)
+        print("Done with fit_im")
+        stars, modsky, skymsky, psf = results_blur
+        stars = Table(stars)
+
+        # crowdsource explicitly inverts x & y from the numpy convention:
+        # https://github.com/schlafly/crowdsource/issues/11
+        coords = ww.pixel_to_world(stars['y'], stars['x'])
+        stars['skycoord'] = coords
+        stars['x'], stars['y'] = stars['y'], stars['x']
+
+        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_nsky15.fits"
+        stars.write(tblfilename, overwrite=True)
+        # add WCS-containing header
+        with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+            fh[0].header.update(im1[1].header)
+
+        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_nsky15_skymodel.fits", overwrite=True)
+        fits.PrimaryHDU(data=data-modsky,
+                        header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_nsky15_data-modsky.fits", overwrite=True)
+
+        zoomcut = slice(128, 256), slice(128, 256)
+
+        pl.figure(figsize=(12,12))
+        pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+        pl.xticks([]); pl.yticks([]); pl.title("Data")
+        pl.colorbar()
+        pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+        pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+        pl.colorbar()
+        pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+        pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
+        pl.colorbar()
+        pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
+        pl.axis([0,128,0,128])
+        pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+        pl.colorbar()
+        pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}")
+        pl.tight_layout()
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky15_catalog_diagnostics_zoom.png',
+                   bbox_inches='tight')
+
+        pl.figure(figsize=(12,12))
+        pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+        pl.xticks([]); pl.yticks([]); pl.title("Data")
+        pl.colorbar()
+        pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
+        pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+        pl.colorbar()
+        pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
+        pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+        pl.colorbar()
+        pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+        pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
+        pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+        pl.colorbar()
+        pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}")
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky15_catalog_diagnostics.png',
+                   bbox_inches='tight')
+
+
 
 
         print("Starting basic PSF photometry", flush=True)
