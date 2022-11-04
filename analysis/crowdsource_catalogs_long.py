@@ -107,7 +107,7 @@ for module in modules:
                 nrc = webbpsf.NIRCam()
                 nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                 nrc.filter = filt
-                print(f"Running {module}")
+                print(f"Running {module}{desat}")
                 if module in ('nrca', 'nrcb'):
                     nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
@@ -215,12 +215,12 @@ for module in modules:
         stars.meta['module'] = module
         stars.meta['detector'] = detector
 
-        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_unweighted.fits"
+        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_unweighted.fits"
         stars.write(tblfilename, overwrite=True)
         # add WCS-containing header
         with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
             fh[0].header.update(im1[1].header)
-        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel_unweighted.fits", overwrite=True)
+        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
         zoomcut = slice(128, 256), slice(128, 256)
 
@@ -235,7 +235,7 @@ for module in modules:
             pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_unweighted.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
 
 
@@ -250,7 +250,7 @@ for module in modules:
             pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom_unweighted.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_unweighted.png',
                     bbox_inches='tight')
         except Exception as ex:
             print(f'FAILURE: {ex}')
@@ -277,7 +277,7 @@ for module in modules:
         fig.clf()
         ax = fig.gca()
         im = ax.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar(mappable=im);
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_weights.png',
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_weights.png',
                    bbox_inches='tight')
 
         print("Running crowdsource fit_im with weights")
@@ -294,15 +294,15 @@ for module in modules:
         stars['skycoord'] = coords
         stars['x'], stars['y'] = stars['y'], stars['x']
 
-        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource.fits"
+        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource.fits"
         stars.write(tblfilename, overwrite=True)
         # add WCS-containing header
         with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
             fh[0].header.update(im1[1].header)
 
-        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_skymodel.fits", overwrite=True)
+        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_skymodel.fits", overwrite=True)
         fits.PrimaryHDU(data=data-modsky,
-                        header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_data-modsky.fits", overwrite=True)
+                        header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_data-modsky.fits", overwrite=True)
 
         zoomcut = slice(128, 256), slice(128, 256)
 
@@ -319,7 +319,7 @@ for module in modules:
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
         pl.suptitle("Using WebbPSF model blurred a little")
         pl.tight_layout()
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics_zoom.png',
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom.png',
                    bbox_inches='tight')
 
         pl.figure(figsize=(12,12))
@@ -332,7 +332,7 @@ for module in modules:
         pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
         pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
         pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
-        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}_catalog_diagnostics.png',
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics.png',
                    bbox_inches='tight')
 
 
@@ -352,7 +352,7 @@ for module in modules:
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
         result['skycoord_centroid'] = coords
         detector = "" # no detector #'s for long
-        result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_basic.fits", overwrite=True)
+        result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_basic.fits", overwrite=True)
 
         if True:
             # iterative takes for-ev-er
@@ -367,4 +367,4 @@ for module in modules:
             coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
             result2['skycoord_centroid'] = coords2
             print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
-            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}_daophot_iterative.fits", overwrite=True)
+            result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_iterative.fits", overwrite=True)
