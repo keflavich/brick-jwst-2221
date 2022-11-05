@@ -1,4 +1,5 @@
 import crowdsource
+import time
 import regions
 import numpy as np
 from astropy.convolution import convolve, Gaussian2DKernel
@@ -49,6 +50,10 @@ parser.add_option("-d", "--desaturated", dest="desaturated",
                   default=False,
                   action='store_true',
                   help="use image with saturated stars removed?", metavar="desaturated")
+parser.add_option("--daophot", dest="daophot",
+                  default=False,
+                  action='store_true',
+                  help="run daophot?", metavar="daophot")
 (options, args) = parser.parse_args()
 
 filternames = options.filternames.split(",")
@@ -130,7 +135,7 @@ for filtername in filternames:
             weight[err < 1e-5] = 0
             weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
             weight[np.isnan(weight)] = 0
-            bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0)
+            bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (data < 1e-5)
 
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
@@ -233,9 +238,12 @@ for filtername in filternames:
                     bbox_inches='tight')
 
 
+            t0 = time.time()
+            print("Starting weighted fit_im crowdsource")
             # see note above about NaN models
             results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                    nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+            print(f"Done with weighted fit_im crowdsource dt={time.time()-t0}")
             stars, modsky, skymsky, psf = results_blur
             stars = Table(stars)
 
@@ -290,6 +298,70 @@ for filtername in filternames:
 
 
 
+            for nsky in (0, 1, 15):
+                t0 = time.time()
+                print(f"Starting weighted fit_im crowdsource w/nsky={nsky}")
+                # see note above about NaN models
+                results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
+                                    nskyx=nsky, nskyy=nsky, refit_psf=False, verbose=True)
+                print(f"Done with weighted fit_im w/nsky={nsky} crowdsource dt={time.time()-t0}")
+                stars, modsky, skymsky, psf = results_blur
+                stars = Table(stars)
+
+                stars.meta['filename'] = filename
+                stars.meta['filter'] = filtername
+                stars.meta['module'] = module
+                stars.meta['detector'] = detector
+
+                # crowdsource explicitly inverts x & y from the numpy convention:
+                # https://github.com/schlafly/crowdsource/issues/11
+                coords = ww.pixel_to_world(stars['y'], stars['x'])
+                stars['skycoord'] = coords
+                stars['x'], stars['y'] = stars['y'], stars['x']
+
+                tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_crowdsource_nsky{nsky}.fits"
+                stars.write(tblfilename, overwrite=True)
+                # add WCS-containing header
+                with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+                    fh[0].header.update(im1[1].header)
+                fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_crowdsource_nsky{nsky}_skymodel.fits", overwrite=True)
+
+
+
+                pl.figure(figsize=(12,12))
+                pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+                pl.xticks([]); pl.yticks([]); pl.title("Data")
+                pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+                pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+                pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+                pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
+                pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
+                pl.axis([0,128,0,128])
+                pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+                pl.suptitle("Using WebbPSF model blurred a little")
+                pl.tight_layout()
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}{desat}_catalog_nsky{nsky}_diagnostics_zoom.png',
+                        bbox_inches='tight')
+
+                pl.figure(figsize=(12,12))
+                pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+                pl.xticks([]); pl.yticks([]); pl.title("Data")
+                pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
+                pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
+                pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
+                pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
+                pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
+                pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}{desat}_catalog_nsky{nsky}_diagnostics.png',
+                        bbox_inches='tight')
+
+
+
+
+
+
             filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
             filter_table.add_index('filterID')
             instrument = 'NIRCam'
@@ -324,19 +396,20 @@ for filtername in filternames:
             #     return psfmodel.evaluate(x, y, flux, x_0, y_0)
             # grid.evaluate = evaluate
 
-            phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
-                                      group_maker=daogroup,
-                                      bkg_estimator=None, # must be none or it un-saturates pixels
-                                      psf_model=grid,
-                                      fitter=LevMarLSQFitter(),
-                                      fitshape=(11, 11),
-                                      aperture_radius=5*fwhm_pix)
+            if options.daophot:
+                phot = BasicPSFPhotometry(finder=daofind_fin,#finder_maker(),
+                                        group_maker=daogroup,
+                                        bkg_estimator=None, # must be none or it un-saturates pixels
+                                        psf_model=grid,
+                                        fitter=LevMarLSQFitter(),
+                                        fitshape=(11, 11),
+                                        aperture_radius=5*fwhm_pix)
 
-            result = phot(data)
-            result['skycoord_centroid'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
-            result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_basic.fits", overwrite=True)
+                result = phot(data)
+                result['skycoord_centroid'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+                result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_basic.fits", overwrite=True)
 
-            if False:
+            if options.daophot:
                 # iterative takes too long
                 phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_fin, group_maker=daogroup,
                                                         bkg_estimator=mmm_bkg,
