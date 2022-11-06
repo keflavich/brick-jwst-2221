@@ -35,7 +35,7 @@ with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
     os.environ['MAST_API_TOKEN'] = fh.read().strip()
 import webbpsf
 
-print("Completed imports")
+print("Completed imports", flush=True)
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
@@ -60,11 +60,13 @@ parser.add_option("--daophot", dest="daophot",
 filternames = options.filternames.split(",")
 modules = options.modules.split(",")
 use_desaturated = options.desaturated
+print(f'options={options}', flush=True)
+print(f'args={args}', flush=True)
 
 desat = '_unsatstar' if use_desaturated else ''
 
 for filtername in filternames:
-    print(f"Starting filter {filtername}")
+    print(f"Starting filter {filtername}", flush=True)
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -77,7 +79,7 @@ for filtername in filternames:
             filename = f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}_i2d{desat}.fits'
             fh = fits.open(filename)
 
-            print(f"Starting {filename}")
+            print(f"Starting {filename}", flush=True)
 
             im1 = fh
             data = im1[1].data
@@ -103,7 +105,7 @@ for filtername in filternames:
                     # TODO: figure out whether a blank detector works here (i.e., if it's possible to specify only the module)
                     if detector:
                         nrc.detector = f'{module.upper()}{detector}'
-                        print(f"Retrieving detector {nrc.detector} with filter {nrc.filter}")
+                        print(f"Retrieving detector {nrc.detector} with filter {nrc.filter}", flush=True)
                         all_detectors = False
                     else:
                         # should be "A" or "B"
@@ -116,9 +118,9 @@ for filtername in filternames:
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=all_detectors)
                     success = True
                 except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-                    print(f"Failed to build PSF: {ex}\n{now}")
+                    print(f"Failed to build PSF: {ex}\n{now}", flush=True)
                 except Exception as ex:
-                    print(f"EXCEPTION: {ex}\n{now}")
+                    print(f"EXCEPTION: {ex}\n{now}", flush=True)
                     continue
 
                 if attempts > 10:
@@ -136,13 +138,20 @@ for filtername in filternames:
             #cutout = mask.cutout(im1[1].data)
             #err = mask.cutout(im1[2].data)
 
+            t0 = time.time()
+            print(f"Calculating inverse error weights. t={t0}", flush=True)
             # crowdsource uses inverse-sigma, not inverse-variance
             weight = err**-1
-            maxweight = np.percentile(weight[np.isfinite(weight)], 95)
-            minweight = np.percentile(weight[np.isfinite(weight)], 5)
-            badweight =  np.percentile(weight[np.isfinite(weight)], 1)
+            print(f'weight shape: {weight.shape} weight dtype: {weight.dtype}')
+            print(f"Calculating finite weights.  t={time.time() - t0}", flush=True)
+            finiteweights = weight[np.isfinite(weight)]
+            print(f"Calculating percentiles.  t={time.time() - t0}", flush=True)
+            # allow overwriting input b/c it's a copy
+            badweight, minweight, midweight, maxweight = np.percentile(finiteweights, [1, 5, 50, 95], overwrite_input=True)
+            print(f"Flagging low weights.  t={time.time() - t0}", flush=True)
+            del finiteweights
             weight[err < 1e-5] = 0
-            weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
+            weight[(err == 0) | (wht == 0)] = midweight
             weight[np.isnan(weight)] = 0
             bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (data < 1e-5)
 
@@ -150,9 +159,9 @@ for filtername in filternames:
             weight[weight < minweight] = minweight
             weight[bad] = badweight
 
-            unweight = np.ones_like(data)*np.nanmedian(weight)
+            unweight = np.ones_like(data)*midweight
             assert np.all(np.isfinite(unweight))
-            print("Done calculating weights")
+            print("Done calculating weights", flush=True)
 
             """
             This error has repeatedly occurred.  My only guess is that it's
@@ -169,11 +178,11 @@ for filtername in filternames:
             On further inspection, it seemed to come up when there were any zero weights
             """
             t0 = time.time()
-            print("Running crowdsource unweighted")
-            results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=unweight,
-                                         #psfderiv=np.gradient(-psf_initial[0].data),
-                                         nskyx=1, nskyy=1, refit_psf=False, verbose=True)
-            print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
+            print("Running crowdsource unweighted", flush=True)
+            results_unweighted = fit_im(np.nan_to_num(data), psf_model, weight=unweight,
+                                        #psfderiv=np.gradient(-psf_initial[0].data),
+                                        nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+            print(f"Done with unweighted crowdsource. dt={time.time() - t0}", flush=True)
             stars, modsky, skymsky, psf = results_unweighted
             # crowdsource explicitly inverts x & y from the numpy convention:
             # https://github.com/schlafly/crowdsource/issues/11
@@ -252,11 +261,11 @@ for filtername in filternames:
 
 
             t0 = time.time()
-            print("Starting weighted fit_im crowdsource")
+            print("Starting weighted fit_im crowdsource", flush=True)
             # see note above about NaN models
             results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                    nskyx=1, nskyy=1, refit_psf=False, verbose=True)
-            print(f"Done with weighted fit_im crowdsource dt={time.time()-t0}")
+            print(f"Done with weighted fit_im crowdsource dt={time.time()-t0}", flush=True)
             stars, modsky, skymsky, psf = results_blur
             stars = Table(stars)
 
@@ -311,13 +320,14 @@ for filtername in filternames:
 
 
 
-            for nsky in (0, 1, 15):
+            # nsky=15 led to OOM errors
+            for nsky in (0, 1, 5):
                 t0 = time.time()
-                print(f"Starting weighted fit_im crowdsource w/nsky={nsky}")
+                print(f"Starting weighted fit_im crowdsource w/nsky={nsky}", flush=True)
                 # see note above about NaN models
                 results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                     nskyx=nsky, nskyy=nsky, refit_psf=False, verbose=True)
-                print(f"Done with weighted fit_im w/nsky={nsky} crowdsource dt={time.time()-t0}")
+                print(f"Done with weighted fit_im w/nsky={nsky} crowdsource dt={time.time()-t0}", flush=True)
                 stars, modsky, skymsky, psf = results_blur
                 stars = Table(stars)
 
@@ -389,7 +399,7 @@ for filtername in filternames:
             mmm_bkg = MMMBackground()
 
             filtered_errest = stats.mad_std(data, ignore_nan=True)
-            print(f'Error estimate for DAO: {filtered_errest}')
+            print(f'Error estimate for DAO: {filtered_errest}', flush=True)
 
             daofind_fin = DAOStarFinder(threshold=7 * filtered_errest, fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                         sharplo=0.30, sharphi=1.40)
