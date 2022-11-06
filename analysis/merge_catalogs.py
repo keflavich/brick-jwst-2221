@@ -108,7 +108,8 @@ def merge_crowdsource(module='nrca', suffix=""):
               for filn in filternames
               for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}_crowdsource{suffix}.fits")
              ]
-    assert len(catfns) == 6
+    if len(catfns) != 6:
+        raise ValueError(f"len(catfns) = {len(catfns)}.  catfns: {catfns}")
     tbls = [Table.read(catfn) for catfn in catfns]
 
     for catfn, tbl in zip(catfns, tbls):
@@ -227,6 +228,9 @@ def main():
         merge_crowdsource(module=module)
         print(f'crowdsource unweighted {module}')
         merge_crowdsource(module=module, suffix='_unweighted')
+        for suffix in ("_nsky0", "_nsky1", "_nsky15"):
+            print(f'crowdsource {suffix} {module}')
+            merge_crowdsource(module=module, suffix=suffix)
         print(f'daophot basic {module}')
         merge_daophot(daophot_type='basic', module=module)
         try:
