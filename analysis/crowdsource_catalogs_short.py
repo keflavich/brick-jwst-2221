@@ -2,6 +2,7 @@ import crowdsource
 import time
 import regions
 import numpy as np
+import datetime
 from astropy.convolution import convolve, Gaussian2DKernel
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
@@ -89,15 +90,20 @@ for filtername in filternames:
             wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
             obsdate = im1[0].header['DATE-OBS']
 
+            attempts = 0
             success = False
             while not success:
+                now = datetime.datetime.now()
+                attempts += 1
                 try:
                     nrc = webbpsf.NIRCam()
                     nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                     nrc.filter = filt
+
                     # TODO: figure out whether a blank detector works here (i.e., if it's possible to specify only the module)
                     if detector:
                         nrc.detector = f'{module.upper()}{detector}'
+                        print(f"Retrieving detector {nrc.detector} with filter {nrc.filter}")
                         all_detectors = False
                     else:
                         # should be "A" or "B"
@@ -110,10 +116,13 @@ for filtername in filternames:
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=all_detectors)
                     success = True
                 except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-                    print(f"Failed to build PSF: {ex}")
+                    print(f"Failed to build PSF: {ex}\n{now}")
                 except Exception as ex:
-                    print(ex)
+                    print(f"EXCEPTION: {ex}\n{now}")
                     continue
+
+                if attempts > 10:
+                    raise ValueError("Failed to download WebbPSF PSFs after 10 attempts")
 
             yy, xx = np.indices([31,31], dtype=float)
             grid.x_0 = grid.y_0 = 15.5
@@ -143,6 +152,7 @@ for filtername in filternames:
 
             unweight = np.ones_like(data)*np.nanmedian(weight)
             assert np.all(np.isfinite(unweight))
+            print("Done calculating weights")
 
             """
             This error has repeatedly occurred.  My only guess is that it's
@@ -158,9 +168,12 @@ for filtername in filternames:
 
             On further inspection, it seemed to come up when there were any zero weights
             """
+            t0 = time.time()
+            print("Running crowdsource unweighted")
             results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=unweight,
                                          #psfderiv=np.gradient(-psf_initial[0].data),
                                          nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+            print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
             stars, modsky, skymsky, psf = results_unweighted
             # crowdsource explicitly inverts x & y from the numpy convention:
             # https://github.com/schlafly/crowdsource/issues/11
@@ -184,13 +197,13 @@ for filtername in filternames:
 
 
             pl.figure(figsize=(12,12))
-            pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', min_cut=0, max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
-            pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', min_cut=0, max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
             pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-            pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', min_cut=0, max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}{detector}{desat}_catalog_diagnostics_unweighted.png',
@@ -198,13 +211,13 @@ for filtername in filternames:
 
             zoomcut = slice(512, 512+128), slice(512, 512+128)
             pl.figure(figsize=(12,12))
-            pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', min_cut=0, max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("Data")
-            pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', min_cut=0, max_percent=99.95), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
             pl.subplot(2,2,3).imshow(skymsky[zoomcut], norm=simple_norm(skymsky[zoomcut], stretch='asinh'), cmap='gray')
             pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-            pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+            pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', min_cut=0, max_percent=99.95), cmap='gray')
             pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
             pl.axis([0,128,0,128])
             pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
@@ -329,13 +342,13 @@ for filtername in filternames:
 
 
                 pl.figure(figsize=(12,12))
-                pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
                 pl.xticks([]); pl.yticks([]); pl.title("Data")
-                pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
                 pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
                 pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
                 pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
-                pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
                 pl.subplot(2,2,4).scatter(stars['x']+zoomcut[1].start, stars['y']+zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
                 pl.axis([0,128,0,128])
                 pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
@@ -345,13 +358,13 @@ for filtername in filternames:
                         bbox_inches='tight')
 
                 pl.figure(figsize=(12,12))
-                pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,1).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
                 pl.xticks([]); pl.yticks([]); pl.title("Data")
-                pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,2).imshow(modsky, norm=simple_norm(modsky, stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
                 pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
                 pl.subplot(2,2,3).imshow(skymsky, norm=simple_norm(skymsky, stretch='asinh'), cmap='gray')
                 pl.xticks([]); pl.yticks([]); pl.title("fit_im sky+skym")
-                pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95), cmap='gray')
+                pl.subplot(2,2,4).imshow(data, norm=simple_norm(data, stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
                 pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
                 pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{detector}{desat}_catalog_nsky{nsky}_diagnostics.png',
