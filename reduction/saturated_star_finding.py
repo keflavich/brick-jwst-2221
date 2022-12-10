@@ -123,57 +123,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         return tbl
     return saturated_finder
 
-def iteratively_remove_saturated_stars(data, header,
-                                       fit_sizes=[351, 351, 201, 201, 101, 51],
-                                       nsaturated=[(100, 500), (50, 100), (25, 50), (10, 25), (5, 10), (0, 5)],
-                                       min_flux=[1000, 750, 500, 250, 200, 150],
-                                       ap_rad=[15, 15, 15, 15, 10, 5],
-                                       require_gradient=[False, False, False, False, False, True],
-                                       dilations=[3, 3, 3, 2, 2, 1],
-                                       rindsize=[6, 5, 5, 4, 4, 3],
-                                       path_prefix='.',
-                                       verbose=False
-                                      ):
-    """
-    Iteratively remove the most saturated down to the least saturated stars until all such stars are fitted & subtracted.
-
-    Parameters
-    ----------
-    fit_sizes : list of integers
-        The size along each axis to cut out around the bright star to fit the
-        PSF and subtract it.  Bigger ``fit_sizes`` are _much_ more expensive,
-        but they are also needed for the brightest sources that affect large
-        areas on the image
-    nsaturated : list of tuples of integer pairs
-        The minimum and maximum number of saturated pixels for stars included in
-        each iteration.
-        For example, the range 100-500 will include all saturated sources with
-        100 < npixels < 500 contiguous saturated pixels.
-    min_flux : list of floats
-        The minimum flux value to consider an object a star.  This is to reject
-        regions that are set to zero but are not saturated.  It includes a region
-        that is by default from the saturated zone edge to a region 3 pixels away
-        using binary dilation.
-    ap_rad : list of integers
-        The aperture radius in which to perform aperture photometry.  It's not
-        clear that this parameter is at all important.
-    require_gradient : list of booleans
-        Check that the "star" pixels around the saturated pixels are brighter
-        than those inside.  This can be used to reject "fake" saturated stars
-        caused by other problems in the image.  It's not clear that this parameter
-        should ever be set, but it should likely be limited to the smallest
-        (~few saturated pixel) sources, since those are the only ones likely to
-        be fake sources.  I think these usually arise from places where the dither
-        failed to fill in bad pixels.
-    dilations : list of integers
-        Dilate the mask to be used when calculating photometry?
-        This masks out pixels around the saturated pixels, which are themselves
-        often unreliable.  This is probably most important for aperture
-        photometry, but it likely also affects PSF fitting.
-    """
-
-    assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
-
+def get_psf(header, path_prefix='.'):
     if header['INSTRUME'].lower() == 'nircam':
         psfgen = webbpsf.NIRCam()
         fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='NIRCam')
@@ -236,6 +186,63 @@ def iteratively_remove_saturated_stars(data, header,
             # that is some sort of average of the PSF model grid.
             # There's no way to do it _right_ right without going back to the original data,
             # which is untenable with this approach.  It's a huge project.
+
+    return big_grid
+
+
+def iteratively_remove_saturated_stars(data, header,
+                                       fit_sizes=[351, 351, 201, 201, 101, 51],
+                                       nsaturated=[(100, 500), (50, 100), (25, 50), (10, 25), (5, 10), (0, 5)],
+                                       min_flux=[1000, 750, 500, 250, 200, 150],
+                                       ap_rad=[15, 15, 15, 15, 10, 5],
+                                       require_gradient=[False, False, False, False, False, True],
+                                       dilations=[3, 3, 3, 2, 2, 1],
+                                       rindsize=[6, 5, 5, 4, 4, 3],
+                                       path_prefix='.',
+                                       verbose=False
+                                      ):
+    """
+    Iteratively remove the most saturated down to the least saturated stars until all such stars are fitted & subtracted.
+
+    Parameters
+    ----------
+    fit_sizes : list of integers
+        The size along each axis to cut out around the bright star to fit the
+        PSF and subtract it.  Bigger ``fit_sizes`` are _much_ more expensive,
+        but they are also needed for the brightest sources that affect large
+        areas on the image
+    nsaturated : list of tuples of integer pairs
+        The minimum and maximum number of saturated pixels for stars included in
+        each iteration.
+        For example, the range 100-500 will include all saturated sources with
+        100 < npixels < 500 contiguous saturated pixels.
+    min_flux : list of floats
+        The minimum flux value to consider an object a star.  This is to reject
+        regions that are set to zero but are not saturated.  It includes a region
+        that is by default from the saturated zone edge to a region 3 pixels away
+        using binary dilation.
+    ap_rad : list of integers
+        The aperture radius in which to perform aperture photometry.  It's not
+        clear that this parameter is at all important.
+    require_gradient : list of booleans
+        Check that the "star" pixels around the saturated pixels are brighter
+        than those inside.  This can be used to reject "fake" saturated stars
+        caused by other problems in the image.  It's not clear that this parameter
+        should ever be set, but it should likely be limited to the smallest
+        (~few saturated pixel) sources, since those are the only ones likely to
+        be fake sources.  I think these usually arise from places where the dither
+        failed to fill in bad pixels.
+    dilations : list of integers
+        Dilate the mask to be used when calculating photometry?
+        This masks out pixels around the saturated pixels, which are themselves
+        often unreliable.  This is probably most important for aperture
+        photometry, but it likely also affects PSF fitting.
+    """
+
+    assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
+
+    big_grid = get_psf(header, path_prefix=path_prefix)
+    ww = wcs.WCS(header)
 
     # We force the centroid to be fixed b/c the fitter doesn't do a great job with this...
     # ....this is not optimal...
