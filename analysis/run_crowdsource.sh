@@ -1,6 +1,6 @@
 #set -o xtrace
 # F405N F410M F466N F212N F187N F182M
-for filter in F212N F187N F182M; do
+for filter in F405N F410M F466N F212N F187N F182M; do
 for module in nrca nrcb merged; do
 for desaturated in "" "--desaturated"; do
 if [ $module = merged ]; then mem="192gb"; else mem="128gb"; fi

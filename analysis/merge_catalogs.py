@@ -134,11 +134,13 @@ def merge_crowdsource(module='nrca', suffix=""):
         flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
         eflux_jy = (tbl['dflux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
         abmag = flux_jy.to(u.ABmag)
-        abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy
-        tbl.add_column(flux_jy, name='flux_jy')
-        tbl.add_column(eflux_jy, name='eflux_jy')
-        tbl.add_column(abmag, name='mag_ab')
-        tbl.add_column(abmag_err, name='emag_ab')
+        abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            tbl.add_column(flux_jy, name='flux_jy')
+            tbl.add_column(eflux_jy, name='eflux_jy')
+            tbl.add_column(abmag, name='mag_ab')
+            tbl.add_column(abmag_err, name='emag_ab')
 
     merge_catalogs(tbls, catalog_type=f'crowdsource{suffix}', module=module)
 
@@ -207,12 +209,12 @@ def flag_near_saturated(cat, filtername, radius=None):
     cat_coords = cat['skycoord']
 
     if radius is None:
-        radius = {'f466n': 0.3*u.arcsec,
-                  'f212n': 0.3*u.arcsec,
-                  'f187n': 0.3*u.arcsec,
-                  'f405n': 0.3*u.arcsec,
-                  'f182m': 0.3*u.arcsec,
-                  'f410m': 0.3*u.arcsec,
+        radius = {'f466n': 0.55*u.arcsec,
+                  'f212n': 0.55*u.arcsec,
+                  'f187n': 0.55*u.arcsec,
+                  'f405n': 0.55*u.arcsec,
+                  'f182m': 0.55*u.arcsec,
+                  'f410m': 0.55*u.arcsec,
                   }[filtername]
 
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
@@ -228,7 +230,7 @@ def main():
         merge_crowdsource(module=module)
         print(f'crowdsource unweighted {module}')
         merge_crowdsource(module=module, suffix='_unweighted')
-        for suffix in ("_nsky0", "_nsky1", "_nsky15"):
+        for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
             print(f'crowdsource {suffix} {module}')
             merge_crowdsource(module=module, suffix=suffix)
         print(f'daophot basic {module}')
