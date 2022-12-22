@@ -14,6 +14,7 @@ from astropy.visualization import simple_norm
 import itertools
 import dust_extinction
 from astroquery.svo_fps import SvoFps
+from astroquery.vizier import Vizier
 from dust_extinction.averages import RRP89_MWGC, CT06_MWGC, F11_MWGC
 from dust_extinction.parameter_averages import CCM89
 
@@ -398,7 +399,7 @@ def starzoom(coords):
                 filters_plotted.append(filtername)
                 ii += 1
 
-def make_sed(coord, radius=0.5*u.arcsec, basetable=basetable):
+def make_sed(coord, basetable, radius=0.5*u.arcsec):
     skycrds_cat = basetable['skycoord_f410m']
     idx = coord.separation(skycrds_cat) < radius
     if len(idx) == 0:
