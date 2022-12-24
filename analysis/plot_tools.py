@@ -6,6 +6,7 @@ from astropy.io import fits
 from astropy import stats
 import pylab as pl
 from astropy import units as u
+from astropy.coordinates import SkyCoord
 from grid_strategy import strategies
 from astropy.table import Table
 from astropy import wcs
@@ -17,6 +18,9 @@ from astroquery.svo_fps import SvoFps
 from astroquery.vizier import Vizier
 from dust_extinction.averages import RRP89_MWGC, CT06_MWGC, F11_MWGC
 from dust_extinction.parameter_averages import CCM89
+import matplotlib as mpl
+
+from filtering import get_fwhm
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
@@ -368,36 +372,87 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0
     fig2.tight_layout()
     return statsd
 
-def starzoom(coords):
-    reg = regions.RectangleSkyRegion(center=coords, width=1*u.arcsec, height=1*u.arcsec)
+def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14):
+    reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
     ii = 0
-    pl.figure(figsize=(12,4))
-    filters_plotted = []
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        for fn in sorted(glob.glob(f'{basepath}/F*/pipeline/*nircam*nrc*_i2d.fits')):
-            filtername = fits.getheader(fn)['PUPIL']+fits.getheader(fn)['FILTER']
-            if filtername in filters_plotted:
-                continue
-            ww = wcs.WCS(fits.getheader(fn, ext=('SCI',1)))
-            if ww.footprint_contains(coords):
-                try:
-                    fits.getheader(fn, ext=("SCI", 1))['OLCRVAL1']
-                    #print(fn, fits.getheader(fn, ext=("SCI", 1))['OLCRVAL1'])
-                except Exception as ex:
-                    #print(ex)
+    with mpl.rc_context({"font.size": fontsize}):
+
+        fig = pl.figure(figsize=(12,4))
+        filters_plotted = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            for fn in sorted(glob.glob(f'{basepath}/F*/pipeline/*nircam*nrc*_i2d.fits')):
+                hdr0 = fits.getheader(fn)
+                filtername = hdr0['PUPIL']+hdr0['FILTER']
+                if filtername in filters_plotted:
                     continue
-                data = fits.getdata(fn, ext=('SCI',1))
-                mask = reg.to_pixel(ww).to_mask()
-                slcs,_ = mask.get_overlap_slices(data.shape)
-                ax = pl.subplot(1,6,ii+1)
-                ax.imshow(data[slcs], norm=simple_norm(data[slcs], stretch='asinh'),
-                          origin='lower', cmap='gray')
-                xx, yy = ww[slcs].world_to_pixel(coords)
-                ax.plot(xx, yy, 'rx')
-                ax.set_title(filtername)
-                filters_plotted.append(filtername)
-                ii += 1
+                hdr = fits.getheader(fn, ext=('SCI', 1))
+                ww = wcs.WCS(hdr)
+                if ww.footprint_contains(coords):
+                    try:
+                        hdr['OLCRVAL1']
+                        #print(fn, fits.getheader(fn, ext=("SCI", 1))['OLCRVAL1'])
+                    except Exception as ex:
+                        #print(ex)
+                        continue
+                    data = fits.getdata(fn, ext=('SCI',1))
+                    mask = reg.to_pixel(ww).to_mask()
+                    slcs,_ = mask.get_overlap_slices(data.shape)
+
+
+                    xc, yc = map(int, map(np.round, ww.world_to_pixel(coords)))
+                    center_value = data[yc,xc]
+                    good_center = np.isfinite(center_value) and center_value > 2
+                    maxval = None #center_value if good_center else None
+                    minval = 0 if good_center else None
+                    stretch = 'log'# if np.isfinite(center_value) else 'asinh'
+                    max_percent = 99.5
+                    min_percent = None if good_center else 1.0
+                    #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
+
+                    ax = pl.subplot(1,6,ii+1)
+                    ax.imshow(data[slcs], norm=simple_norm(data[slcs],
+                                                           stretch=stretch,
+                                                           min_percent=min_percent,
+                                                           max_percent=max_percent,
+                                                           min_cut=minval,
+                                                           max_cut=maxval),
+                              origin='lower', cmap='gray_r')
+                    xx, yy = ww[slcs].world_to_pixel(coords)
+                    ax.plot(xx, yy, 'rx')
+                    pixscale = ww.proj_plane_pixel_area()**0.5
+                    quartas = (0.25*u.arcsec/pixscale).decompose().value
+
+                    if ii == 0:
+                        xoffset = 4
+                        ax.plot([xoffset, xoffset+quartas], [2, 2], color='r')
+                        ax.text(xoffset+quartas/2, 3, '0.25"', color='r', horizontalalignment='center')
+
+                    shp = data[slcs].shape
+
+                    unit = u.Unit(hdr['BUNIT'])
+                    fwhm, fwhm_pix = get_fwhm(hdr0)
+                    fwhm = u.Quantity(fwhm, u.arcsec)
+                    # debug print(unit, fwhm, pixscale)
+                    max_flux_jy = (center_value * unit *
+                                   (2*np.pi / (8*np.log(2))) *
+                                   fwhm_pix**2 *
+                                   pixscale**2).to(u.Jy)
+
+                    if good_center:
+                        ax.text(shp[1]-quartas*1.75, shp[0]-quartas/1.1,
+                                f'{max_flux_jy.to(u.mJy):0.1f}', horizontalalignment='center',
+                                #color='r',
+                               )
+
+                    ax.set_title(filtername.replace("CLEAR","").replace("F444W",""))
+                    ax.set_xticklabels([])
+                    ax.set_yticklabels([])
+                    filters_plotted.append(filtername)
+                    ii += 1
+            #if len(filters_plotted) == 0:
+            #    print(f'Coordinate {coords} not in footprint')
+    return fig
 
 def make_sed(coord, basetable, radius=0.5*u.arcsec):
     skycrds_cat = basetable['skycoord_f410m']
@@ -411,14 +466,14 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
     if len(spitzer) > 0:
         spitzer_crds = SkyCoord(spitzer['RAJ2000'], spitzer['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
         spitzindex = coord.separation(spitzer_crds) < radius
-        print(len(spitzindex))
+        #print(len(spitzindex))
         spitzermatch = spitzer[spitzindex]
 
     vvvdr2 = Vizier.query_region(coordinates=coord, radius=0.5*u.arcsec, catalog=['II/348/vvv2'])[0]
     if len(spitzer) > 0:
         vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
         vvvindex = coord.separation(vvvdr2_crds) < radius
-        print(len(vvvindex))
+        #print(len(vvvindex))
         vvvmatch = vvvdr2[vvvindex]
 
     wavelengths = []
