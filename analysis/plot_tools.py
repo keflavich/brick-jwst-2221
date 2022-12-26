@@ -57,6 +57,7 @@ def ccds(basetable, sel=True,
          fig=None,
          ext=CT06_MWGC(),
          extvec_scale=200,
+         rasterized=True,
         ):
     if fig is None:
         fig = pl.figure()
@@ -68,8 +69,8 @@ def ccds(basetable, sel=True,
         keys2 = [f'mag_ab_{col}' for col in color2]
         colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
         colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
-        ax.scatter(colorp1, colorp2, s=5, alpha=0.5, c='k')
-        ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r')
+        ax.scatter(colorp1, colorp2, s=5, alpha=0.5, c='k', rasterized=rasterized)
+        ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r', rasterized=rasterized)
         ax.set_xlabel(f"{color1[0]} - {color1[1]}")
         ax.set_ylabel(f"{color2[0]} - {color2[1]}")
         ax.axis(axlims)
@@ -101,6 +102,7 @@ def cmds(basetable, sel=True,
          fig=None,
          extvec_scale=30,
          markersize=5,
+         rasterized=True,
         ):
     if fig is None:
         fig = pl.figure()
@@ -109,8 +111,8 @@ def cmds(basetable, sel=True,
         ax = fig.add_subplot(gridspec[ii])
         colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
         magp = basetable[f'mag_ab_{f1}']
-        ax.scatter(colorp, magp, s=markersize, alpha=0.5, c='k')
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r')
+        ax.scatter(colorp, magp, s=markersize, alpha=0.5, c='k', rasterized=rasterized)
+        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r', rasterized=rasterized)
         ax.set_xlabel(f"{f1} - {f2}")
         ax.set_ylabel(f"{f1}")
         ax.axis(axlims)
@@ -133,6 +135,7 @@ def color_plot(basetable,
                show_extremes=False,
                reg=None,
                markersize=5,
+               rasterized=True,
         ):
     if fig is None:
         fig = pl.figure()
@@ -179,7 +182,9 @@ def color_plot(basetable,
 
     green = (colorp > -2) & (colorp < 2)
     mappable = ax.scatter(crds.ra[green], crds.dec[green], c=colorp[green], s=markersize, alpha=0.5, cmap='jet',
-                          norm=simple_norm(colorp[green], min_cut=-2, max_cut=2), transform=ax.get_transform('fk5'))
+                          norm=simple_norm(colorp[green], min_cut=-2, max_cut=2), transform=ax.get_transform('fk5'),
+                          rasterized=rasterized
+                         )
     pl.colorbar(mappable=mappable)
 
     if show_extremes:
@@ -190,6 +195,7 @@ def color_plot(basetable,
                               edgecolor='b',
                               facecolor='none',
                               #norm=simple_norm(colorp[blue], min_cut=-5, max_cut=-2),
+                              rasterized=rasterized,
                               transform=ax.get_transform('fk5'))
         #pl.colorbar(mappable=mappable)
         red = colorp > 2
@@ -200,6 +206,7 @@ def color_plot(basetable,
                               facecolor='none',
                               s=markersize, alpha=0.5, cmap='viridis',
                               #norm=simple_norm(colorp[red], min_cut=2, max_cut=6),
+                              rasterized=rasterized,
                               transform=ax.get_transform('fk5'))
         #pl.colorbar(mappable=mappable)
     ax.axis(axlims)
@@ -209,6 +216,7 @@ def color_plot(basetable,
 def cmds_withiso(basetable, sel=True,
                  colors=[('f410m', 'f466n'), ('f410m', 'f405n'), ('f405n', 'f466n'), ('410m405', 'f405n')],
                  axlims=(-5,10,25,12),
+                 yval='f1',
                  fig=None,
                  ext=CT06_MWGC(),
                  iso=True,
@@ -216,6 +224,10 @@ def cmds_withiso(basetable, sel=True,
                  alpha_k=0.5,
                  distance_modulus=0,
                  markersize=5,
+                 arrowhead_width=0.5,
+                 arrow_start=(0, 18),
+                 extinction_scaling_av=20,
+                 rasterized=True,
         ):
     if fig is None:
         fig = pl.figure()
@@ -229,38 +241,49 @@ def cmds_withiso(basetable, sel=True,
 
         ax = fig.add_subplot(gridspec[ii])
         colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
-        magp = basetable[f'mag_ab_{f1}']
-        ax.scatter(colorp[~exclude], magp[~exclude], s=markersize, alpha=alpha_k, c='k')
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r')
+        if yval == 'f1':
+            magp = basetable[f'mag_ab_{f1}']
+            ax.set_ylabel(f"{f1}")
+            yval_ = f1
+        elif yval == 'f2':
+            magp = basetable[f'mag_ab_{f2}']
+            ax.set_ylabel(f"{f2}")
+            yval_ = f2
+        else:
+            raise ValueError("yval must be f1 or f2")
+        ax.scatter(colorp[~exclude], magp[~exclude], s=markersize, alpha=alpha_k, c='k', rasterized=rasterized)
+        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r', rasterized=rasterized)
         ax.set_xlabel(f"{f1} - {f2}")
-        ax.set_ylabel(f"{f1}")
         ax.axis(axlims)
         if iso:
             agesel = mist['log10_isochrone_age_yr'] == 5
             ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[f2.upper()][agesel] + distance_modulus,
+                    mist[yval_.upper()][agesel] + distance_modulus,
                     color='b', linestyle='-', linewidth=0.5,
                     label='10$^5$ yr'
                     )
             agesel = mist['log10_isochrone_age_yr'] == 7
             ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[f2.upper()][agesel] + distance_modulus,
+                    mist[yval_.upper()][agesel] + distance_modulus,
                     color='g', linestyle=':', linewidth=0.5,
                     label='10$^7$ yr'
                     )
             agesel = mist['log10_isochrone_age_yr'] == 9
             ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[f2.upper()][agesel] + distance_modulus,
+                    mist[yval_.upper()][agesel] + distance_modulus,
                     color='c', linestyle='--', linewidth=0.5,
                     label='10$^9$ yr'
                     )
 
         if ext is not None:
             #print(w1,w2)
-            e_1 = ext(w1) * 20
-            e_2 = ext(w2) * 20
+            e_1 = ext(w1) * extinction_scaling_av
+            e_2 = ext(w2) * extinction_scaling_av
 
-            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=0.5)
+            if yval == 'f2':
+                ax.arrow(arrow_start[0], arrow_start[1], e_1-e_2, e_2, color='y', head_width=arrowhead_width)
+            elif yval == 'f1':
+                ax.arrow(arrow_start[0], arrow_start[1], e_1-e_2, e_1, color='y', head_width=arrowhead_width)
 
         if ii == 1:
             ax.legend(bbox_to_anchor=(1.5, 1))
@@ -276,6 +299,7 @@ def ccds_withiso(basetable, sel=True,
                  exclude=False,
                  iso=True,
                  arrowhead_width=0.5,
+                 rasterized=True,
         ):
     if fig is None:
         fig = pl.figure()
@@ -304,8 +328,8 @@ def ccds_withiso(basetable, sel=True,
         keys2 = [f'mag_ab_{col}' for col in color2]
         colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
         colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
-        ax.scatter(colorp1[~exclude], colorp2[~exclude], s=5, alpha=alpha_k, c='k')
-        ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r')
+        ax.scatter(colorp1[~exclude], colorp2[~exclude], s=5, alpha=alpha_k, c='k', rasterized=rasterized)
+        ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r', rasterized=rasterized)
         ax.set_xlabel(f"{color1[0]} - {color1[1]}")
         ax.set_ylabel(f"{color2[0]} - {color2[1]}")
         ax.axis(axlims)
@@ -446,6 +470,94 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14):
                                )
 
                     ax.set_title(filtername.replace("CLEAR","").replace("F444W",""))
+                    ax.set_xticklabels([])
+                    ax.set_yticklabels([])
+                    filters_plotted.append(filtername)
+                    ii += 1
+            #if len(filters_plotted) == 0:
+            #    print(f'Coordinate {coords} not in footprint')
+    return fig
+
+def starzoom_spitzer(coords, cutoutsize=10*u.arcsec, fontsize=14):
+    reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
+
+    flist = {
+        'I1': '/orange/adamginsburg/spitzer/GLIMPSE/GLM_00000+0000_mosaic_I1.fits',
+        'I2': '/orange/adamginsburg/spitzer/GLIMPSE/GLM_00000+0000_mosaic_I2.fits',
+        'I3': '/orange/adamginsburg/spitzer/GLIMPSE/GLM_00000+0000_mosaic_I3.fits',
+        'I4': '/orange/adamginsburg/spitzer/GLIMPSE/GLM_00000+0000_mosaic_I4.fits',
+        'M1': '/orange/adamginsburg/spitzer/mips/MG0000n005_024.fits'}
+    # https://irsa.ipac.caltech.edu/data/SPITZER/docs/irac/iracinstrumenthandbook/5/
+    fwhms = {'I1': 1.66,
+             'I2': 1.72,
+             'I3': 1.88,
+             'I4': 1.98,
+             'M1': 5.9,
+            }
+    ii = 0
+    with mpl.rc_context({"font.size": fontsize}):
+
+        fig = pl.figure(figsize=(12,4))
+        filters_plotted = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            for filtername, fn in flist.items():
+                if filtername in filters_plotted:
+                    continue
+                hdr0 = hdr = fits.getheader(fn)
+                ww = wcs.WCS(hdr)
+                if ww.footprint_contains(coords):
+                    data = fits.getdata(fn)
+                    mask = reg.to_pixel(ww).to_mask()
+                    slcs,_ = mask.get_overlap_slices(data.shape)
+
+                    xc, yc = map(int, map(np.round, ww.world_to_pixel(coords)))
+                    center_value = data[yc,xc]
+                    good_center = np.isfinite(center_value)
+                    maxval = None #center_value if good_center else None
+                    minval = 0 if good_center else None
+                    stretch = 'log'# if np.isfinite(center_value) else 'asinh'
+                    max_percent = 99.5
+                    min_percent = None if good_center else 1.0
+                    #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
+
+                    ax = pl.subplot(1,6,ii+1)
+                    ax.imshow(data[slcs], norm=simple_norm(data[slcs],
+                                                           stretch=stretch,
+                                                           min_percent=min_percent,
+                                                           max_percent=max_percent,
+                                                           min_cut=minval,
+                                                           max_cut=maxval),
+                              origin='lower', cmap='gray_r')
+                    xx, yy = ww[slcs].world_to_pixel(coords)
+                    ax.plot(xx, yy, 'rx')
+                    pixscale = ww.proj_plane_pixel_area()**0.5
+                    quartas = (1*u.arcsec/pixscale).decompose().value
+
+                    if ii == 0:
+                        xoffset = 1
+                        ax.plot([xoffset, xoffset+quartas], [2, 2], color='r')
+                        ax.text(xoffset+quartas/2, 3, '1"', color='r', horizontalalignment='center')
+
+                    shp = data[slcs].shape
+                    unit = u.Unit(hdr['BUNIT'])
+                    fwhm = fwhms[filtername]
+                    fwhm = u.Quantity(fwhm, u.arcsec)
+                    fwhm_pix = (fwhm / pixscale).decompose().value
+                    # debug print(unit, fwhm, pixscale)
+                    max_flux_jy = (center_value * unit *
+                                   (2*np.pi / (8*np.log(2))) *
+                                   fwhm_pix**2 *
+                                   pixscale**2).to(u.Jy)
+
+                    if good_center:
+                        ax.set_title(f'{filtername}: {max_flux_jy.to(u.mJy):0.1f}')
+                        #ax.text(shp[1]-quartas*1.75, shp[0]-quartas/1.1,
+                        #        f'{max_flux_jy.to(u.mJy):0.1f}', horizontalalignment='center',
+                        #        #color='r',
+                        #       )
+                    else:
+                        ax.set_title(filtername)
                     ax.set_xticklabels([])
                     ax.set_yticklabels([])
                     filters_plotted.append(filtername)
