@@ -34,6 +34,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
     basecrds = basetable['skycoord']
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
     flag_near_saturated(basetable, filtername=ref_filter)
+    replace_saturated(basetable, filtername=ref_filter)
     print(f"filter {basetable.meta['filter']} has {len(basetable)} rows")
 
     with warnings.catch_warnings():
@@ -58,6 +59,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             tbl['skycoord'] = newcrds
 
             flag_near_saturated(tbl, filtername=wl)
+            replace_saturated(tbl, filtername=wl)
 
             matches, sep, _ = basecrds.match_to_catalog_sky(newcrds, nthneighbor=1)
 
@@ -222,7 +224,33 @@ def flag_near_saturated(cat, filtername, radius=None):
     near_sat = np.zeros(len(cat), dtype='bool')
     near_sat[idx_cat] = True
 
-    cat.add_column(near_sat, name='near_saturated')
+    cat.add_column(near_sat, name=f'near_saturated_{filtername}')
+
+def replace_saturated(cat, filtername, radius=None):
+    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
+    satstar_cat = Table.read(satstar_cat_fn)
+    satstar_coords = satstar_cat['skycoord_fit']
+
+    cat_coords = cat['skycoord']
+
+    if radius is None:
+        radius = {'f466n': 0.1*u.arcsec,
+                  'f212n': 0.05*u.arcsec,
+                  'f187n': 0.05*u.arcsec,
+                  'f405n': 0.1*u.arcsec,
+                  'f182m': 0.05*u.arcsec,
+                  'f410m': 0.1*u.arcsec,
+                  }[filtername]
+
+    idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
+
+    replaced_sat = np.zeros(len(cat), dtype='bool')
+    replaced_sat[idx_cat] = True
+
+    cat['flux'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
+    cat['dflux'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
+
+    cat.add_column(replaced_sat, name=f'replaced_saturated')
 
 def main():
     for module in ('nrca', 'nrcb', 'merged',):
