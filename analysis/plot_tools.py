@@ -515,9 +515,9 @@ def starzoom_spitzer(coords, cutoutsize=10*u.arcsec, fontsize=14):
                     center_value = data[yc,xc]
                     good_center = np.isfinite(center_value)
                     maxval = None #center_value if good_center else None
-                    minval = 0 if good_center else None
-                    stretch = 'log'# if np.isfinite(center_value) else 'asinh'
-                    max_percent = 99.5
+                    minval = None #0 if good_center else None
+                    stretch = 'asinh' #'log'# if np.isfinite(center_value) else 'asinh'
+                    max_percent = None #99.995
                     min_percent = None if good_center else 1.0
                     #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
 
@@ -581,16 +581,11 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
         #print(len(spitzindex))
         spitzermatch = spitzer[spitzindex]
 
-    vvvdr2 = Vizier.query_region(coordinates=coord, radius=0.5*u.arcsec, catalog=['II/348/vvv2'])[0]
-    if len(spitzer) > 0:
-        vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
-        vvvindex = coord.separation(vvvdr2_crds) < radius
-        #print(len(vvvindex))
-        vvvmatch = vvvdr2[vvvindex]
 
     wavelengths = []
     fluxes = []
     widths = []
+    lims = []
     telescope = 'JWST'
     instrument = 'NIRCAM'
     filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
@@ -603,21 +598,87 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
         eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
         widths.append(eff_width)
         filtername = filtername.lower()
+        #if basetable[f'flux_jy_{filtername}'].mask[idx]:
+        #    fluxes.append(np.nan*u.Jy)
+        #    lims.append(0.01*u.Jy) # TODO: put in a real limit here
+        #else:
         fluxes.append(basetable[f'flux_jy_{filtername}'][idx] * u.Jy)
+        lims.append(np.nan*u.Jy)
 
+
+    lim_dict = {'I1': 13.594460010528564, # 99 percentile of detections in the GC survey
+                'I2': 13.034479751586915,
+                'I3': 12.056260299682616,
+                'I4': 10.70722972869873,
+                'J': 19,
+                'Y': 20,
+                'Z': 20.5,
+                'H': 18,
+                'Ks': 17.5, # loose, from https://www.eso.org/sci/observing/phase3/data_releases/vvv_dr1.html
+               }
 
     telescope = 'Spitzer'
     instrument = 'IRAC'
     filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
     filter_table.add_index('filterID')
+    def mag2flux(x, filtername, telescope=telescope, instrument=instrument):
+        return (10**(-x/2.5) *
+                filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint']
+                * u.Jy)
+
+
     for filtername,colname in [('I1', '_3.6mag'),
                                ('I2', '_4.5mag'),
                                ('I3', '_5.8mag'),
                                ('I4', '_8.0mag')]:
         eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
         wavelengths.append(eff_wavelength)
-        fluxes.append(10**(-spitzer[colname]/2.5) * filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint'] * u.Jy)
+        if spitzermatch[colname].mask:
+            fluxes.append(np.nan * u.Jy)
+            lims.append(mag2flux(lim_dict[filtername], filtername))
+        else:
+            fluxes.append(mag2flux(spitzermatch[colname], filtername))
+            lims.append(np.nan*u.Jy)
         eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
         widths.append(eff_width)
 
-    return wavelengths, widths, fluxes
+
+   # VVV
+
+    vvvdr2 = Vizier.query_region(coordinates=coord, radius=0.5*u.arcsec, catalog=['II/348/vvv2'])
+    if len(vvvdr2) > 0:
+        vvvdr2 = vvvdr2[0]
+        if len(vvvdr2) > 0:
+            vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
+            vvvindex = coord.separation(vvvdr2_crds) < radius
+            #print(len(vvvindex))
+            vvvmatch = vvvdr2[vvvindex]
+
+
+    telescope = 'Paranal'
+    instrument = 'VISTA'
+    filter_table = SvoFps.get_filter_list(facility=telescope)
+    filter_table.add_index('filterID')
+    def mag2flux(x, filtername, telescope=telescope, instrument=instrument):
+        return (10**(-x/2.5) *
+                filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint']
+                * u.Jy)
+
+    for filtername,colname in [('Z', 'Zmag3'),
+                               ('Y', 'Ymag3'),
+                               ('J', 'Jmag3'),
+                               ('H', 'Hmag3'),
+                               ('Ks', 'Ksmag3'),
+                              ]:
+        eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+        wavelengths.append(eff_wavelength)
+        if len(vvvdr2) == 0 or vvvmatch[colname].mask:
+            fluxes.append(np.nan * u.Jy)
+            lims.append(mag2flux(lim_dict[filtername], filtername))
+        else:
+            fluxes.append(mag2flux(vvvmatch[colname], filtername))
+            lims.append(np.nan*u.Jy)
+        eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+        widths.append(eff_width)
+
+    return wavelengths, widths, fluxes, lims
