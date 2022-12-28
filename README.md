@@ -1,4 +1,15 @@
-Reduction process:
+This repository contains notes & scripts for reduction and analysis of the JWST
+Cycle 1 project 2221 GO that observed the Brick and Cloud C in NIRCAM
+narrow-band filters and the MIRI F2550W filter.
+
+While some aspects of this repository are well-organized, the notebooks are
+not: they often include asides and experiments that lead to dead ends or just
+got dropped.  There are a lot of 'notes in the margins'.  Most of them should
+work if you have the directory structure set up right and the right files in
+place, but I haven't put in the time needed to make clear what that structure
+should be.
+
+## Reduction process
 
  1. Pipeline files are in `reduction/`.
   * `PipelineRerunNIRCAM-{LONG,SHORT}.py` run the JWST pipeline with modifications to the tweakwcs stage
@@ -13,3 +24,10 @@ Reduction process:
   * `nrca_contsub_colorimages.ipynb` and `BrickImages.ipynb` make 3-color images.
 
   Most of the rest are test / WIP things.
+
+
+## Analysis
+
+
+Photometry:
+  * `crowdsource_catalogs_long.py` and `crowdsource_catalogs_short.py` run the crowsource extraction algorithm

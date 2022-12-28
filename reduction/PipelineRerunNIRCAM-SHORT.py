@@ -46,7 +46,7 @@ def main():
 
     basepath = '/orange/adamginsburg/jwst/brick/'
     os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
-    os.environ["CRDS_SERVER_URL"] = "https://jwst-crds-pub.stsci.edu"
+    os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
 
