@@ -31,11 +31,14 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f410m',
                    max_offset=0.25*u.arcsec):
     basetable = master_tbl = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
-    basecrds = basetable['skycoord']
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
     flag_near_saturated(basetable, filtername=ref_filter)
+    # replace_saturated adds more rows
     replace_saturated(basetable, filtername=ref_filter)
+    basecrds = basetable['skycoord']
     print(f"filter {basetable.meta['filter']} has {len(basetable)} rows")
+
+    meta = {}
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -44,6 +47,10 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
         for tbl in tbls[1:]:
             wl = tbl.meta['filter']
+            flag_near_saturated(tbl, filtername=wl)
+            # replace_saturated adds more rows
+            replace_saturated(tbl, filtername=wl)
+
             print(f"filter {wl} has {len(tbl)} rows")
             crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
@@ -58,8 +65,6 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
             tbl['skycoord'] = newcrds
 
-            flag_near_saturated(tbl, filtername=wl)
-            replace_saturated(tbl, filtername=wl)
 
             matches, sep, _ = basecrds.match_to_catalog_sky(newcrds, nthneighbor=1)
 
@@ -70,15 +75,24 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                 matchtb.rename_column(cn, f"{cn}_{wl}")
 
             basetable = table.hstack([basetable, matchtb], join_type='exact')
-            basetable.meta[f'{wl}_pixelscale_deg2'] = tbl.meta['pixelscale_deg2']
-            basetable.meta[f'{wl}_pixelscale_arcsec'] = tbl.meta['pixelscale_arcsec']
+            meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
+            meta[f'{wl[1:-1]}pxas'.upper()] = tbl.meta['pixelscale_arcsec']
+            for key in tbl.meta:
+                meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
+            # DEBUG if hasattr(basetable[f'{cn}_{wl}'], 'mask'):
+            # DEBUG     print(f"Table has mask sum for column {cn} {basetable[cn+'_'+wl].mask.sum()}")
+
+            bad = np.isnan(tbl['mag_ab']) & (tbl['flux'] > 0)
+            if any(bad):
+                raise ValueError("Bad magnitudes for good fluxes")
 
         # Line-subtract the F410 continuum band
         # 0.16 is from BrA_separation
         # 0.196 is the 'post-destreak' version, which might (?) be better
         # 0.11 is the theoretical version from RecombFilterDifferencing
         # 0.16 still looks like the best; 0.175ish is the median, but 0.16ish is the mode
-        f405to410_scale = 0.16
+        # but we use 0.11, the theoretica one, because we don't necessarily expect a good match!
+        f405to410_scale = 0.11
         basetable.add_column(basetable['flux_jy_f410m'] - basetable['flux_jy_f405n'] * f405to410_scale, name='flux_jy_410m405')
         basetable.add_column(basetable['flux_jy_410m405'].to(u.ABmag), name='mag_ab_410m405')
         # Then subtract that remainder back from the F405 band to get the continuum-subtracted F405
@@ -89,15 +103,25 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # 0.11 is the theoretical bandwidth fraction
         # PaA_separation_nrcb gives 0.175ish -> 0.183 with "latest"
         # 0.18 is closer to the histogram mode
-        f187to182_scale = 0.18
+        f187to182_scale = 0.11
         basetable.add_column(basetable['flux_jy_f182m'] - basetable['flux_jy_f187n'] * f187to182_scale, name='flux_jy_182m187')
         basetable.add_column(basetable['flux_jy_182m187'].to(u.ABmag), name='mag_ab_182m187')
         # Then subtract that remainder back from the F187 band to get the continuum-subtracted F187
         basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
         basetable.add_column(basetable['flux_jy_187m182'].to(u.ABmag), name='mag_ab_187m182')
 
+        # DEBUG for colname in basetable.colnames:
+        # DEBUG     print(f"colname {colname} has mask: {hasattr(basetable[colname], 'mask')}")
+        basetable.meta = meta
+        assert '212PXDG' in meta
+        assert '212PXDG' in basetable.meta
+
         basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.ecsv", overwrite=True)
+        # DO NOT USE FITS in production, it drops critical metadata
         basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits", overwrite=True)
+
+        # testtb = Table.read(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits")
+        # assert '212PXDG' in testtb.meta
 
 def merge_crowdsource(module='nrca', suffix=""):
     imgfns = [x
@@ -143,6 +167,12 @@ def merge_crowdsource(module='nrca', suffix=""):
             tbl.add_column(eflux_jy, name='eflux_jy')
             tbl.add_column(abmag, name='mag_ab')
             tbl.add_column(abmag_err, name='emag_ab')
+        if hasattr(tbl['mag_ab'], 'mask'):
+            print(f'ab mag tbl col has mask sum = {tbl["mag_ab"].mask.sum()} masked values')
+        if hasattr(abmag, 'mask'):
+            print(f'ab mag has mask sum = {abmag.mask.sum()} masked values')
+        if hasattr(tbl['flux'], 'mask'):
+            print(f'ab mag has mask sum = {tbl["flux"].mask.sum()} masked values')
 
     merge_catalogs(tbls, catalog_type=f'crowdsource{suffix}', module=module)
 
@@ -242,18 +272,94 @@ def replace_saturated(cat, filtername, radius=None):
                   'f410m': 0.1*u.arcsec,
                   }[filtername]
 
+    fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
+    fwhm = u.Quantity(fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]['PSF FWHM (arcsec)'], u.arcsec)
+
+    flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
+    eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
+    abmag = flux_jy.to(u.ABmag)
+    abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
+    satstar_cat['mag_ab'] = abmag
+    satstar_cat['emag_ab'] = abmag_err
+
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
 
     replaced_sat = np.zeros(len(cat), dtype='bool')
     replaced_sat[idx_cat] = True
 
-    cat['flux'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
-    cat['dflux'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
+    if 'flux' in cat.colnames:
+        cat['flux'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
+        cat['dflux'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
+        cat['skycoord'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
+        cat['x'][idx_cat] = satstar_cat['x_fit'][idx_sat]
+        cat['y'][idx_cat] = satstar_cat['y_fit'][idx_sat]
+        cat['dx'][idx_cat] = satstar_cat['x_0_unc'][idx_sat]
+        cat['dy'][idx_cat] = satstar_cat['y_0_unc'][idx_sat]
 
-    cat.add_column(replaced_sat, name=f'replaced_saturated')
+        cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
+
+        # ID the stars that are saturated-only (not INCluded in the orig cat)
+        satstar_not_inc = np.ones(len(satstar_cat), dtype='bool')
+        satstar_not_inc[idx_sat] = False
+        satstar_toadd = satstar_cat[satstar_not_inc]
+
+        satstar_toadd.rename_column('flux_fit', 'flux')
+        satstar_toadd.rename_column('flux_unc', 'dflux')
+        satstar_toadd.rename_column('skycoord_fit', 'skycoord')
+        satstar_toadd.rename_column('x_fit', 'x')
+        satstar_toadd.rename_column('y_fit', 'y')
+        satstar_toadd.rename_column('x_0_unc', 'dx')
+        satstar_toadd.rename_column('y_0_unc', 'dy')
+
+        for colname in cat.colnames:
+            if colname not in satstar_toadd.colnames:
+                satstar_toadd.add_column(np.ones(len(satstar_toadd))*np.nan, name=colname)
+        for colname in satstar_toadd.colnames:
+            if colname not in cat.colnames:
+                satstar_toadd.remove_column(colname)
+
+        for row in satstar_toadd:
+            cat.add_row(dict(row))
+
+
+
+    elif 'flux_fit' in cat.colnames:
+        # DAOPHOT
+        cat['flux_fit'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
+        cat['flux_unc'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
+        cat['skycoord_fit'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
+        cat['x_fit'][idx_cat] = satstar_cat['x_fit'][idx_sat]
+        cat['y_fit'][idx_cat] = satstar_cat['y_fit'][idx_sat]
+        cat['x_0_unc'][idx_cat] = satstar_cat['x_0_unc'][idx_sat]
+        cat['y_0_unc'][idx_cat] = satstar_cat['y_0_unc'][idx_sat]
+
+        cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
+
+        # ID the stars that are saturated-only (not INCluded in the orig cat)
+        satstar_not_inc = np.ones(len(satstar_cat), dtype='bool')
+        satstar_not_inc[idx_sat] = False
+        satstar_toadd = satstar_cat[satstar_not_inc]
+
+        for colname in cat.colnames:
+            if colname not in satstar_toadd.colnames:
+                satstar_toadd.add_column(np.ones(len(satstar_toadd))*np.nan, name=colname)
+        for colname in satstar_toadd.colnames:
+            if colname not in cat.colnames:
+                satstar_toadd.remove_column(colname)
+
+        for row in satstar_toadd:
+            cat.add_row(dict(row))
+
+    # we've added on more rows that are all 'replaced_sat'
+    replaced_sat_ = np.ones(len(cat), dtype='bool')
+    replaced_sat_[:len(replaced_sat)] = replaced_sat
+
+    cat.add_column(replaced_sat_, name='replaced_saturated')
 
 def main():
-    for module in ('nrca', 'nrcb', 'merged',):
+    for module in ('merged', 'nrca', 'nrcb', ):
         print(f'crowdsource {module}')
         merge_crowdsource(module=module)
         print(f'crowdsource unweighted {module}')
@@ -261,8 +367,11 @@ def main():
         for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
             print(f'crowdsource {suffix} {module}')
             merge_crowdsource(module=module, suffix=suffix)
-        print(f'daophot basic {module}')
-        merge_daophot(daophot_type='basic', module=module)
+        try:
+            print(f'daophot basic {module}')
+            merge_daophot(daophot_type='basic', module=module)
+        except Exception as ex:
+            print(ex)
         try:
             print(f'daophot iterative {module}')
             merge_daophot(daophot_type='iterative', module=module)

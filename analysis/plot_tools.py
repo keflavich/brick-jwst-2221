@@ -233,9 +233,22 @@ def cmds_withiso(basetable, sel=True,
         fig = pl.figure()
     gridspec = sqgrid.get_grid(len(colors))
     for ii, (f1, f2) in enumerate(colors):
-        w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
-        w2 = 4.10*u.um if f2 == '410m405' else 4.05*u.um if f2 == '405m410' else int(f2[1:-1])/100*u.um
+        w1 = (4.10*u.um if f1 == '410m405'
+              else 4.05*u.um if f1 == '405m410'
+              else 1.82*u.um if f1 == '182m187'
+              else 1.87*u.um if f1 == '187m182'
+              else int(f1[1:-1])/100*u.um)
+        w2 = (4.10*u.um if f2 == '410m405'
+              else 4.05*u.um if f2 == '405m410'
+              else 1.82*u.um if f2 == '182m187'
+              else 1.87*u.um if f2 == '187m182'
+              else int(f2[1:-1])/100*u.um)
+
         if w1 > w2:
+            w1,w2 = w2,w1
+            f1,f2 = f2,f1
+        if (w1 == 1.82*u.um) and (w2 == 1.87*u.um):
+            # for consistency w/F405/F410, we want narrow - medium
             w1,w2 = w2,w1
             f1,f2 = f2,f1
 
@@ -306,15 +319,39 @@ def ccds_withiso(basetable, sel=True,
     combos = list(itertools.combinations(colors, 2))
     gridspec = sqgrid.get_grid(len(combos))
     for ii, (color1, color2) in enumerate(combos):
-        w1 = 4.10*u.um if color1[0] == '410m405' else 4.05*u.um if color1[0] == '405m410' else int(color1[0][1:-1])/100*u.um
-        w2 = 4.10*u.um if color1[1] == '410m405' else 4.05*u.um if color1[1] == '405m410' else int(color1[1][1:-1])/100*u.um
-        w3 = 4.10*u.um if color2[0] == '410m405' else 4.05*u.um if color2[0] == '405m410' else int(color2[0][1:-1])/100*u.um
-        w4 = 4.10*u.um if color2[1] == '410m405' else 4.05*u.um if color2[1] == '405m410' else int(color2[1][1:-1])/100*u.um
+        w1 = (4.10*u.um if color1[0] == '410m405'
+             else 4.05*u.um if color1[0] == '405m410'
+             else 1.82*u.um if f1 == '182m187'
+             else 1.87*u.um if f1 == '187m182'
+             else int(f1[1:-1])/100*u.um)
+        w2 = (4.10*u.um if color1[1] == '410m405'
+             else 4.05*u.um if color1[1] == '405m410'
+             else 1.82*u.um if f2 == '182m187'
+             else 1.87*u.um if f2 == '187m182'
+             else int(f2[1:-1])/100*u.um)
+        w3 = (4.10*u.um if color2[0] == '410m405'
+             else 4.05*u.um if color2[0] == '405m410'
+             else 1.82*u.um if f3 == '182m187'
+             else 1.87*u.um if f3 == '187m182'
+             else int(f3[1:-1])/100*u.um)
+        w4 = (4.10*u.um if color2[1] == '410m405'
+             else 4.05*u.um if color2[1] == '405m410'
+             else 1.82*u.um if f4 == '182m187'
+             else 1.87*u.um if f4 == '187m182'
+             else int(f4[1:-1])/100*u.um)
 
         if w1 > w2:
             w1,w2 = w2,w1
             color1 = color1[::-1]
         if w3 > w4:
+            w3,w4 = w4,w3
+            color2 = color2[::-1]
+
+        # for consistency w/F405/F410, we want narrow - medium
+        if (w1 == 1.82*u.um) and (w2 == 1.87*u.um):
+            w1,w2 = w2,w1
+            color1 = color1[::-1]
+        if (w3 == 1.82*u.um) and (w4 == 1.87*u.um):
             w3,w4 = w4,w3
             color2 = color2[::-1]
 
@@ -478,7 +515,7 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14):
             #    print(f'Coordinate {coords} not in footprint')
     return fig
 
-def starzoom_spitzer(coords, cutoutsize=10*u.arcsec, fontsize=14):
+def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14):
     reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
 
     flist = {
@@ -610,11 +647,11 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
                 'I2': 13.034479751586915,
                 'I3': 12.056260299682616,
                 'I4': 10.70722972869873,
-                'J': 19,
-                'Y': 20,
-                'Z': 20.5,
-                'H': 18,
-                'Ks': 17.5, # loose, from https://www.eso.org/sci/observing/phase3/data_releases/vvv_dr1.html
+                'J': 19-3, # extra conservative: maybe detection limits worse in GC?
+                'Y': 20-3,
+                'Z': 20.5-3,
+                'H': 18-3,
+                'Ks': 17.5-1, # loose, from https://www.eso.org/sci/observing/phase3/data_releases/vvv_dr1.html
                }
 
     telescope = 'Spitzer'
