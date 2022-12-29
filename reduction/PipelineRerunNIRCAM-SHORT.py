@@ -121,10 +121,12 @@ def main(filtername, module, Observations=None):
                                             if f'{module}' in row['expname']]
 
         for member in asn_data['products'][0]['members']:
-            # changed filter size to be maximal now that we're using the background
-            outname = destreak(member['expname'], median_filter_size=2048,
-                                use_background_map=True)  # medfilt_size[filtername])
-            member['expname'] = outname
+            hdr = fits.getheader(member['expname'])
+            if filtername in (hdr['PUPIL'], hdr['FILTER']):
+                # changed filter size to be maximal now that we're using the background
+                outname = destreak(member['expname'], median_filter_size=2048,
+                                    use_background_map=True)  # medfilt_size[filtername])
+                member['expname'] = outname
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_alldetectors_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -189,10 +191,12 @@ def main(filtername, module, Observations=None):
         asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
 
         for member in asn_data['products'][0]['members']:
-            # changed filter size to be maximal now that we're using the background
-            outname = destreak(member['expname'], median_filter_size=2048,
-                                use_background_map=True)  # medfilt_size[filtername])
-            member['expname'] = outname
+            hdr = fits.getheader(member['expname'])
+            if filtername in (hdr['PUPIL'], hdr['FILTER']):
+                # changed filter size to be maximal now that we're using the background
+                outname = destreak(member['expname'], median_filter_size=2048,
+                                    use_background_map=True)  # medfilt_size[filtername])
+                member['expname'] = outname
 
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
         with open(asn_file_merged, 'w') as fh:
@@ -248,7 +252,6 @@ if __name__ == "__main__":
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
-    use_desaturated = options.desaturated
 
     with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
