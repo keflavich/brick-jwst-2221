@@ -5,6 +5,7 @@ import os
 import shutil
 import numpy as np
 import json
+from astropy import log
 # import requests
 import asdf
 from astropy import log
@@ -43,6 +44,7 @@ medfilt_size = {'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 
 def main(filtername, module, Observations=None):
+    log.info(f"Processing filter {filtername} module {module}")
 
     basepath = '/orange/adamginsburg/jwst/brick/'
     os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
@@ -144,6 +146,10 @@ def main(filtername, module, Observations=None):
         # image3.tweakreg.snr_threshold = 5
         # image3.tweakreg.nclip = 1
 
+        # reference to long-wavelength catalogs
+        image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        image3.tweakreg.abs_searchrad = 0.25
+
         # try .... something else?
         image3.tweakreg.brightest = 2000
         image3.tweakreg.snr_threshold = 15
@@ -157,7 +163,8 @@ def main(filtername, module, Observations=None):
 
         image3.run(asn_file_each)
         print(f"DONE running {asn_file_each}")
-        realigned = realign_to_vvv(filtername=filtername.lower(), module=module)
+        # don't realign now
+        #realigned = realign_to_vvv(filtername=filtername.lower(), module=module)
 
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
 
@@ -209,13 +216,18 @@ def main(filtername, module, Observations=None):
         for par in tweakreg_parameters:
             setattr(image3.tweakreg, par, tweakreg_parameters[par])
 
-        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
-        print(vvvdr2fn)
-        if os.path.exists(vvvdr2fn):
-            image3.tweakreg.abs_refcat = vvvdr2fn
-            image3.tweakreg.abs_searchrad = 1
-        else:
-            print(f"Did not find VVV catalog {vvvdr2fn}")
+        # # TODO: instead, use F410M as the astrometric reference, since that matches _better_ to VVV
+
+        # vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        # print(vvvdr2fn)
+        # if os.path.exists(vvvdr2fn):
+        #     image3.tweakreg.abs_refcat = vvvdr2fn
+        #     image3.tweakreg.abs_searchrad = 1
+        # else:
+        #     print(f"Did not find VVV catalog {vvvdr2fn}")
+
+        image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        image3.tweakreg.abs_searchrad = 0.25
 
         # try .... something else?
         image3.tweakreg.brightest = 2000
@@ -231,7 +243,8 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_merged)
         print(f"DONE running {asn_file_merged}")
 
-        realign_to_vvv(filtername=filtername.lower(), module='merged')
+        # realignment doesn't work
+        # realign_to_vvv(filtername=filtername.lower(), module='merged')
 
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
