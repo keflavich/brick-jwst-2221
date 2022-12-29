@@ -41,7 +41,7 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-def main():
+def main(filtername, module, Observations=None):
 
 
     basepath = '/orange/adamginsburg/jwst/brick/'
@@ -50,114 +50,113 @@ def main():
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
-        api_token = fh.read().strip()
-    Mast.login(api_token.strip())
-    Observations.login(api_token)
 
 
-    for filtername in ('F405N', 'F466N', 'F410M'):
-        # Files created in this notebook will be saved
-        # in a subdirectory of the base directory called `Stage3`
-        output_dir = f'/orange/adamginsburg/jwst/brick/{filtername}/pipeline/'
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
-        os.chdir(output_dir)
+    # Files created in this notebook will be saved
+    # in a subdirectory of the base directory called `Stage3`
+    output_dir = f'/orange/adamginsburg/jwst/brick/{filtername}/pipeline/'
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    os.chdir(output_dir)
 
-        # the files are one directory up
-        for fn in glob("../*cal.fits"):
-            try:
-                os.link(fn, './'+os.path.basename(fn))
-            except Exception as ex:
-                print(f'Failed to link {fn} to {os.path.basename(fn)} because of {ex}')
+    # the files are one directory up
+    for fn in glob("../*cal.fits"):
+        try:
+            os.link(fn, './'+os.path.basename(fn))
+        except Exception as ex:
+            print(f'Failed to link {fn} to {os.path.basename(fn)} because of {ex}')
 
-        Observations.cache_location = output_dir
-        obs_table = Observations.query_criteria(
-                                                proposal_id="2221",
-                                                proposal_pi="Ginsburg*",
-                                                calib_level=3,
-                                               )
-        print(len(obs_table))
+    Observations.cache_location = output_dir
+    obs_table = Observations.query_criteria(
+                                            proposal_id="2221",
+                                            proposal_pi="Ginsburg*",
+                                            calib_level=3,
+                                            )
+    print(len(obs_table))
 
-        data_products_by_obs = Observations.get_product_list(obs_table[np.char.find(obs_table['obs_id'], filtername.lower()) >= 0])
-        print(len(data_products_by_obs))
+    data_products_by_obs = Observations.get_product_list(obs_table[np.char.find(obs_table['obs_id'], filtername.lower()) >= 0])
+    print(len(data_products_by_obs))
 
-        products_asn = Observations.filter_products(data_products_by_obs, extension="json")
-        print(len(products_asn))
-        valid_obsids = products_asn['obs_id'][np.char.find(np.unique(products_asn['obs_id']), 'jw02221-o001', ) == 0]
-        match = [x for x in valid_obsids if filtername.lower() in x][0]
+    products_asn = Observations.filter_products(data_products_by_obs, extension="json")
+    print(len(products_asn))
+    valid_obsids = products_asn['obs_id'][np.char.find(np.unique(products_asn['obs_id']), 'jw02221-o001', ) == 0]
+    match = [x for x in valid_obsids if filtername.lower() in x][0]
 
-        asn_mast_data = products_asn[products_asn['obs_id'] == match]
-        print(asn_mast_data)
+    asn_mast_data = products_asn[products_asn['obs_id'] == match]
+    print(asn_mast_data)
 
-        manifest = Observations.download_products(asn_mast_data, download_dir=output_dir)
-        print(manifest)
+    manifest = Observations.download_products(asn_mast_data, download_dir=output_dir)
+    print(manifest)
 
-        # MAST creates deep directory structures we don't want
-        for row in manifest:
-            try:
-                shutil.move(row['Local Path'], os.path.join(output_dir, os.path.basename(row['Local Path'])))
-            except Exception as ex:
-                print(f"Failed to move file with error {ex}")
-
-
-        if True:
-            for module in ('nrca', 'nrcb'):
-                print(f"Filter {filtername} module {module}")
-                print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json')}")
-                asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
-                if len(asn_file_search) == 1:
-                    asn_file = asn_file_search[0]
-                elif len(asn_file_search) > 1:
-                    asn_file = sorted(asn_file_search)[-1]
-                    print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
-                else:
-                    raise ValueError("Mismatch")
-
-                mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
-                tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if filtername in (x[1:3])][0][4]
-                tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
-                tweakreg_parameters = tweakreg_asdf.tree['parameters']
-                print(f'Filter {filtername}: {tweakreg_parameters}')
-
-                with open(asn_file) as f_obj:
-                    asn_data = json.load(f_obj)
-                asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}'
-                asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
-                                                        if f'{module}' in row['expname']]
-
-                for member in asn_data['products'][0]['members']:
-                    outname = destreak(member['expname'],
-                                       use_background_map=True,
-                                       median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
-                    member['expname'] = outname
+    # MAST creates deep directory structures we don't want
+    for row in manifest:
+        try:
+            shutil.move(row['Local Path'], os.path.join(output_dir, os.path.basename(row['Local Path'])))
+        except Exception as ex:
+            print(f"Failed to move file with error {ex}")
 
 
-                asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
-                with open(asn_file_each, 'w') as fh:
-                    json.dump(asn_data, fh)
+    if module in ('nrca', 'nrcb'):
+        print(f"Filter {filtername} module {module}")
+        print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json')}")
+        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
+        if len(asn_file_search) == 1:
+            asn_file = asn_file_search[0]
+        elif len(asn_file_search) > 1:
+            asn_file = sorted(asn_file_search)[-1]
+            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+        else:
+            raise ValueError("Mismatch")
 
-                image3 = calwebb_image3.Image3Pipeline()
+        mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+        tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if filtername in (x[1:3])][0][4]
+        tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
+        tweakreg_parameters = tweakreg_asdf.tree['parameters']
+        print(f'Filter {filtername}: {tweakreg_parameters}')
 
-                image3.output_dir = output_dir
-                image3.save_results = True
-                for par in tweakreg_parameters:
-                    setattr(image3.tweakreg, par, tweakreg_parameters[par])
+        with open(asn_file) as f_obj:
+            asn_data = json.load(f_obj)
+        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}'
+        asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
+                                                if f'{module}' in row['expname']]
 
-                image3.tweakreg.fit_geometry = 'general'
-                image3.tweakreg.brightest = 10000
-                image3.tweakreg.snr_threshold = 5
-                image3.tweakreg.nclip = 1
+        for member in asn_data['products'][0]['members']:
+            outname = destreak(member['expname'],
+                                use_background_map=True,
+                                median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+            member['expname'] = outname
 
-                image3.run(asn_file_each)
-                print(f"DONE running {asn_file_each}")
 
-                realign_to_vvv(filtername=filtername.lower(), module=module)
+        asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
+        with open(asn_file_each, 'w') as fh:
+            json.dump(asn_data, fh)
 
+        image3 = calwebb_image3.Image3Pipeline()
+
+        image3.output_dir = output_dir
+        image3.save_results = True
+        for par in tweakreg_parameters:
+            setattr(image3.tweakreg, par, tweakreg_parameters[par])
+
+        image3.tweakreg.fit_geometry = 'general'
+        image3.tweakreg.brightest = 10000
+        image3.tweakreg.snr_threshold = 5
+        image3.tweakreg.nclip = 1
+
+        image3.run(asn_file_each)
+        print(f"DONE running {asn_file_each}")
+
+        realign_to_vvv(filtername=filtername.lower(), module=module)
+
+        remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+
+    if module == 'nrcb':
+        # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules")
         merge_a_plus_b(filtername)
         print("DONE Merging already-combined nrca + nrcb modules")
 
+    if module == 'merge':
         # try merging all frames & modules
 
         asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
@@ -185,8 +184,8 @@ def main():
 
         for member in asn_data['products'][0]['members']:
             outname = destreak(member['expname'],
-                               use_background_map=True,
-                               median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+                                use_background_map=True,
+                                median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
             member['expname'] = outname
 
         asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
@@ -222,13 +221,33 @@ def main():
 
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
-
-
     globals().update(locals())
     return locals()
 
 if __name__ == "__main__":
-    results = main()
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option("-f", "--filternames", dest="filternames",
+                      default='F466N,F405N,F410M',
+                      help="filter name list", metavar="filternames")
+    parser.add_option("-m", "--modules", dest="modules",
+                    default='merged,nrca,nrcb',
+                    help="module list", metavar="modules")
+    (options, args) = parser.parse_args()
+
+    filternames = options.filternames.split(",")
+    modules = options.modules.split(",")
+    use_desaturated = options.desaturated
+
+    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+        api_token = fh.read().strip()
+    Mast.login(api_token.strip())
+    Observations.login(api_token)
+
+    for filtername in filternames:
+        for module in modules:
+            results = main(filtername=filtername, module=module, Observations=Observations)
+
 
     from run_notebook import run_notebook
     basepath = '/orange/adamginsburg/jwst/brick/'
