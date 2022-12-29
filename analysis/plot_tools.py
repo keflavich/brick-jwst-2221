@@ -6,6 +6,7 @@ from astropy.io import fits
 from astropy import stats
 import pylab as pl
 from astropy import units as u
+from astropy import log
 from astropy.coordinates import SkyCoord
 from grid_strategy import strategies
 from astropy.table import Table
@@ -433,16 +434,23 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0
     fig2.tight_layout()
     return statsd
 
-def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14):
+def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
+             fig=pl.figure(figsize=(12,4)),
+             axes=None,
+             module='nrc*',
+             ):
     reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
     ii = 0
+
     with mpl.rc_context({"font.size": fontsize}):
 
-        fig = pl.figure(figsize=(12,4))
+        if axes is None:
+            axes = pl.subplots(1,6)
+
         filters_plotted = []
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            for fn in sorted(glob.glob(f'{basepath}/F*/pipeline/*nircam*nrc*_i2d.fits')):
+            for fn in sorted(glob.glob(f'{basepath}/F*/pipeline/*nircam*{module}_i2d.fits')):
                 hdr0 = fits.getheader(fn)
                 filtername = hdr0['PUPIL']+hdr0['FILTER']
                 if filtername in filters_plotted:
@@ -471,7 +479,7 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14):
                     min_percent = None if good_center else 1.0
                     #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
 
-                    ax = pl.subplot(1,6,ii+1)
+                    ax = axes[ii]
                     ax.imshow(data[slcs], norm=simple_norm(data[slcs],
                                                            stretch=stretch,
                                                            min_percent=min_percent,
@@ -515,7 +523,10 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14):
             #    print(f'Coordinate {coords} not in footprint')
     return fig
 
-def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14):
+def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14,
+                     fig=pl.figure(figsize=(12,4)),
+                     axes=None,
+                    ):
     reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
 
     flist = {
@@ -534,7 +545,9 @@ def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14):
     ii = 0
     with mpl.rc_context({"font.size": fontsize}):
 
-        fig = pl.figure(figsize=(12,4))
+        if axes is None:
+            axes = pl.subplots(1,5)
+
         filters_plotted = []
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
@@ -558,7 +571,7 @@ def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14):
                     min_percent = None if good_center else 1.0
                     #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
 
-                    ax = pl.subplot(1,6,ii+1)
+                    ax = axes[ii]
                     ax.imshow(data[slcs], norm=simple_norm(data[slcs],
                                                            stretch=stretch,
                                                            min_percent=min_percent,
@@ -611,12 +624,16 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
     else:
         idx = np.argmin(coord.separation(skycrds_cat))
 
-    spitzer = Vizier.query_region(coordinates=coord, radius=radius, catalog=['II/295/SSTGC'])[0]
-    if len(spitzer) > 0:
-        spitzer_crds = SkyCoord(spitzer['RAJ2000'], spitzer['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
-        spitzindex = coord.separation(spitzer_crds) < radius
-        #print(len(spitzindex))
-        spitzermatch = spitzer[spitzindex]
+    try:
+        spitzer = Vizier.query_region(coordinates=coord, radius=radius, catalog=['II/295/SSTGC'])[0]
+        if len(spitzer) > 0:
+            spitzer_crds = SkyCoord(spitzer['RAJ2000'], spitzer['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
+            spitzindex = coord.separation(spitzer_crds) < radius
+            #print(len(spitzindex))
+            spitzermatch = spitzer[spitzindex]
+    except Exception as ex:
+        spitzer = []
+        log.info(f"No matches for spitzer: {ex}")
 
 
     wavelengths = []
@@ -664,32 +681,35 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
                 * u.Jy)
 
 
-    for filtername,colname in [('I1', '_3.6mag'),
-                               ('I2', '_4.5mag'),
-                               ('I3', '_5.8mag'),
-                               ('I4', '_8.0mag')]:
-        eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
-        wavelengths.append(eff_wavelength)
-        if spitzermatch[colname].mask:
-            fluxes.append(np.nan * u.Jy)
-            lims.append(mag2flux(lim_dict[filtername], filtername))
-        else:
-            fluxes.append(mag2flux(spitzermatch[colname], filtername))
-            lims.append(np.nan*u.Jy)
-        eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
-        widths.append(eff_width)
+    if len(spitzer) > 0:
+        for filtername,colname in [('I1', '_3.6mag'),
+                                ('I2', '_4.5mag'),
+                                ('I3', '_5.8mag'),
+                                ('I4', '_8.0mag')]:
+            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+            wavelengths.append(eff_wavelength)
+            if spitzermatch[colname].mask:
+                fluxes.append(np.nan * u.Jy)
+                lims.append(mag2flux(lim_dict[filtername], filtername))
+            else:
+                fluxes.append(mag2flux(spitzermatch[colname], filtername))
+                lims.append(np.nan*u.Jy)
+            eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+            widths.append(eff_width)
 
 
    # VVV
 
     vvvdr2 = Vizier.query_region(coordinates=coord, radius=0.5*u.arcsec, catalog=['II/348/vvv2'])
     if len(vvvdr2) > 0:
-        vvvdr2 = vvvdr2[0]
-        if len(vvvdr2) > 0:
-            vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
+        vvvdr2_ = vvvdr2[0]
+        if len(vvvdr2_) > 0:
+            vvvdr2_crds = SkyCoord(vvvdr2_['RAJ2000'], vvvdr2_['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
             vvvindex = coord.separation(vvvdr2_crds) < radius
             #print(len(vvvindex))
-            vvvmatch = vvvdr2[vvvindex]
+            vvvmatch = vvvdr2_[vvvindex]
+    else:
+        log.info("No VVV match")
 
 
     telescope = 'Paranal'
@@ -701,21 +721,54 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
                 filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint']
                 * u.Jy)
 
-    for filtername,colname in [('Z', 'Zmag3'),
-                               ('Y', 'Ymag3'),
-                               ('J', 'Jmag3'),
-                               ('H', 'Hmag3'),
-                               ('Ks', 'Ksmag3'),
-                              ]:
-        eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
-        wavelengths.append(eff_wavelength)
-        if len(vvvdr2) == 0 or vvvmatch[colname].mask:
-            fluxes.append(np.nan * u.Jy)
-            lims.append(mag2flux(lim_dict[filtername], filtername))
-        else:
-            fluxes.append(mag2flux(vvvmatch[colname], filtername))
-            lims.append(np.nan*u.Jy)
-        eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
-        widths.append(eff_width)
+    if len(vvvdr2) > 0:
+        for filtername,colname in [('Z', 'Zmag3'),
+                                ('Y', 'Ymag3'),
+                                ('J', 'Jmag3'),
+                                ('H', 'Hmag3'),
+                                ('Ks', 'Ksmag3'),
+                                ]:
+            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+            wavelengths.append(eff_wavelength)
+            if len(vvvdr2_) == 0 or vvvmatch[colname].mask:
+                fluxes.append(np.nan * u.Jy)
+                lims.append(mag2flux(lim_dict[filtername], filtername))
+            else:
+                fluxes.append(mag2flux(vvvmatch[colname], filtername))
+                lims.append(np.nan*u.Jy)
+            eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+            widths.append(eff_width)
 
     return wavelengths, widths, fluxes, lims
+
+
+def sed_and_starzoom_plot(coord, basetable, fignum=1, title=None, module='merged'):
+    fig = pl.figure(figsize=(12, 12), num=fignum)
+    fig.clf()
+    ax = pl.subplot(2, 1, 1)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+
+            wavelengths, widths, fluxes, lims = map(u.Quantity, make_sed(coord, basetable=basetable, radius=1*u.arcsec))
+            lamflam = (fluxes * wavelengths.to(u.Hz, u.spectral())).to(u.erg/u.s/u.cm**2)
+            lamflamlim = (lims * wavelengths.to(u.Hz, u.spectral())).to(u.erg/u.s/u.cm**2)
+            ax.errorbar(u.Quantity(wavelengths, u.um), 
+                        lamflam,
+                        xerr=[w/2 for w in widths], linestyle='none', marker='x')
+            ax.errorbar(wavelengths.to(u.um), lamflamlim, xerr=[w/2 for w in widths], linestyle='none', marker='v')
+            if title is None:
+                ax.set_title(f"{coord}")
+            else:
+                ax.set_title(title)
+            ax.set_ylabel(r"$\lambda F_\lambda$ [erg s$^{-1}$ cm$^{-2}$]")
+            ax.set_xlabel(r"Wavelength [$\mu$m]")
+            ax.semilogy()
+            axes = [pl.subplot(4, 6, ii) for ii in range(13, 20)]
+            starzoom(coord, fig=fig, axes=axes, module=module)
+            axes = [pl.subplot(4, 5, ii) for ii in range(16, 21)]
+            starzoom_spitzer(coord, fig=fig, axes=axes)
+    except Exception as ex:
+        print(ex)
+
+    return fig, (wavelengths, widths, fluxes, lims)

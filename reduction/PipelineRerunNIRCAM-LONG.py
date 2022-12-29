@@ -5,6 +5,7 @@ import os
 import shutil
 import numpy as np
 import json
+from astropy import log
 # import requests
 import asdf
 from astropy.io import ascii, fits
@@ -42,6 +43,7 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 basepath = '/orange/adamginsburg/jwst/brick/'
 
 def main(filtername, module, Observations=None):
+    log.info(f"Processing filter {filtername} module {module}")
 
 
     basepath = '/orange/adamginsburg/jwst/brick/'
@@ -72,21 +74,21 @@ def main(filtername, module, Observations=None):
                                             proposal_pi="Ginsburg*",
                                             calib_level=3,
                                             )
-    print(len(obs_table))
+    print("Obs table length:", len(obs_table))
 
     data_products_by_obs = Observations.get_product_list(obs_table[np.char.find(obs_table['obs_id'], filtername.lower()) >= 0])
-    print(len(data_products_by_obs))
+    print("data prodcts by obs length: ", len(data_products_by_obs))
 
     products_asn = Observations.filter_products(data_products_by_obs, extension="json")
-    print(len(products_asn))
+    print("products_asn length:", len(products_asn))
     valid_obsids = products_asn['obs_id'][np.char.find(np.unique(products_asn['obs_id']), 'jw02221-o001', ) == 0]
     match = [x for x in valid_obsids if filtername.lower() in x][0]
 
     asn_mast_data = products_asn[products_asn['obs_id'] == match]
-    print(asn_mast_data)
+    print("asn_mast_data:", asn_mast_data)
 
     manifest = Observations.download_products(asn_mast_data, download_dir=output_dir)
-    print(manifest)
+    print("manifest:", manifest)
 
     # MAST creates deep directory structures we don't want
     for row in manifest:
@@ -124,8 +126,8 @@ def main(filtername, module, Observations=None):
             hdr = fits.getheader(member['expname'])
             if filtername in (hdr['PUPIL'], hdr['FILTER']):
                 outname = destreak(member['expname'],
-                                    use_background_map=True,
-                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+                                   use_background_map=True,
+                                   median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
 
 
@@ -160,6 +162,7 @@ def main(filtername, module, Observations=None):
 
     if module == 'merge':
         # try merging all frames & modules
+        log.info("Working on merged reduction (both modules)")
 
         asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
@@ -206,7 +209,7 @@ def main(filtername, module, Observations=None):
 
 
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
-        print(vvvdr2fn)
+        print(f"Loaded VVV catalog {vvvdr2fn}")
         if os.path.exists(vvvdr2fn):
             image3.tweakreg.abs_refcat = vvvdr2fn
             image3.tweakreg.abs_searchrad = 1
@@ -241,6 +244,7 @@ if __name__ == "__main__":
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
+    print(options)
 
     with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
@@ -249,6 +253,7 @@ if __name__ == "__main__":
 
     for filtername in filternames:
         for module in modules:
+            print(f"Main Loop: {filtername} + {module}")
             results = main(filtername=filtername, module=module, Observations=Observations)
 
 
