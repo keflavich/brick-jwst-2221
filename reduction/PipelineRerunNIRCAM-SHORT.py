@@ -5,7 +5,6 @@ import os
 import shutil
 import numpy as np
 import json
-from astropy import log
 # import requests
 import asdf
 from astropy import log
@@ -148,7 +147,7 @@ def main(filtername, module, Observations=None):
 
         # reference to long-wavelength catalogs
         image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
-        image3.tweakreg.abs_searchrad = 0.25
+        image3.tweakreg.abs_searchrad = 0.5
 
         # try .... something else?
         image3.tweakreg.brightest = 2000
@@ -157,8 +156,8 @@ def main(filtername, module, Observations=None):
         image3.tweakreg.peakmax = 1400
 
         image3.tweakreg.searchrad = 1 # 1 arcsec instead of 2
-        image3.tweakreg.separation = 0.4 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
-        image3.tweakreg.tolerance = 0.2 # max tolerance 0.2 instead of 0.7
+        image3.tweakreg.separation = 0.5 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
+        image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
 
         image3.run(asn_file_each)
@@ -166,6 +165,7 @@ def main(filtername, module, Observations=None):
         # don't realign now
         #realigned = realign_to_vvv(filtername=filtername.lower(), module=module)
 
+        log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
 
     if module == 'nrcb':
@@ -227,7 +227,7 @@ def main(filtername, module, Observations=None):
         #     print(f"Did not find VVV catalog {vvvdr2fn}")
 
         image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
-        image3.tweakreg.abs_searchrad = 0.25
+        image3.tweakreg.abs_searchrad = 0.5
 
         # try .... something else?
         image3.tweakreg.brightest = 2000
@@ -236,8 +236,8 @@ def main(filtername, module, Observations=None):
         image3.tweakreg.peakmax = 1400
 
         image3.tweakreg.searchrad = 1 # 1 arcsec instead of 2
-        image3.tweakreg.separation = 0.4 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
-        image3.tweakreg.tolerance = 0.2 # max tolerance 0.2 instead of 0.7
+        image3.tweakreg.separation = 0.6 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
+        image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
 
         image3.run(asn_file_merged)
@@ -246,6 +246,7 @@ def main(filtername, module, Observations=None):
         # realignment doesn't work
         # realign_to_vvv(filtername=filtername.lower(), module='merged')
 
+        log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
 

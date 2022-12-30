@@ -5,9 +5,9 @@ import os
 import shutil
 import numpy as np
 import json
-from astropy import log
 # import requests
 import asdf
+from astropy import log
 from astropy.io import ascii, fits
 from astropy.utils.data import download_file
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
@@ -150,8 +150,10 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_each)
         print(f"DONE running {asn_file_each}")
 
+        log.info("Realigning to VVV")
         realign_to_vvv(filtername=filtername.lower(), module=module)
 
+        log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
 
     if module == 'nrcb':
@@ -224,8 +226,10 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_merged)
         print(f"DONE running {asn_file_merged}")
 
+        log.info("Realigning to VVV")
         realign_to_vvv(filtername=filtername.lower(), module='merged')
 
+        log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
     globals().update(locals())
