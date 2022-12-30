@@ -265,6 +265,13 @@ def iteratively_remove_saturated_stars(data, header,
     # #lmfitter.__call__ = levmarverbosewrapper
     # lmfitter._run_fitter = levmarverbosewrapper
 
+    if header['INSTRUME'].lower() == 'nircam':
+        psfgen = webbpsf.NIRCam()
+        fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='NIRCam')
+    elif header['INSTRUME'].lower() == 'miri':
+        psfgen = webbpsf.MIRI()
+        fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='MIRI')
+
     satpix = data == 0
 
     for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter, rsz in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations, rindsize):
