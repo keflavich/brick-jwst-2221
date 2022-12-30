@@ -141,12 +141,14 @@ def get_psf(header, path_prefix='.'):
     obsdate = header['DATE-OBS']
     loaded_psfgen = False
     while not loaded_psfgen:
+        print(f"Attempting to load PSF for {obsdate}")
         try:
             psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
             loaded_psfgen = True
         except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
             print(f"Failed to build PSF: {ex}")
         except Exception as ex:
+            print("psfgen load_wss_opd_by_date failed")
             print(ex)
 
     npsf = 16
@@ -343,6 +345,13 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh.writeto(filename.replace(".fits", save_suffix+".fits"), overwrite=True)
 
 def main():
+
+    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+        api_token = fh.read().strip()
+    from astroquery.mast import Mast
+    Mast.login(api_token.strip())
+    os.environ['MAST_API_TOKEN'] = api_token.strip()
+
     for module in ('nrca', 'nrcb', 'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
             remove_saturated_stars(fn)

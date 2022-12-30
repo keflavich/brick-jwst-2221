@@ -473,7 +473,7 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
                     center_value = data[yc,xc]
                     good_center = np.isfinite(center_value) and center_value > 2
                     maxval = None #center_value if good_center else None
-                    minval = 0 if good_center else None
+                    minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
                     stretch = 'log'# if np.isfinite(center_value) else 'asinh'
                     max_percent = 99.5
                     min_percent = None if good_center else 1.0
