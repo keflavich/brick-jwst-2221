@@ -259,8 +259,9 @@ if __name__ == "__main__":
     parser.add_option("-f", "--filternames", dest="filternames",
                       default='F212N,F182M,F187N',
                       help="filter name list", metavar="filternames")
+    # merged requires >512 GB of memory, apparently - it fails with OOM kill
     parser.add_option("-m", "--modules", dest="modules",
-                    default='merged,nrca,nrcb',
+                    default='nrca,nrcb,merged',
                     help="module list", metavar="modules")
     (options, args) = parser.parse_args()
 
