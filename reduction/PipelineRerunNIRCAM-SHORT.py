@@ -175,6 +175,7 @@ def main(filtername, module, Observations=None):
         print("DONE Merging already-combined nrca + nrcb modules")
 
     if module == 'merged':
+        print(f"Filter {filtername} module = merged nrca + nrcb ")
         log.info("Running merged frames")
         # try merging all frames & modules
 
