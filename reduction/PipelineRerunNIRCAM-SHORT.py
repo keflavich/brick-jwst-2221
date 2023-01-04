@@ -170,16 +170,17 @@ def main(filtername, module, Observations=None):
 
     if module == 'nrcb':
         # assume nrca is run before nrcb
-        print("Merging already-combined nrca + nrcb modules")
+        print("Merging already-combined nrca + nrcb modules", flush=True)
         merge_a_plus_b(filtername)
         print("DONE Merging already-combined nrca + nrcb modules")
 
     if module == 'merged':
+        raise ValueError("Don't try merging on disk any more, instead do the merging the other way.")
         print(f"Filter {filtername} module = merged nrca + nrcb ")
         log.info("Running merged frames")
         # try merging all frames & modules
 
-        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
+        asn_file_search = glob(os.path.join(output_dir, 'jw02221-*_image3_0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
             asn_file = asn_file_search[0]
         elif len(asn_file_search) > 1:
@@ -261,9 +262,8 @@ if __name__ == "__main__":
                       default='F212N,F182M,F187N',
                       help="filter name list", metavar="filternames")
     # merged requires >512 GB of memory, apparently - it fails with OOM kill
-    parser.add_option("-m", "--modules", dest="modules",
-                    default='nrca,nrcb,merged',
-                    help="module list", metavar="modules")
+    parser.add_option("-m", "--modules", dest="modules", default='nrca,nrcb',
+                      help="module list", metavar="modules")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
