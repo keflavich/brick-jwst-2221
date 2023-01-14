@@ -1,4 +1,5 @@
 print("Starting long-wavelength cataloging", flush=True)
+import glob
 import time
 import numpy as np
 import crowdsource
@@ -86,6 +87,8 @@ def main():
     modules = options.modules.split(",")
     use_desaturated = options.desaturated
 
+    nullslice = (slice(None), slice(None))
+
     for module in modules:
         detector = module # no sub-detectors for long-NIRCAM
         for filtername in filternames:
@@ -170,7 +173,8 @@ def main():
             zoomcut_list = {reg.meta['text']: reg.to_pixel(ww).to_mask().get_overlap_slices(data.shape)[0]
                             for reg in region_list}
             zoomcut_list = {nm:slc for nm,slc in zoomcut_list.items()
-                            if slc[0].start > 0 and slc[1].start > 0
+                            if slc is not None and
+                            slc[0].start > 0 and slc[1].start > 0
                             and slc[0].stop < data.shape[0] and slc[1].stop < data.shape[1]}
 
             # crowdsource uses inverse-sigma, not inverse-variance
@@ -221,7 +225,7 @@ def main():
 
             modsky = data*0 # no model for daofind
             try:
-                catalog_zoom_diagnostic(data, modsky, [slice(None), slice(None)], stars)
+                catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                 pl.suptitle(f"daofind Catalog Diagnostics zoomed {filtername} {module}{desat}")
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_daofind.png',
                         bbox_inches='tight')
@@ -282,7 +286,7 @@ def main():
             zoomcut = slice(128, 256), slice(128, 256)
 
             try:
-                catalog_zoom_diagnostic(data, modsky, [slice(None), slice(None)], stars)
+                catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                 pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics zoomed {filtername} {module}{desat}")
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_unweighted.png',
                         bbox_inches='tight')
@@ -350,7 +354,7 @@ def main():
 
             zoomcut = slice(128, 256), slice(128, 256)
 
-            catalog_zoom_diagnostic(data, modsky, [slice(None), slice(None)], stars)
+            catalog_zoom_diagnostic(data, modsky, nullslice, stars)
             pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics zoomed {filtername} {module}{desat}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_weighted_nsky1.png',
                     bbox_inches='tight')
@@ -390,7 +394,7 @@ def main():
                 zoomcut = slice(128, 256), slice(128, 256)
 
 
-                catalog_zoom_diagnostic(data, modsky, [slice(None), slice(None)], stars)
+                catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                 pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat} nsky={nsky} weighted")
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_catalog_diagnostics.png',
                         bbox_inches='tight')
@@ -432,7 +436,7 @@ def main():
                 stars['y'] = stars['y_fit']
                 modsky = phot.get_residual_image()
                 try:
-                    catalog_zoom_diagnostic(data, modsky, [slice(None), slice(None)], stars)
+                    catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                     pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{desat}")
                     pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_daophot_basic.png',
                             bbox_inches='tight')
@@ -464,7 +468,7 @@ def main():
 
                 modsky = phot_.get_residual_image()
                 try:
-                    catalog_zoom_diagnostic(data, modsky, [slice(None), slice(None)], stars)
+                    catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                     pl.suptitle(f"daophot iterative Catalog Diagnostics zoomed {filtername} {module}{desat}")
                     pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_daophot_iterative.png',
                             bbox_inches='tight')

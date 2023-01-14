@@ -435,12 +435,14 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0
     return statsd
 
 def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
-             fig=pl.figure(figsize=(12,4)),
+             fig=None,
              axes=None,
              module='nrc*',
              ):
     reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
     ii = 0
+    if fig is None:
+        fig = pl.figure(figsize=(12,4))
 
     with mpl.rc_context({"font.size": fontsize}):
 
@@ -527,10 +529,12 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
     return fig
 
 def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14,
-                     fig=pl.figure(figsize=(12,4)),
+                     fig=None,
                      axes=None,
                     ):
     reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
+    if fig is None:
+        fig = pl.figure(figsize=(12,4))
 
     flist = {
         'I1': '/orange/adamginsburg/spitzer/GLIMPSE/GLM_00000+0000_mosaic_I1.fits',
@@ -775,3 +779,90 @@ def sed_and_starzoom_plot(coord, basetable, fignum=1, title=None, module='merged
         print(ex)
 
     return fig, (wavelengths, widths, fluxes, lims)
+
+
+def regzoomplot(reg, fontsize=14, axes=None,
+                module='nrca',
+                globstr=f'{basepath}/F*/pipeline/*nircam*_i2d.fits',
+                showcat=True, cattype='crowdsource_nsky1',):
+    ii = 0
+
+    with mpl.rc_context({"font.size": fontsize}):
+
+        if axes is None:
+            fig, axes_ = pl.subplots(2,3, figsize=(12,8))
+            axes = axes_.ravel()
+
+        filters_plotted = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            # bit of a hacky way to exclude individual-frame reductions
+            for fn in sorted([x for x in glob.glob(globstr) if module+"_" in x]):
+                hdr0 = fits.getheader(fn)
+                filtername = hdr0['PUPIL']+hdr0['FILTER']
+                if filtername in filters_plotted:
+                    continue
+                hdr = fits.getheader(fn, ext=('SCI', 1))
+                ww = wcs.WCS(hdr)
+                if ww.footprint_contains(reg.center):
+                    data = fits.getdata(fn, ext=('SCI',1))
+                    mask = reg.to_pixel(ww).to_mask()
+                    slcs,_ = mask.get_overlap_slices(data.shape)
+
+                    # future failure point...
+                    filtershortname = fn.split("/")[-3]
+                    cat = Table.read(fn.split("pipeline")[0] + f'{filtershortname.lower()}_{module}_{cattype}.fits')
+
+                    xc, yc = map(int, map(np.round, ww.world_to_pixel(reg.center)))
+                    center_value = data[yc,xc]
+                    good_center = np.isfinite(center_value) and center_value > 2
+                    maxval = None #center_value if good_center else None
+                    minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
+                    stretch = 'log'# if np.isfinite(center_value) else 'asinh'
+                    max_percent = 99.95
+                    min_percent = None if good_center else 1.0
+                    min_percent = 0.1
+
+                    ax = axes[ii]
+                    ax.imshow(data[slcs], norm=simple_norm(data[slcs],
+                                                           stretch=stretch,
+                                                           min_percent=min_percent,
+                                                           max_percent=max_percent,
+                                                           min_cut=minval,
+                                                           max_cut=maxval),
+                              origin='lower', cmap='gray_r')
+                    xx, yy = ww[slcs].world_to_pixel(reg.center)
+                    pixscale = ww.proj_plane_pixel_area()**0.5
+                    quartas = (0.25*u.arcsec/pixscale).decompose().value
+
+                    axlims = ax.axis()
+                    if showcat:
+                        subset = ((cat['x'] > slcs[1].start) & (cat['x'] < slcs[1].stop) &
+                                  (cat['y'] > slcs[0].start) & (cat['y'] < slcs[0].stop))
+                        ax.scatter(cat['x'][subset]-slcs[1].start,
+                                   cat['y'][subset]-slcs[0].start, marker='x',
+                                   color='r', s=8, linewidth=0.5)
+                        ax.axis(axlims)
+
+                    shp = data[slcs].shape
+
+                    unit = u.Unit(hdr['BUNIT'])
+                    fwhm, fwhm_pix = get_fwhm(hdr0)
+                    fwhm = u.Quantity(fwhm, u.arcsec)
+                    # debug print(unit, fwhm, pixscale)
+                    max_flux_jy = (center_value * unit *
+                                   (2*np.pi / (8*np.log(2))) *
+                                   fwhm_pix**2 *
+                                   pixscale**2).to(u.Jy)
+
+
+                    ax.set_title(filtername.replace("CLEAR","").replace("F444W",""))
+                    ax.set_xticklabels([])
+                    ax.set_yticklabels([])
+                    filters_plotted.append(filtername)
+                    ii += 1
+            for ax in axes[ii:]:
+                # pl.subplots makes blank axes that we have to close
+                ax.set_visible(False)
+    pl.tight_layout()
+    return fig
