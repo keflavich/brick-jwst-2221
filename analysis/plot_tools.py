@@ -445,7 +445,7 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
     with mpl.rc_context({"font.size": fontsize}):
 
         if axes is None:
-            axes = pl.subplots(1,6)
+            fig, axes = pl.subplots(1,6)
 
         filters_plotted = []
         with warnings.catch_warnings():
@@ -519,6 +519,9 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
                     ax.set_yticklabels([])
                     filters_plotted.append(filtername)
                     ii += 1
+            for ax in axes[ii:]:
+                # pl.subplots makes blank axes that we have to close
+                ax.set_visible(False)
             #if len(filters_plotted) == 0:
             #    print(f'Coordinate {coords} not in footprint')
     return fig
