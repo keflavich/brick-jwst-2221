@@ -157,8 +157,13 @@ def main():
                 grid = grid[0]
 
             print("Done with WebbPSF downloading; now building model", flush=True)
-            yy, xx = np.indices([31,31], dtype=float)
-            grid.x_0 = grid.y_0 = 15.5
+            # yy, xx = np.indices([31,31], dtype=float)
+            # grid.x_0 = grid.y_0 = 15.5
+            # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
+
+            # bigger PSF probably needed
+            yy, xx = np.indices([61,61], dtype=float)
+            grid.x_0 = grid.y_0 = 30
             psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
 
             ww = wcs.WCS(im1[1].header)
