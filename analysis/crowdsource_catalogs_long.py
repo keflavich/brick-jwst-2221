@@ -45,21 +45,40 @@ basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
 def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     pl.figure(figsize=(12,12))
-    im = pl.subplot(2,2,1).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
+    im = pl.subplot(2,2,1).imshow(data[zoomcut],
+                                  norm=simple_norm(data[zoomcut],
+                                                   stretch='log',
+                                                   max_percent=99.95,
+                                                   min_cut=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("Data")
     pl.colorbar(mappable=im)
-    im = pl.subplot(2,2,2).imshow(modsky[zoomcut], norm=simple_norm(modsky[zoomcut], stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
+    im = pl.subplot(2,2,2).imshow(modsky[zoomcut],
+                                  norm=simple_norm(modsky[zoomcut],
+                                                   stretch='log',
+                                                   max_percent=99.95,
+                                                   min_cut=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
     pl.colorbar(mappable=im)
-    im = pl.subplot(2,2,3).imshow((data-modsky)[zoomcut], norm=simple_norm((data-modsky)[zoomcut], stretch='asinh', max_percent=99.5, min_percent=0.5), cmap='gray')
+    im = pl.subplot(2,2,3).imshow((data-modsky)[zoomcut],
+                                  norm=simple_norm((data-modsky)[zoomcut],
+                                                   stretch='asinh',
+                                                   max_percent=99.5,
+                                                   min_percent=0.5),
+                                  cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
     pl.colorbar(mappable=im)
-    im = pl.subplot(2,2,4).imshow(data[zoomcut], norm=simple_norm(data[zoomcut], stretch='log', max_percent=99.95, min_cut=0), cmap='gray')
+    im = pl.subplot(2,2,4).imshow(data[zoomcut],
+                                  norm=simple_norm(data[zoomcut],
+                                                   stretch='log',
+                                                   max_percent=99.95,
+                                                   min_cut=0), cmap='gray')
+    axlims = pl.axis()
     if zoomcut[0].start:
         pl.axis([0,zoomcut[0].stop-zoomcut[0].start, 0, zoomcut[1].stop-zoomcut[1].start])
         pl.subplot(2,2,4).scatter(stars['x']-zoomcut[1].start, stars['y']-zoomcut[0].start, marker='x', color='r', s=8, linewidth=0.5)
     else:
         pl.subplot(2,2,4).scatter(stars['x'], stars['y'], marker='x', color='r', s=5, linewidth=0.5)
+    pl.axis(axlims)
     pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
     pl.colorbar(mappable=im)
     pl.tight_layout()
@@ -401,18 +420,18 @@ def main():
 
                 catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                 pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat} nsky={nsky} weighted")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_catalog_diagnostics.png',
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_weighted_catalog_diagnostics.png',
                         bbox_inches='tight')
 
                 catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
                 pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat} nsky={nsky} weighted")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_catalog_diagnostics_zoom.png',
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
                         bbox_inches='tight')
 
                 for name, zoomcut in zoomcut_list.items():
                     catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
                     pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
                             bbox_inches='tight')
 
 
@@ -450,6 +469,12 @@ def main():
                     pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{desat}")
                     pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_daophot_basic.png',
                             bbox_inches='tight')
+
+                    for name, zoomcut in zoomcut_list.items():
+                        catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                        pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
+                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
+                                bbox_inches='tight')
                 except Exception as ex:
                     print(f'FAILURE: {ex}')
 
@@ -482,6 +507,12 @@ def main():
                     pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{desat}")
                     pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_daophot_iterative.png',
                             bbox_inches='tight')
+
+                    for name, zoomcut in zoomcut_list.items():
+                        catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                        pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
+                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}__catalog_diagnostics_zoom_daophot_iterative{name.replace(" ","_")}.png',
+                                bbox_inches='tight')
                 except Exception as ex:
                     print(f'FAILURE: {ex}')
 
