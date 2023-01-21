@@ -1,3 +1,7 @@
+raise NotImplementedError("Try the long version, it has more options built in")
+"""
+Trying to declare this obsolete & use the LONG version for all wavelengths
+"""
 import crowdsource
 import time
 import regions
