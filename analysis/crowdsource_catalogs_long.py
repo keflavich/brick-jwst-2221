@@ -1,4 +1,4 @@
-print("Starting long-wavelength cataloging", flush=True)
+print("Starting cataloging", flush=True)
 import glob
 import time
 import numpy as np
@@ -151,7 +151,7 @@ def main():
                 fits.PrimaryHDU(data=bkg.background, header=im1['SCI'].header).writeto(filename.replace(".fits", "_background.fits"), overwrite=True)
                 data = data - bkg.background
                 fits.PrimaryHDU(data=data, header=im1['SCI'].header).writeto(filename.replace(".fits", "_bgsub.fits"), overwrite=True)
-                
+
             wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
             obsdate = im1[0].header['DATE-OBS']
 
@@ -173,7 +173,10 @@ def main():
                     nrc.filter = filt
                     print(f"Running {module}{desat}{bgsub}")
                     if module in ('nrca', 'nrcb'):
-                        nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
+                        if 'f4' in filt:
+                            nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
+                        else:
+                            nrc.detector = f'{module.upper()}1' #TODO: figure out a way to use all 4?
                         grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
                     else:
                         grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True)
@@ -261,6 +264,7 @@ def main():
             finstars['y'] = finstars['ycentroid']
             stars = finstars # because I'm copy-pasting code...
 
+            zoomcut = slice(128, 256), slice(128, 256)
             modsky = data*0 # no model for daofind
             try:
                 catalog_zoom_diagnostic(data, modsky, nullslice, stars)
@@ -314,7 +318,9 @@ def main():
             stars.meta['module'] = module
             stars.meta['detector'] = detector
 
-            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_unweighted.fits"
+            tblfilename = (f"{basepath}/{filtername}/"
+                           f"{filtername.lower()}_{module}{desat}{bgsub}"
+                           "_crowdsource_unweighted.fits")
             stars.write(tblfilename, overwrite=True)
             # add WCS-containing header
             with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
@@ -505,7 +511,9 @@ def main():
                 coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
                 result2['skycoord_centroid'] = coords2
                 print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
-                result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}{bgsub}_daophot_iterative.fits", overwrite=True)
+                result2.write(f"{basepath}/{filtername}/{filtername.lower()}"
+                              f"_{module}{detector}{desat}{bgsub}"
+                              f"_daophot_iterative.fits", overwrite=True)
                 stars = result2
                 stars['x'] = stars['x_fit']
                 stars['y'] = stars['y_fit']

@@ -9,7 +9,7 @@ from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy import stats
-from astropy.table import Table
+from astropy.table import Table, Column, MaskedColumn
 from astropy.wcs import WCS
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
@@ -29,23 +29,36 @@ filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f410m',
-                   max_offset=0.25*u.arcsec):
+                   max_offset=0.15*u.arcsec):
     basetable = master_tbl = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
-    flag_near_saturated(basetable, filtername=ref_filter)
-    # replace_saturated adds more rows
-    replace_saturated(basetable, filtername=ref_filter)
+
+    # build up a reference coordinate catalog by adding in those with no matches each time
     basecrds = basetable['skycoord']
-    print(f"filter {basetable.meta['filter']} has {len(basetable)} rows")
+    for tb in tbls:
+        if tb.meta['filter' ] == ref_filter:
+            continue
+        crds = tb['skycoord']
+        matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+        newcrds = crds[sep > max_offset]
+        basecrds = SkyCoord([basecrds, newcrds])
+    print(f"Base coordinate lenth = {len(basecrds)}")
+
+    basetable = Table(data=[MaskedColumn(basecrds, name="skycoord_ref")])
+
+    # flag_near_saturated(basetable, filtername=ref_filter)
+    # # replace_saturated adds more rows
+    # replace_saturated(basetable, filtername=ref_filter)
+    # print(f"filter {basetable.meta['filter']} has {len(basetable)} rows")
 
     meta = {}
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        for colname in basetable.colnames:
-            basetable.rename_column(colname, colname+"_"+basetable.meta['filter'])
+        #for colname in basetable.colnames:
+        #    basetable.rename_column(colname, colname+"_"+basetable.meta['filter'])
 
-        for tbl in tbls[1:]:
+        for tbl in tbls:
             wl = tbl.meta['filter']
             flag_near_saturated(tbl, filtername=wl)
             # replace_saturated adds more rows
@@ -55,24 +68,29 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
-            # do one iteration of bulk offset measurement
-            radiff = (crds.ra[matches]-basecrds.ra).to(u.arcsec)
-            decdiff = (crds.dec[matches]-basecrds.dec).to(u.arcsec)
-            oksep = sep < max_offset
-            medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
-            tbl.meta[f'ra_offset_from_{ref_filter}'] = medsep_ra
-            tbl.meta[f'dec_offset_from_{ref_filter}'] = medsep_dec
-            newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
-            tbl['skycoord'] = newcrds
-
-
-            matches, sep, _ = basecrds.match_to_catalog_sky(newcrds, nthneighbor=1)
+            # removed Jan 21, 2023 because this *should* be handled by the pipeline now
+            # # do one iteration of bulk offset measurement
+            # radiff = (crds.ra[matches]-basecrds.ra).to(u.arcsec)
+            # decdiff = (crds.dec[matches]-basecrds.dec).to(u.arcsec)
+            # oksep = sep < max_offset
+            # medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
+            # tbl.meta[f'ra_offset_from_{ref_filter}'] = medsep_ra
+            # tbl.meta[f'dec_offset_from_{ref_filter}'] = medsep_dec
+            # newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
+            # tbl['skycoord'] = newcrds
+            # matches, sep, _ = basecrds.match_to_catalog_sky(newcrds, nthneighbor=1)
 
             basetable.add_column(name=f"sep_{wl}", col=sep)
             basetable.add_column(name=f"id_{wl}", col=matches)
             matchtb = tbl[matches]
+            badsep = sep > max_offset
             for cn in matchtb.colnames:
-                matchtb.rename_column(cn, f"{cn}_{wl}")
+                matchtb[f'{cn}_{wl}'] = MaskedColumn(data=matchtb[cn], name=f'{cn}_{wl}')
+                matchtb[f'{cn}_{wl}'].mask[badsep] = True
+                if hasattr(matchtb[cn], 'meta'):
+                    matchtb[f'{cn}_{wl}'].meta = matchtb[cn].meta
+                matchtb.remove_column(cn)
+                #matchtb.rename_column(cn, f"{cn}_{wl}")
 
             basetable = table.hstack([basetable, matchtb], join_type='exact')
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
@@ -123,16 +141,20 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # testtb = Table.read(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits")
         # assert '212PXDG' in testtb.meta
 
-def merge_crowdsource(module='nrca', suffix=""):
+def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
     imgfns = [x
           for filn in filternames
-          for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw02221-o001_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+          for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/"
+                             f"jw02221-o001_t001_nircam*{filn.lower()}*{module}_i2d.fits")
           if f'{module}_' in x or f'{module}1_' in x
          ]
 
+    desat = "_unsatstar" if desat else ""
+    bgsub = '_bgsub' if bgsub else ''
+
     catfns = [x
               for filn in filternames
-              for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}_crowdsource{suffix}.fits")
+              for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}_crowdsource{suffix}.fits")
              ]
     if len(catfns) != 6:
         raise ValueError(f"len(catfns) = {len(catfns)}.  catfns: {catfns}")
@@ -177,9 +199,13 @@ def merge_crowdsource(module='nrca', suffix=""):
     merge_catalogs(tbls, catalog_type=f'crowdsource{suffix}', module=module)
 
 
-def merge_daophot(module='nrca', detector='', daophot_type='basic'):
+def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False):
+
+    desat = "_unsatstar" if desat else ""
+    bgsub = '_bgsub' if bgsub else ''
+
     catfns = daocatfns = [
-        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}_daophot_{daophot_type}.fits"
+        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}_daophot_{daophot_type}.fits"
         for filtername in filternames
     ]
     imgfns = [x
@@ -359,25 +385,30 @@ def replace_saturated(cat, filtername, radius=None):
     cat.add_column(replaced_sat_, name='replaced_saturated')
 
 def main():
-    for module in ('merged', 'nrca', 'nrcb', ):
-        print(f'crowdsource {module}')
-        merge_crowdsource(module=module)
-        print(f'crowdsource unweighted {module}')
-        merge_crowdsource(module=module, suffix='_unweighted')
-        for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
-            print(f'crowdsource {suffix} {module}')
-            merge_crowdsource(module=module, suffix=suffix)
-        try:
-            print(f'daophot basic {module}')
-            merge_daophot(daophot_type='basic', module=module)
-        except Exception as ex:
-            print(ex)
-        try:
-            print(f'daophot iterative {module}')
-            merge_daophot(daophot_type='iterative', module=module)
-        except Exception as ex:
-            print(ex)
-        print()
+    for desat in (False, True):
+        for bgsub in (False, True):
+            for module in ( 'nrca', 'nrcb', 'merged', ):
+                print(f'crowdsource {module} desat={desat} bgsub={bgsub}')
+                merge_crowdsource(module=module, desat=desat, bgsub=bgsub)
+                try:
+                    print(f'crowdsource unweighted {module}')
+                    merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub)
+                    for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
+                        print(f'crowdsource {suffix} {module}')
+                        merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub)
+                except Exception as ex:
+                    print(ex)
+                try:
+                    print(f'daophot basic {module}')
+                    merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub)
+                except Exception as ex:
+                    print(ex)
+                try:
+                    print(f'daophot iterative {module}')
+                    merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub)
+                except Exception as ex:
+                    print(ex)
+                print()
 
 if __name__ == "__main__":
     main()
