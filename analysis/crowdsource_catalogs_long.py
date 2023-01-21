@@ -20,7 +20,8 @@ import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
-from photutils.background import MMMBackground, MADStdBackgroundRMS
+from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D
+
 
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
@@ -43,8 +44,8 @@ print("Done with imports", flush=True)
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
-def catalog_zoom_diagnostic(data, modsky, zoomcut, stars, fignum=1):
-    pl.figure(fignum=fignum, figsize=(12,12))
+def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
+    pl.figure(figsize=(12,12))
     im = pl.subplot(2,2,1).imshow(data[zoomcut],
                                   norm=simple_norm(data[zoomcut],
                                                    stretch='log',
@@ -100,6 +101,10 @@ def main():
                     default=False,
                     action='store_true',
                     help="run daophot?", metavar="daophot")
+    parser.add_option("--bgsub", dest="bgsub",
+                    default=False,
+                    action='store_true',
+                    help="perform background-subtraction first?", metavar="bgsub")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
@@ -118,6 +123,7 @@ def main():
             fwhm_pix = float(row['PSF FWHM (pixel)'][0])
 
             desat = '_unsatstar' if use_desaturated else ''
+            bgsub = '_bgsub' if options.bgsub else ''
 
             try:
                 pupil = 'clear'
@@ -138,6 +144,14 @@ def main():
             #filt = im1[0].header['FILTER']
             filt = filtername
 
+            if options.bgsub:
+                # background subtraction
+                # see BackgroundEstimationExperiments.ipynb
+                bkg = Background2D(data, box_size=11, bkg_estimator=MedianBackground())
+                fits.PrimaryHDU(data=bkg.background, header=im1['SCI'].header).writeto(filename.replace(".fits", "_background.fits"), overwrite=True)
+                data = data - bkg.background
+                fits.PrimaryHDU(data=data, header=im1['SCI'].header).writeto(filename.replace(".fits", "_bgsub.fits"), overwrite=True)
+                
             wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
             obsdate = im1[0].header['DATE-OBS']
 
@@ -157,7 +171,7 @@ def main():
                     nrc = webbpsf.NIRCam()
                     nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
                     nrc.filter = filt
-                    print(f"Running {module}{desat}")
+                    print(f"Running {module}{desat}{bgsub}")
                     if module in ('nrca', 'nrcb'):
                         nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
                         grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
@@ -250,19 +264,19 @@ def main():
             modsky = data*0 # no model for daofind
             try:
                 catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                pl.suptitle(f"daofind Catalog Diagnostics zoomed {filtername} {module}{desat}")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_daofind.png',
+                pl.suptitle(f"daofind Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_daofind.png',
                         bbox_inches='tight')
 
                 catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                pl.suptitle(f"daofind Catalog Diagnostics {filtername} {module}{desat}")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_daofind.png',
+                pl.suptitle(f"daofind Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_daofind.png',
                         bbox_inches='tight')
 
                 for name, zoomcut in zoomcut_list.items():
                     catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                    pl.suptitle(f"daofind Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom{name.replace(" ","_")}_daofind.png',
+                    pl.suptitle(f"daofind Catalog Diagnostics {filtername} {module}{desat}{bgsub} zoom {name}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom{name.replace(" ","_")}_daofind.png',
                             bbox_inches='tight')
             except Exception as ex:
                 print(f'FAILURE: {ex}')
@@ -300,29 +314,29 @@ def main():
             stars.meta['module'] = module
             stars.meta['detector'] = detector
 
-            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_unweighted.fits"
+            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_unweighted.fits"
             stars.write(tblfilename, overwrite=True)
             # add WCS-containing header
             with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
                 fh[0].header.update(im1[1].header)
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_skymodel_unweighted.fits", overwrite=True)
+            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel_unweighted.fits", overwrite=True)
 
             zoomcut = slice(128, 256), slice(128, 256)
 
             try:
                 catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics zoomed {filtername} {module}{desat}")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_unweighted.png',
+                pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_unweighted.png',
                         bbox_inches='tight')
 
                 catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics {filtername} {module}{desat}")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_unweighted.png',
+                pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_unweighted.png',
                         bbox_inches='tight')
                 for name, zoomcut in zoomcut_list.items():
                     catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                    pl.suptitle(f"Crowdsource nsky=1 Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom{name.replace(" ","_")}_unweighted.png',
+                    pl.suptitle(f"Crowdsource nsky=1 Catalog Diagnostics {filtername} {module}{desat}{bgsub} zoom {name}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom{name.replace(" ","_")}_unweighted.png',
                             bbox_inches='tight')
             except Exception as ex:
                 print(f'FAILURE: {ex}')
@@ -349,7 +363,7 @@ def main():
             fig.clf()
             ax = fig.gca()
             im = ax.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar(mappable=im);
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_weights.png',
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_weights.png',
                     bbox_inches='tight')
 
             t0 = time.time()
@@ -366,26 +380,26 @@ def main():
             stars['skycoord'] = coords
             stars['x'], stars['y'] = stars['y'], stars['x']
 
-            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource.fits"
+            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource.fits"
             stars.write(tblfilename, overwrite=True)
             # add WCS-containing header
             with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
                 fh[0].header.update(im1[1].header)
 
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_skymodel.fits", overwrite=True)
+            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel.fits", overwrite=True)
             fits.PrimaryHDU(data=data-modsky,
-                            header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_data-modsky.fits", overwrite=True)
+                            header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_data-modsky.fits", overwrite=True)
 
             zoomcut = slice(128, 256), slice(128, 256)
 
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-            pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics zoomed {filtername} {module}{desat}")
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_weighted_nsky1.png',
+            pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_weighted_nsky1.png',
                     bbox_inches='tight')
 
             catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-            pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics {filtername} {module}{desat}")
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_weighted_nsky1.png',
+            pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_weighted_nsky1.png',
                     bbox_inches='tight')
 
 
@@ -405,33 +419,33 @@ def main():
                 stars['skycoord'] = coords
                 stars['x'], stars['y'] = stars['y'], stars['x']
 
-                tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_nsky{nsky}.fits"
+                tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}.fits"
                 stars.write(tblfilename, overwrite=True)
                 # add WCS-containing header
                 with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
                     fh[0].header.update(im1[1].header)
 
-                fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_nsky{nsky}_skymodel.fits", overwrite=True)
+                fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}_skymodel.fits", overwrite=True)
                 fits.PrimaryHDU(data=data-modsky,
-                                header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}_crowdsource_nsky{nsky}_data-modsky.fits", overwrite=True)
+                                header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}_data-modsky.fits", overwrite=True)
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
 
                 catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat} nsky={nsky} weighted")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_weighted_catalog_diagnostics.png',
+                pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}{bgsub} nsky={nsky} weighted")
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_nsky{nsky}_weighted_catalog_diagnostics.png',
                         bbox_inches='tight')
 
                 catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat} nsky={nsky} weighted")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
+                pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub} nsky={nsky} weighted")
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
                         bbox_inches='tight')
 
                 for name, zoomcut in zoomcut_list.items():
                     catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                    pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
+                    pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub} zoom {name}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
                             bbox_inches='tight')
 
 
@@ -453,7 +467,7 @@ def main():
                 print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
                 result['skycoord_centroid'] = coords
                 detector = "" # no detector #'s for long
-                result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_basic.fits", overwrite=True)
+                result.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}{bgsub}_daophot_basic.fits", overwrite=True)
 
                 stars = result
                 stars['x'] = stars['x_fit']
@@ -461,19 +475,19 @@ def main():
                 modsky = phot.get_residual_image()
                 try:
                     catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                    pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{desat}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_daophot_basic.png',
+                    pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_daophot_basic.png',
                             bbox_inches='tight')
 
                     catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                    pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{desat}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_daophot_basic.png',
+                    pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_daophot_basic.png',
                             bbox_inches='tight')
 
                     for name, zoomcut in zoomcut_list.items():
                         catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                        pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
-                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
+                        pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{desat}{bgsub} zoom {name}")
+                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
                                 bbox_inches='tight')
                 except Exception as ex:
                     print(f'FAILURE: {ex}')
@@ -491,7 +505,7 @@ def main():
                 coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
                 result2['skycoord_centroid'] = coords2
                 print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
-                result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}_daophot_iterative.fits", overwrite=True)
+                result2.write(f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}{bgsub}_daophot_iterative.fits", overwrite=True)
                 stars = result2
                 stars['x'] = stars['x_fit']
                 stars['y'] = stars['y_fit']
@@ -499,19 +513,19 @@ def main():
                 modsky = phot_.get_residual_image()
                 try:
                     catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                    pl.suptitle(f"daophot iterative Catalog Diagnostics zoomed {filtername} {module}{desat}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_daophot_iterative.png',
+                    pl.suptitle(f"daophot iterative Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_daophot_iterative.png',
                             bbox_inches='tight')
 
                     catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                    pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{desat}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}_catalog_diagnostics_zoom_daophot_iterative.png',
+                    pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_daophot_iterative.png',
                             bbox_inches='tight')
 
                     for name, zoomcut in zoomcut_list.items():
                         catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                        pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{desat} zoom {name}")
-                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}__catalog_diagnostics_zoom_daophot_iterative{name.replace(" ","_")}.png',
+                        pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{desat}{bgsub} zoom {name}")
+                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}__catalog_diagnostics_zoom_daophot_iterative{name.replace(" ","_")}.png',
                                 bbox_inches='tight')
                 except Exception as ex:
                     print(f'FAILURE: {ex}')
