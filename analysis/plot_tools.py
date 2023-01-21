@@ -320,6 +320,8 @@ def ccds_withiso(basetable, sel=True,
     combos = list(itertools.combinations(colors, 2))
     gridspec = sqgrid.get_grid(len(combos))
     for ii, (color1, color2) in enumerate(combos):
+        f1, f2 = color1[0], color1[1]
+        f3, f4 = color2[0], color2[1]
         w1 = (4.10*u.um if color1[0] == '410m405'
              else 4.05*u.um if color1[0] == '405m410'
              else 1.82*u.um if f1 == '182m187'
