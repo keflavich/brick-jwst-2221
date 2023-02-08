@@ -84,7 +84,11 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     pl.colorbar(mappable=im)
     pl.tight_layout()
 
-def main():
+def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
+                           'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
+        bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
+                     'f410m': 11, 'f405n':11, 'f466n':11}
+        ):
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-f", "--filternames", dest="filternames",
@@ -147,9 +151,17 @@ def main():
             if options.bgsub:
                 # background subtraction
                 # see BackgroundEstimationExperiments.ipynb
-                bkg = Background2D(data, box_size=11, bkg_estimator=MedianBackground())
-                fits.PrimaryHDU(data=bkg.background, header=im1['SCI'].header).writeto(filename.replace(".fits", "_background.fits"), overwrite=True)
+                bkg = Background2D(data, box_size=bg_boxsize[filt], bkg_estimator=MedianBackground())
+                fits.PrimaryHDU(data=bkg.background,
+                                header=im1['SCI'].header).writeto(filename.replace(".fits",
+                                                                                   "_background.fits"),
+                                                                  overwrite=True)
+
+                # subtract background, but then re-zero the edges
+                zeros = data == 0
                 data = data - bkg.background
+                data[zeros] = 0
+
                 fits.PrimaryHDU(data=data, header=im1['SCI'].header).writeto(filename.replace(".fits", "_bgsub.fits"), overwrite=True)
 
             wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filt}')
@@ -361,7 +373,7 @@ def main():
             gpsf2 = grid(xx+preg.center.x, yy+preg.center.y)
             psf_model = crowdsource.psf.SimplePSF(stamp=gpsf2)
 
-            smoothing_scale = 0.55 # pixels
+            smoothing_scale = smoothing_scales[filt.lower()]
             gpsf3 = convolve(gpsf2, Gaussian2DKernel(smoothing_scale))
             psf_model_blur = crowdsource.psf.SimplePSF(stamp=gpsf3)
 
@@ -372,87 +384,89 @@ def main():
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_weights.png',
                     bbox_inches='tight')
 
-            t0 = time.time()
-            print("Running crowdsource fit_im with weights")
-            results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
-                                nskyx=1, nskyy=1, refit_psf=False, verbose=True)
-            print(f"Done with weighted, nsky=1 crowdsource. dt={time.time() - t0}")
-            stars, modsky, skymsky, psf = results_blur
-            stars = Table(stars)
+            # t0 = time.time()
+            # print("Running crowdsource fit_im with weights")
+            # results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
+            #                     nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+            # print(f"Done with weighted, nsky=1 crowdsource. dt={time.time() - t0}")
+            # stars, modsky, skymsky, psf = results_blur
+            # stars = Table(stars)
 
-            # crowdsource explicitly inverts x & y from the numpy convention:
-            # https://github.com/schlafly/crowdsource/issues/11
-            coords = ww.pixel_to_world(stars['y'], stars['x'])
-            stars['skycoord'] = coords
-            stars['x'], stars['y'] = stars['y'], stars['x']
+            # # crowdsource explicitly inverts x & y from the numpy convention:
+            # # https://github.com/schlafly/crowdsource/issues/11
+            # coords = ww.pixel_to_world(stars['y'], stars['x'])
+            # stars['skycoord'] = coords
+            # stars['x'], stars['y'] = stars['y'], stars['x']
 
-            tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource.fits"
-            stars.write(tblfilename, overwrite=True)
-            # add WCS-containing header
-            with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
-                fh[0].header.update(im1[1].header)
+            # tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource.fits"
+            # stars.write(tblfilename, overwrite=True)
+            # # add WCS-containing header
+            # with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+            #     fh[0].header.update(im1[1].header)
 
-            fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel.fits", overwrite=True)
-            fits.PrimaryHDU(data=data-modsky,
-                            header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_data-modsky.fits", overwrite=True)
+            # fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel.fits", overwrite=True)
+            # fits.PrimaryHDU(data=data-modsky,
+            #                 header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_data-modsky.fits", overwrite=True)
 
-            zoomcut = slice(128, 256), slice(128, 256)
+            # zoomcut = slice(128, 256), slice(128, 256)
 
-            catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-            pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_weighted_nsky1.png',
-                    bbox_inches='tight')
+            # catalog_zoom_diagnostic(data, modsky, nullslice, stars)
+            # pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
+            # pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_weighted_nsky1.png',
+            #         bbox_inches='tight')
 
-            catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-            pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_weighted_nsky1.png',
-                    bbox_inches='tight')
-
-
-
-            for nsky in (0, 1, 15):
-                t0 = time.time()
-                print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
-                results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
-                                    nskyx=nsky, nskyy=nsky, refit_psf=False, verbose=True)
-                print(f"Done with weighted, nsky={nsky} crowdsource. dt={time.time() - t0}")
-                stars, modsky, skymsky, psf = results_blur
-                stars = Table(stars)
-
-                # crowdsource explicitly inverts x & y from the numpy convention:
-                # https://github.com/schlafly/crowdsource/issues/11
-                coords = ww.pixel_to_world(stars['y'], stars['x'])
-                stars['skycoord'] = coords
-                stars['x'], stars['y'] = stars['y'], stars['x']
-
-                tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}.fits"
-                stars.write(tblfilename, overwrite=True)
-                # add WCS-containing header
-                with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
-                    fh[0].header.update(im1[1].header)
-
-                fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}_skymodel.fits", overwrite=True)
-                fits.PrimaryHDU(data=data-modsky,
-                                header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}_data-modsky.fits", overwrite=True)
-
-                zoomcut = slice(128, 256), slice(128, 256)
+            # catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+            # pl.suptitle(f"Crowdsource nsky=1 weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}")
+            # pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom_weighted_nsky1.png',
+            #         bbox_inches='tight')
 
 
-                catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}{bgsub} nsky={nsky} weighted")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_nsky{nsky}_weighted_catalog_diagnostics.png',
-                        bbox_inches='tight')
 
-                catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub} nsky={nsky} weighted")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
-                        bbox_inches='tight')
+            for refit_psf, fpsf in zip((True, False), ('_fitpsf', '')):
+                for nsky in (0, 1, ):
+                    t0 = time.time()
+                    print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
+                    print(f"data.shape={data.shape} weight_shape={weight.shape}")
+                    results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
+                                        nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True)
+                    print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
+                    stars, modsky, skymsky, psf = results_blur
+                    stars = Table(stars)
 
-                for name, zoomcut in zoomcut_list.items():
-                    catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                    pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub} zoom {name}")
-                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
+                    # crowdsource explicitly inverts x & y from the numpy convention:
+                    # https://github.com/schlafly/crowdsource/issues/11
+                    coords = ww.pixel_to_world(stars['y'], stars['x'])
+                    stars['skycoord'] = coords
+                    stars['x'], stars['y'] = stars['y'], stars['x']
+
+                    tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}.fits"
+                    stars.write(tblfilename, overwrite=True)
+                    # add WCS-containing header
+                    with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+                        fh[0].header.update(im1[1].header)
+
+                    fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_nsky{nsky}_skymodel.fits", overwrite=True)
+                    fits.PrimaryHDU(data=data-modsky,
+                                    header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_nsky{nsky}_data-modsky.fits", overwrite=True)
+
+                    zoomcut = slice(128, 256), slice(128, 256)
+
+
+                    catalog_zoom_diagnostic(data, modsky, nullslice, stars)
+                    pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}{bgsub}{fpsf} nsky={nsky} weighted")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics.png',
                             bbox_inches='tight')
+
+                    catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                    pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}{fpsf} nsky={nsky} weighted")
+                    pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
+                            bbox_inches='tight')
+
+                    for name, zoomcut in zoomcut_list.items():
+                        catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                        pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}{fpsf} zoom {name}")
+                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw02221-o001_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
+                                bbox_inches='tight')
 
 
 
