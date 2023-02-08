@@ -44,7 +44,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basecrds = SkyCoord([basecrds, newcrds])
     print(f"Base coordinate lenth = {len(basecrds)}")
 
-    basetable = Table(data=[MaskedColumn(basecrds, name="skycoord_ref")])
+    basetable = Table()
+    basetable['skycoord_ref'] = basecrds
 
     # flag_near_saturated(basetable, filtername=ref_filter)
     # # replace_saturated adds more rows
@@ -85,12 +86,15 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             matchtb = tbl[matches]
             badsep = sep > max_offset
             for cn in matchtb.colnames:
-                matchtb[f'{cn}_{wl}'] = MaskedColumn(data=matchtb[cn], name=f'{cn}_{wl}')
-                matchtb[f'{cn}_{wl}'].mask[badsep] = True
-                if hasattr(matchtb[cn], 'meta'):
-                    matchtb[f'{cn}_{wl}'].meta = matchtb[cn].meta
-                matchtb.remove_column(cn)
-                #matchtb.rename_column(cn, f"{cn}_{wl}")
+                if isinstance(matchtb[cn], SkyCoord):
+                    matchtb.rename_column(cn, f"{cn}_{wl}")
+                    matchtb[f'mask_{wl}'] = badsep
+                else:
+                    matchtb[f'{cn}_{wl}'] = MaskedColumn(data=matchtb[cn], name=f'{cn}_{wl}')
+                    matchtb[f'{cn}_{wl}'].mask[badsep] = True
+                    if hasattr(matchtb[cn], 'meta'):
+                        matchtb[f'{cn}_{wl}'].meta = matchtb[cn].meta
+                    matchtb.remove_column(cn)
 
             basetable = table.hstack([basetable, matchtb], join_type='exact')
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']

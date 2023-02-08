@@ -555,7 +555,7 @@ def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14,
     with mpl.rc_context({"font.size": fontsize}):
 
         if axes is None:
-            axes = pl.subplots(1,5)
+            fig, axes = pl.subplots(1,5)
 
         filters_plotted = []
         with warnings.catch_warnings():
