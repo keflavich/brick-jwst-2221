@@ -138,6 +138,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         assert '212PXDG' in meta
         assert '212PXDG' in basetable.meta
 
+        basetable.meta['version'] = datetime.datetime.now().isoformat()
         basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.ecsv", overwrite=True)
         # DO NOT USE FITS in production, it drops critical metadata
         basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits", overwrite=True)
@@ -416,3 +417,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    import make_reftable
+    make_reftable.main()
