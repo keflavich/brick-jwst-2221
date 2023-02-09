@@ -16,6 +16,10 @@ should be.
   * `destreak.py` runs "Massimo's Destriper", which is a simple percentile-subtraction across the X-axis of each horizontal quadrant of each detector (this is run by the pipeline)
   * `align_to_catalogs.py` includes some post-facto re-alignment tools.  One function runs only on the final processed data & matches it to VVV. (this is run by the pipeline)
   * `saturated_star_finding.py` performs PSF fitting on saturated stars and removes them.  (this is run by the pipeline)
+  * `crowdsource_catalogs_long.py` runs the crowsource extraction algorithm.  This must be run on the long-wavelength channels before running the short-wavelength pipeline to provide the reference catalog we use for the shortwave data.
+  * `merge_catalogs.py` merges the multiwavelength catalogs.
+  * `make_reftable.py` makes the reference table from the long-wavelength (F410M) data to be used on the short-wavelength data (this is run by merge_catalogs)
+
  2. Notebooks.  There are a lot of these.
   * `BrA_separation_nrc{a,b}.ipynb` should be run after the pipeline.  They subtract BrA from F410M, then subtract the rescaled continuum from the BrA image.
   * `F466_separation_nrc{a,b}.ipynb` does the same thing, but for the F466 filter.  It doesn't work as well because of the wavelength difference.
@@ -26,8 +30,5 @@ should be.
   Most of the rest are test / WIP things.
 
 
-## Analysis
 
 
-Photometry:
-  * `crowdsource_catalogs_long.py` and `crowdsource_catalogs_short.py` run the crowsource extraction algorithm
