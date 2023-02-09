@@ -177,7 +177,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #         grid = grid[0]
 
             has_downloaded = False
+            ntries = 0
             while not has_downloaded:
+                ntries += 1
                 try:
                     print("Attempting to download WebbPSF data", flush=True)
                     nrc = webbpsf.NIRCam()
@@ -185,7 +187,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     nrc.filter = filt
                     print(f"Running {module}{desat}{bgsub}")
                     if module in ('nrca', 'nrcb'):
-                        if 'f4' in filt:
+                        if 'F4' in filt.upper():
                             nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
                         else:
                             nrc.detector = f'{module.upper()}1' #TODO: figure out a way to use all 4?
@@ -197,7 +199,11 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     print(f"Failed to build PSF: {ex}", flush=True)
                 except Exception as ex:
                     print(ex, flush=True)
-                    continue
+                    if ntries > 10:
+                        # avoid infinite loops
+                        raise ValueError("Failed to download PSF, probably because of an error listed above")
+                    else:
+                        continue
 
             # there's no way to use a grid across all detectors.
             # the right way would be to use this as a grid of grids, but that apparently isn't supported.
