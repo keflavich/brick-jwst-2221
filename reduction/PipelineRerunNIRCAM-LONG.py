@@ -150,7 +150,7 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_each)
         print(f"DONE running {asn_file_each}")
 
-        log.info("Realigning to VVV")
+        log.info(f"Realigning to VVV (module={module}")
         realign_to_vvv(filtername=filtername.lower(), module=module)
 
         log.info("Removing saturated stars")
@@ -226,7 +226,7 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_merged)
         print(f"DONE running {asn_file_merged}")
 
-        log.info("Realigning to VVV")
+        log.info("Realigning to VVV (module=merged)")
         realign_to_vvv(filtername=filtername.lower(), module='merged')
 
         log.info("Removing saturated stars")
@@ -261,6 +261,7 @@ if __name__ == "__main__":
             results = main(filtername=filtername, module=module, Observations=Observations)
 
 
+    print("Running notebooks")
     from run_notebook import run_notebook
     basepath = '/orange/adamginsburg/jwst/brick/'
     run_notebook(f'{basepath}/notebooks/BrA_Separation_nrca.ipynb')

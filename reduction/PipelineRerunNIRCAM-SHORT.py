@@ -9,6 +9,7 @@ import json
 import asdf
 from astropy import log
 from astropy.io import ascii, fits
+from astropy.table import Table
 from astropy.utils.data import download_file
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
 import matplotlib.pyplot as plt
@@ -147,6 +148,7 @@ def main(filtername, module, Observations=None):
 
         # reference to long-wavelength catalogs
         image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        print(f"Reference catalog is {image3.tweakreg.abs_refcat} with version {Table.read(image3.tweakreg.abs_refcat).meta['version']}")
         image3.tweakreg.abs_searchrad = 0.5
 
         # try .... something else?
