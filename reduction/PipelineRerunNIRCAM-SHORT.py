@@ -148,7 +148,7 @@ def main(filtername, module, Observations=None):
 
         # reference to long-wavelength catalogs
         image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
-        print(f"Reference catalog is {image3.tweakreg.abs_refcat} with version {Table.read(image3.tweakreg.abs_refcat).meta['version']}")
+        print(f"Reference catalog is {image3.tweakreg.abs_refcat} with version {Table.read(image3.tweakreg.abs_refcat).meta['VERSION']}")
         image3.tweakreg.abs_searchrad = 0.5
 
         # try .... something else?
