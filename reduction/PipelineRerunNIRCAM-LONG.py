@@ -162,7 +162,7 @@ def main(filtername, module, Observations=None):
         merge_a_plus_b(filtername)
         print("DONE Merging already-combined nrca + nrcb modules")
 
-    if module == 'merge':
+    if module == 'merged':
         # try merging all frames & modules
         log.info("Working on merged reduction (both modules)")
 
