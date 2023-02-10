@@ -151,7 +151,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             if options.bgsub:
                 # background subtraction
                 # see BackgroundEstimationExperiments.ipynb
-                bkg = Background2D(data, box_size=bg_boxsize[filt], bkg_estimator=MedianBackground())
+                bkg = Background2D(data, box_size=bg_boxsizes[filt.lower()], bkg_estimator=MedianBackground())
                 fits.PrimaryHDU(data=bkg.background,
                                 header=im1['SCI'].header).writeto(filename.replace(".fits",
                                                                                    "_background.fits"),

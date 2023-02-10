@@ -23,12 +23,13 @@ def main():
 
     sel &= goodqflong & goodspreadlong & goodfracfluxlong
 
-    reftbl = tbl['skycoord_f410m'][sel]
+    # include two columns to make it a table
+    reftbl = tbl['skycoord_f410m', 'skycoord_f405n', ][sel]
     reftbl['RA'] = reftbl['skycoord_f410m'].ra
     reftbl['DEC'] = reftbl['skycoord_f410m'].dec
 
-    reftbl.meta['version'] = datetime.datetime.now().isoformat()
-    reftbl.meta['parent_version'] = tbl.meta['version']
+    reftbl.meta['VERSION'] = datetime.datetime.now().isoformat()
+    reftbl.meta['PARENT_VERSION'] = tbl.meta['VERSION']
 
     reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv', overwrite=True)
 

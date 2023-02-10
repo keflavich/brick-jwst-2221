@@ -31,13 +31,13 @@ filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f410m',
                    max_offset=0.15*u.arcsec):
-    basetable = master_tbl = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
+    basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
 
     # build up a reference coordinate catalog by adding in those with no matches each time
     basecrds = basetable['skycoord']
     for tb in tbls:
-        if tb.meta['filter' ] == ref_filter:
+        if tb.meta['filter'] == ref_filter:
             continue
         crds = tb['skycoord']
         matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
@@ -139,7 +139,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         assert '212PXDG' in meta
         assert '212PXDG' in basetable.meta
 
-        basetable.meta['version'] = datetime.datetime.now().isoformat()
+        # use caps b/c FITS will force it to caps anyway
+        basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
         basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.ecsv", overwrite=True)
         # DO NOT USE FITS in production, it drops critical metadata
         basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits", overwrite=True)
@@ -395,7 +396,10 @@ def main():
         for bgsub in (False, True):
             for module in ( 'nrca', 'nrcb', 'merged', ):
                 print(f'crowdsource {module} desat={desat} bgsub={bgsub}')
-                merge_crowdsource(module=module, desat=desat, bgsub=bgsub)
+                try:
+                    merge_crowdsource(module=module, desat=desat, bgsub=bgsub)
+                except ValueError as ex:
+                    print("Living with this error:", ex)
                 try:
                     print(f'crowdsource unweighted {module}')
                     merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub)
