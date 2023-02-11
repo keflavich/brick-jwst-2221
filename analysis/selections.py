@@ -51,6 +51,24 @@ any_saturated.sum()
 magerr_gtpt1 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.2 for filtername in filternames])
 magerr_gtpt1.sum()
 
+for filt in filternames:
+    filt = filt.lower()
+    mask = basetable[f'mag_ab_{filt}'].mask
+    # this qf threshold can be pretty stringent; 0.98 drops the number of sources a lot
+    # Eddie Schlafly recommended "For unsaturated sources, I'd be deeply
+    # skeptical of anything with qf < 0.6 or so; the suggestion is that we're
+    # on the edge of a chip or a bad region and don't even have the peak on a
+    # good pixel. I'd put tighter bounds if I wanted very good photometry, more
+    # like 90-95%."
+    qfok = ((basetable[f'qf_{filt}'] > 0.9).data & (~(basetable[f'qf_{filt}']).mask))
+    qfmask = basetable[f'qf_{filt}'].mask
+    spok = ((basetable[f'spread_model_{filt}'] < 0.025) & (~basetable[f'spread_model_{filt}'].mask))
+    ffok = ((basetable[f'fracflux_{filt}'] > 0.9) & (~basetable[f'fracflux_{filt}'].mask))
+    basetable[f'good_{filt}'] = allok = (qfok & spok & ffok)
+    print(f"Filter {filt} has qf={qfok.sum()}, spread={spok.sum()}, fracflux={ffok.sum()} ok,"
+          f" totaling {allok.sum()}.  There are {len(basetable)} total, of which "
+          f"{mask.sum()} are masked and {(~mask).sum()} are unmasked. qfmasksum={qfmask.sum()}, inverse={(~qfmask).sum()}.")
+
 goodqflong = ((basetable['qf_f410m'] > 0.98) | (basetable['qf_f405n'] > 0.98) | (basetable['qf_f466n'] > 0.98))
 goodspreadlong = ((basetable['spread_model_f410m'] < 0.025) | (basetable['spread_model_f405n'] < 0.025) | (basetable['spread_model_f466n'] < 0.025))
 goodfracfluxlong = ((basetable['fracflux_f410m'] > 0.9) | (basetable['fracflux_f405n'] > 0.9) & (basetable['fracflux_f466n'] > 0.9))
@@ -83,12 +101,12 @@ blue_405_410 = (oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) &
                 & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
 blue_405_410b = (oksep & ~any_saturated & (basetable['flux_f405n'] > basetable['flux_f410m']) &
                  (~(basetable['mag_ab_f405n'].mask)) &
-                 ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) + 
+                 ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) +
                   (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.5)
                  & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
 blue_187_182 = (oksep & ~any_saturated & (basetable['flux_f187n'] > basetable['flux_f182m']) &
                  (~(basetable['mag_ab_f187n'].mask)) &
-                 ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) + 
+                 ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                   (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
                 & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
 
@@ -96,11 +114,14 @@ blue_BrA_and_PaA = (oksep & ~any_saturated &
                     (basetable['flux_f405n'] > basetable['flux_f410m']) &
                     (basetable['flux_f187n'] > basetable['flux_f182m']) &
                  (~(basetable['mag_ab_f405n'].mask)) &
-                 ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) + 
+                 ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                   (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -0.1) &
-                 ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) + 
+                 ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) +
                   (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.1)
-                    & ~magerr_gtpt1  & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+                    & ~magerr_gtpt1 &
+                    basetable['good_f405n'] &
+                    basetable['good_f410m'])
+                    #& (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
 detected = (~basetable['mag_ab_f405n'].mask) & (~basetable['mag_ab_f410m'].mask) & (~basetable['mag_ab_f187n'].mask) & (~basetable['mag_ab_f182m'].mask)
 print(f"Strongly blue [410-466] sources: {blue_410_466.sum()}")
 print(f"Somewhat blue [410-466] sources: {slightly_blue_410_466.sum()}")
@@ -117,17 +138,29 @@ print(f"Excluding {exclude.sum()} of {exclude.size}")
 bad = (any_saturated | ~oksep | magerr_gtpt1 | basetable['mag_ab_f212n'].mask |
        basetable['mag_ab_f410m'].mask | badqflong | badfracfluxlong |
        badspreadlong | badqfshort | badfracfluxshort | badspreadshort)
+print("'Bad' sources are those where _any_ filter is masked out")
 print(f"Not-bad:{(~bad).sum()}, bad: {bad.sum()}, bad.mask: {bad.mask.sum()},"
       f" len(bad):{len(bad)}, len(table):{len(basetable)}")
 
 
 # Basic selections for CMD, CCD plotting
 sel = reg.contains(basetable['skycoord_f410m'], ww)
-sel &= basetable['sep_f466n'].quantity < 0.13*u.arcsec
-sel &= basetable['sep_f405n'].quantity < 0.13*u.arcsec
+sel &= basetable['sep_f466n'].quantity < 0.1*u.arcsec
+sel &= basetable['sep_f405n'].quantity < 0.1*u.arcsec
 
 def ccds_withiso(basetable=basetable, sel=sel, exclude=exclude, **kwargs):
     return plot_tools.ccds_withiso(basetable=basetable, sel=sel, exclude=exclude, **kwargs)
 
 def cmds_withiso(basetable=basetable, sel=sel, exclude=exclude, distance_modulus=distance_modulus, **kwargs):
     return plot_tools.cmds_withiso(basetable=basetable, sel=sel, exclude=exclude, distance_modulus=distance_modulus, **kwargs)
+
+
+sel = reg.contains(basetable['skycoord_f410m'], ww)
+sel &= basetable['sep_f466n'].quantity < 0.1*u.arcsec
+sel &= basetable['sep_f405n'].quantity < 0.1*u.arcsec
+
+def ccds(basetable=basetable, sel=sel, **kwargs):
+    return plot_tools.ccds(basetable=basetable, sel=sel, **kwargs)
+
+def cmds(basetable=basetable, sel=sel, **kwargs):
+    return plot_tools.cmds(basetable=basetable, sel=sel, **kwargs)
