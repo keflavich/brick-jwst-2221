@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import datetime
 import os
 import warnings
@@ -61,14 +62,16 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         #    basetable.rename_column(colname, colname+"_"+basetable.meta['filter'])
 
         for tbl in tbls:
+            t0 = time.time()
             wl = tbl.meta['filter']
             flag_near_saturated(tbl, filtername=wl)
             # replace_saturated adds more rows
             replace_saturated(tbl, filtername=wl)
+            # DEBUG print(f"DEBUG: tbl['replaced_saturated'].sum(): {tbl['replaced_saturated'].sum()}")
 
-            print(f"filter {wl} has {len(tbl)} rows")
             crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+            print(f"filter {wl} has {len(tbl)} rows.  Matching took {time.time()-t0:0.1f} seconds")
 
             # removed Jan 21, 2023 because this *should* be handled by the pipeline now
             # # do one iteration of bulk offset measurement
@@ -102,12 +105,27 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             meta[f'{wl[1:-1]}pxas'.upper()] = tbl.meta['pixelscale_arcsec']
             for key in tbl.meta:
                 meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
+
+            # DEBUG
             # DEBUG if hasattr(basetable[f'{cn}_{wl}'], 'mask'):
             # DEBUG     print(f"Table has mask sum for column {cn} {basetable[cn+'_'+wl].mask.sum()}")
+            # DEBUG if 'replaced_saturated_f410m' in basetable.colnames:
+            # DEBUG     print(f"'replaced_saturated_f410m' has {basetable['replaced_saturated_f410m'].sum()}")
+            # There can be more stars in replaced_saturated_f410m than there were stars replaced because
+            # there can be multiple stars in the merged coordinate list whose closest match is a saturated
+            # star.  i.e., there could be two coordinates that both see the same F410M flux.
 
             bad = np.isnan(tbl['mag_ab']) & (tbl['flux'] > 0)
             if any(bad):
                 raise ValueError("Bad magnitudes for good fluxes")
+
+            print(f"Flagged {tbl[f'near_saturated_{wl}'].sum()} stars that are near saturated stars "
+                  f"in filter {wl} out of {len(tbl)}.  "
+                  f"There are then {basetable[f'near_saturated_{wl}_{wl}'].sum()} in the merged table.  "
+                  f"There are also {basetable[f'replaced_saturated_{wl}'].sum()} replaced saturated.")
+
+
+        print(f"Stacked all rows into table with len={len(basetable)}")
 
         # Line-subtract the F410 continuum band
         # 0.16 is from BrA_separation
@@ -139,14 +157,23 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         assert '212PXDG' in meta
         assert '212PXDG' in basetable.meta
 
+        tablename = f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged"
+        t0 = time.time()
+        print(f"Writing table {tablename}")
         # use caps b/c FITS will force it to caps anyway
         basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
-        basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.ecsv", overwrite=True)
+        # takes FOR-EV-ER
+        basetable.write(f"{tablename}.ecsv", overwrite=True)
+        print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds")
+        t0 = time.time()
         # DO NOT USE FITS in production, it drops critical metadata
-        basetable.write(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits", overwrite=True)
+        # I wish I had noted *what* metadata it drops, though, since I still seem to be using
+        # it in production code down the line...
+        # OH, I think the FITS file turns "True" into "False"?
+        # Yes, specifically: it DROPS masked data types, converting "masked" into "True"?
+        basetable.write(f"{tablename}.fits", overwrite=True)
+        print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds")
 
-        # testtb = Table.read(f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged.fits")
-        # assert '212PXDG' in testtb.meta
 
 def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
     imgfns = [x
@@ -188,14 +215,15 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
         flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
         eflux_jy = (tbl['dflux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
-        abmag = flux_jy.to(u.ABmag)
-        abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            tbl.add_column(flux_jy, name='flux_jy')
-            tbl.add_column(eflux_jy, name='eflux_jy')
-            tbl.add_column(abmag, name='mag_ab')
-            tbl.add_column(abmag_err, name='emag_ab')
+        with np.errstate(all='ignore'):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                abmag = flux_jy.to(u.ABmag)
+                abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
+                tbl.add_column(flux_jy, name='flux_jy')
+                tbl.add_column(eflux_jy, name='eflux_jy')
+                tbl.add_column(abmag, name='mag_ab')
+                tbl.add_column(abmag_err, name='emag_ab')
         if hasattr(tbl['mag_ab'], 'mask'):
             print(f'ab mag tbl col has mask sum = {tbl["mag_ab"].mask.sum()} masked values')
         if hasattr(abmag, 'mask'):
@@ -317,10 +345,12 @@ def replace_saturated(cat, filtername, radius=None):
 
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
 
+
     replaced_sat = np.zeros(len(cat), dtype='bool')
     replaced_sat[idx_cat] = True
 
     if 'flux' in cat.colnames:
+
         cat['flux'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
         cat['dflux'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
         cat['skycoord'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
@@ -389,19 +419,24 @@ def replace_saturated(cat, filtername, radius=None):
     replaced_sat_ = np.ones(len(cat), dtype='bool')
     replaced_sat_[:len(replaced_sat)] = replaced_sat
 
+    print(f"Replacing {len(idx_cat)} stars that are saturated of {len(cat)} "
+          f"in filter {filtername}.  "
+          f"{satstar_not_inc.sum()} are newly added.  The total replaced stars={replaced_sat_.sum()}")
+
     cat.add_column(replaced_sat_, name='replaced_saturated')
+    # DEBUG print(f"DEBUG: cat['replaced_saturated'].sum(): {cat['replaced_saturated'].sum()}")
 
 def main():
     for desat in (False, True):
         for bgsub in (False, True):
-            for module in ( 'nrca', 'nrcb', 'merged', ):
+            for module in ( 'merged', 'nrca', 'nrcb', ):
                 print(f'crowdsource {module} desat={desat} bgsub={bgsub}')
                 try:
                     merge_crowdsource(module=module, desat=desat, bgsub=bgsub)
                 except ValueError as ex:
                     print("Living with this error:", ex)
                 try:
-                    print(f'crowdsource unweighted {module}')
+                    print(f'crowdsource unweighted {module}', flush=True)
                     merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub)
                     for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
                         print(f'crowdsource {suffix} {module}')

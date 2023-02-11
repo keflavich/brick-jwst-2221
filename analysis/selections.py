@@ -37,16 +37,27 @@ from astropy.table import Table
 from astropy import units as u
 
 from analysis_setup import (basepath, reg, regzoom, distance_modulus,
-                            filternames, basetable, ww410 as ww, plot_tools)
+                            filternames, basetable, ww410 as ww, plot_tools,
+                            )
+from plot_tools import regzoomplot, starzoom
 
 
-
-any_saturated_ = [basetable[x] for x in basetable.colnames if 'near_sat' in x]
+# FITS tables can't mask boolean columns
+# so, we have to mask the saturated mask using the mask on the flux for the filter
+any_saturated_ = [basetable[f'near_saturated_{x}_{x}'] & ~basetable[f'flux_{x}'].mask for x in filternames]
 any_saturated = any_saturated_[0]
-for row in any_saturated_[1:]:
-    print(row.sum())
-    any_saturated = any_saturated | row
-any_saturated.sum()
+for col in any_saturated_[1:]:
+    print(f"{col.sum()} saturated in {col.name}")
+    any_saturated = any_saturated | col
+print(f"{any_saturated.sum()} near saturated out of {len(basetable)}.  That leaves {(~any_saturated).sum()} not near unsaturated")
+
+any_replaced_saturated_ = [basetable[f'replaced_saturated_{x}'] &
+                           ~basetable[f'flux_{x}'].mask for x in filternames]
+any_replaced_saturated = any_replaced_saturated_[0]
+for col in any_replaced_saturated_[1:]:
+    print(f"{col.sum()} saturated in {col.name}")
+    any_replaced_saturated = any_replaced_saturated | col
+print(f"{any_replaced_saturated.sum()} saturated out of {len(basetable)}.  That leaves {(~any_replaced_saturated).sum()} unsaturated")
 
 magerr_gtpt1 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.2 for filtername in filternames])
 magerr_gtpt1.sum()
@@ -164,3 +175,5 @@ def ccds(basetable=basetable, sel=sel, **kwargs):
 
 def cmds(basetable=basetable, sel=sel, **kwargs):
     return plot_tools.cmds(basetable=basetable, sel=sel, **kwargs)
+
+crds = basetable['skycoord_f410m']

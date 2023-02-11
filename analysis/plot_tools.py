@@ -142,18 +142,23 @@ def color_plot(basetable,
         fig = pl.figure()
 
     ww = wcs.WCS(fh['SCI'].header)
-    ww2 = WCS()
-    ww2.wcs.ctype = ww.wcs.ctype
-    ww2.wcs.crval = ww.wcs.crval
-    ww2.wcs.cdelt = ww.wcs.cdelt
-    ww2.wcs.crpix = ww.wcs.crpix[::-1]
-    ww2.wcs.cunit = ww.wcs.cunit
+    if 'CON' in fh:
+        ww2 = WCS()
+        ww2.wcs.ctype = ww.wcs.ctype
+        ww2.wcs.crval = ww.wcs.crval
+        ww2.wcs.cdelt = ww.wcs.cdelt
+        ww2.wcs.crpix = ww.wcs.crpix[::-1]
+        ww2.wcs.cunit = ww.wcs.cunit
+    else:
+        # for reprojected images
+        ww2 = ww
 
     if reg is not None:
         preg = reg.to_pixel(ww2)
         slcs, _ = preg.bounding_box.get_overlap_slices(fh['SCI'].data.shape)
         pregb = reg.to_pixel(ww)
         dslcs, _ = pregb.bounding_box.get_overlap_slices(fh['SCI'].data.shape)
+        assert slcs is not None
     else:
         slcs = slice(None), slice(None)
         dslcs = slice(None), slice(None)
