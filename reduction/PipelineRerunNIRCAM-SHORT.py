@@ -14,6 +14,7 @@ from astropy.utils.data import download_file
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import datetime
 from jwst.pipeline import calwebb_image3
 
 # Individual steps that make up calwebb_image3
@@ -32,9 +33,13 @@ from align_to_catalogs import realign_to_vvv, merge_a_plus_b
 
 import crds
 
-import pprint
-
 import jwst
+
+def print(*args, **kwargs):
+    now = datetime.datetime.now().isoformat()
+    from builtins import print as printfunc
+    return printfunc(f"{now}:", *args, **kwargs)
+
 print(jwst.__version__)
 
 # see 'destreak187.ipynb' for tests of this
