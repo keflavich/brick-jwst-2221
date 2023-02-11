@@ -41,7 +41,7 @@ sys.path.append(f'{basepath}/analysis/')
 sys.path.append(f'{basepath}/reduction/')
 import plot_tools
 imp.reload(plot_tools)
-from plot_tools import regzoomplot
+from plot_tools import regzoomplot, starzoom
 
 
 distance_modulus = dm = 5*np.log10(8.3*u.kpc / (10*u.pc))
@@ -69,4 +69,4 @@ avm = avm_nrca
 img = img_nrca
 wwi = wwi_nrca
 
-basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
+basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
