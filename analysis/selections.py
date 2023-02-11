@@ -177,3 +177,10 @@ def cmds(basetable=basetable, sel=sel, **kwargs):
     return plot_tools.cmds(basetable=basetable, sel=sel, **kwargs)
 
 crds = basetable['skycoord_f410m']
+
+
+# not sure these are legitimately bad?
+# Feb 11, 2023: these are the same objects as 'weird blue'
+# This is needed by some plots, but isn't obviously useful
+badblue = blue_410_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2) |
+                          ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )

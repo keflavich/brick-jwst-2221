@@ -34,9 +34,6 @@ pl.rcParams['image.origin'] = 'lower'
 
 import os
 print("Importing webbpsf", flush=True)
-os.environ['WEBBPSF_PATH'] = '/blue/adamginsburg/adamginsburg/jwst/webbpsf-data/'
-with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
-    os.environ['MAST_API_TOKEN'] = fh.read().strip()
 import webbpsf
 from webbpsf.utils import to_griddedpsfmodel
 import datetime
@@ -181,6 +178,12 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #     if isinstance(big_grid, list):
             #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
             #         grid = grid[0]
+
+            with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+                api_token = fh.read().strip()
+            from astroquery.mast import Mast
+            Mast.login(api_token.strip())
+            os.environ['MAST_API_TOKEN'] = api_token.strip()
 
             has_downloaded = False
             ntries = 0
