@@ -32,9 +32,15 @@ from destreak import destreak
 
 import crds
 
-import pprint
-
+import datetime
 import jwst
+
+def print(*args, **kwargs):
+    now = datetime.datetime.now().isoformat()
+    from builtins import print as printfunc
+    return printfunc(f"{now}:", *args, **kwargs)
+
+
 print(jwst.__version__)
 
 # see 'destreak410.ipynb' for tests of this

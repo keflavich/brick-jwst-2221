@@ -39,6 +39,12 @@ with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
     os.environ['MAST_API_TOKEN'] = fh.read().strip()
 import webbpsf
 from webbpsf.utils import to_griddedpsfmodel
+import datetime
+
+def print(*args, **kwargs):
+    now = datetime.datetime.now().isoformat()
+    from builtins import print as printfunc
+    return printfunc(f"{now}:", *args, **kwargs)
 
 print("Done with imports", flush=True)
 
