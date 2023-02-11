@@ -74,4 +74,7 @@ avm_nostars_merged = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_merged_l
 img_nostars_merged = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_merged_longwave_narrowband_rotated.png'))[::-1,:,:]
 wwi_nostars_merged = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
 
-basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
+# the merged version is the one I *want* to work with, but nrca is the one I've tested most
+# and can really vouch for
+# basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
+basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
