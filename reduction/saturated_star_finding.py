@@ -139,7 +139,15 @@ def get_psf(header, path_prefix='.'):
 
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
+
+    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+        api_token = fh.read().strip()
+    from astroquery.mast import Mast
+    Mast.login(api_token.strip())
+    os.environ['MAST_API_TOKEN'] = api_token.strip()
+
     loaded_psfgen = False
+    ntries = 0
     while not loaded_psfgen:
         print(f"Attempting to load PSF for {obsdate}")
         try:
@@ -150,6 +158,9 @@ def get_psf(header, path_prefix='.'):
         except Exception as ex:
             print("psfgen load_wss_opd_by_date failed")
             print(ex)
+        ntries += 1
+        if ntries > 10:
+            raise ValueError("Could not download in 10 tries")
 
     npsf = 16
     oversample = 2
