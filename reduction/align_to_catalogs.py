@@ -12,6 +12,13 @@ import warnings
 from astropy.wcs import WCS
 from astropy.io import fits
 
+import datetime
+
+def print(*args, **kwargs):
+    now = datetime.datetime.now().isoformat()
+    from builtins import print as printfunc
+    return printfunc(f"{now}:", *args, **kwargs)
+
 def main():
     for filtername in ('f182m', 'f187n', 'f212n', 'f405n', 'f410m', 'f466n'):
         for module in ('nrca', 'nrcb'):
@@ -26,8 +33,9 @@ def realign_to_vvv(
     module = 'nrca',
     imfile = None,
     catfile = None,
+    fov_regname='/orange/adamginsburg/jwst/brick/regions/nircam_fov.reg',
 ):
-    fov = regions.Regions.read(f'{basepath}/regions/nircam_fov.reg')
+    fov = regions.Regions.read(fov_regname)
 
     coord = fov[0].center
     height = fov[0].height
@@ -46,6 +54,15 @@ def realign_to_vvv(
     # FK5 because it says 'J2000' on the Vizier page (same as twomass)
     vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
 
+    return realign_to_catalog(vvvdr2_crds, filtername=filtername,
+                              module=module, basepath=basepath,
+                              catfile=catfile, imfile=imfile)
+
+
+def realign_to_catalog(reference_coordinates, filtername='f212n',
+                       module='nrca',
+                       basepath='/orange/adamginsburg/jwst/brick/',
+                       catfile=None, imfile=None):
     if catfile is None:
         catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
     if imfile is None:
@@ -65,9 +82,9 @@ def realign_to_vvv(
         ww =  WCS(fits.getheader(imfile, ext=('SCI', 1)))
     skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = vvvdr2_crds.search_around_sky(skycrds_cat[sel], 0.4*u.arcsec)
-    dra = (skycrds_cat[sel][idx].ra - vvvdr2_crds[sidx].ra).to(u.arcsec)
-    ddec = (skycrds_cat[sel][idx].dec - vvvdr2_crds[sidx].dec).to(u.arcsec)
+    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], 0.4*u.arcsec)
+    dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
+    ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
     print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}')
 
@@ -86,9 +103,9 @@ def realign_to_vvv(
         ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = vvvdr2_crds.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
-    dra = (skycrds_cat_new[sel][idx].ra - vvvdr2_crds[sidx].ra).to(u.arcsec)
-    ddec = (skycrds_cat_new[sel][idx].dec - vvvdr2_crds[sidx].dec).to(u.arcsec)
+    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
+    dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
+    ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
     print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)}')
 
@@ -107,9 +124,9 @@ def realign_to_vvv(
         ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = vvvdr2_crds.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
-    dra = (skycrds_cat_new[sel][idx].ra - vvvdr2_crds[sidx].ra).to(u.arcsec)
-    ddec = (skycrds_cat_new[sel][idx].dec - vvvdr2_crds[sidx].dec).to(u.arcsec)
+    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
+    dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
+    ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
     print(f'After re-realignment, offset is {np.median(dra)}, {np.median(ddec)}')
 

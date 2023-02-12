@@ -29,7 +29,7 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from destreak import destreak
 from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
 
-from align_to_catalogs import realign_to_vvv, merge_a_plus_b
+from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b
 
 import crds
 
@@ -153,7 +153,9 @@ def main(filtername, module, Observations=None):
 
         # reference to long-wavelength catalogs
         image3.tweakreg.abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
-        print(f"Reference catalog is {image3.tweakreg.abs_refcat} with version {Table.read(image3.tweakreg.abs_refcat).meta['VERSION']}")
+        reftbl = Table.read(image3.tweakreg.abs_refcat)
+        reftblversion = reftbl.meta['VERSION']
+        print(f"Reference catalog is {image3.tweakreg.abs_refcat} with version {reftblversion}")
         image3.tweakreg.abs_searchrad = 0.5
 
         # try .... something else?
@@ -170,10 +172,16 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_each)
         print(f"DONE running {asn_file_each}")
         # don't realign now
-        #realigned = realign_to_vvv(filtername=filtername.lower(), module=module)
+        realigned = realign_to_catalog(reftbl['skycoord_f410m'],
+                                       filtername=filtername.lower(),
+                                       module=module)
+
+        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='u') as fh:
+            fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+
 
     if module == 'nrcb':
         # assume nrca is run before nrcb
@@ -253,7 +261,7 @@ def main(filtername, module, Observations=None):
         print(f"DONE running {asn_file_merged}")
 
         # realignment doesn't work
-        # realign_to_vvv(filtername=filtername.lower(), module='merged')
+        #realign_to_catalog(filtername=filtername.lower(), module='merged')
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
