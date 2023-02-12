@@ -5,6 +5,7 @@ from astropy.table import Table
 
 def main():
     basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
+    long_filternames = ['f410m', 'f405n', 'f466n']
 
     # filtername = 'F410M'
     # module = 'merged'
@@ -27,7 +28,26 @@ def main():
                         (tbl['fracflux_f405n'] > 0.8) &
                         (tbl['fracflux_f466n'] > 0.8))
 
+    any_saturated_ = [(tbl[f'near_saturated_{x}_{x}'] &
+                      ~tbl[f'flux_{x}'].mask)
+                      for x in long_filternames]
+    any_saturated = any_saturated_[0]
+    for col in any_saturated_[1:]:
+        any_saturated = any_saturated | col
+
+    any_replaced_saturated_ = [tbl[f'replaced_saturated_{x}'] &
+                               ~tbl[f'flux_{x}'].mask for x in long_filternames]
+    any_replaced_saturated = any_replaced_saturated_[0]
+    for col in any_replaced_saturated_[1:]:
+        any_replaced_saturated = any_replaced_saturated | col
+
+
     sel &= goodqflong & goodspreadlong & goodfracfluxlong
+    print(f"QFs are good for {sel.sum()} out of {len(tbl)} catalog entries")
+    print(f"Rejecting {(any_replaced_saturated & sel).sum()} replaced-saturated sources.")
+    sel &= ~any_replaced_saturated
+    print(f"Rejecting {(any_saturated & sel).sum()} near-saturated sources.")
+    sel &= ~any_saturated
     print(f"Making the reference catalog from {sel.sum()} out of {len(tbl)} catalog entries")
 
     # include two columns to make it a table
