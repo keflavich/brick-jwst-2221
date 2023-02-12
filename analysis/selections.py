@@ -73,12 +73,28 @@ for filt in filternames:
     # like 90-95%."
     qfok = ((basetable[f'qf_{filt}'] > 0.9).data & (~(basetable[f'qf_{filt}']).mask))
     qfmask = basetable[f'qf_{filt}'].mask
-    spok = ((basetable[f'spread_model_{filt}'] < 0.025) & (~basetable[f'spread_model_{filt}'].mask))
-    ffok = ((basetable[f'fracflux_{filt}'] > 0.9) & (~basetable[f'fracflux_{filt}'].mask))
+    # it's not very clear what the spread model does; Schafly points to
+    # https://sextractor.readthedocs.io/en/latest/Model.html#model-based-star-galaxy-separation-spread-model
+    # it may be useful for IDing extended sources
+    spok = ((np.abs(basetable[f'spread_model_{filt}']) < 0.25) & (~basetable[f'spread_model_{filt}'].mask))
+    # fracflux is intended to be a measure of how blended the source is. It's
+    # the PSF-weighted flux of the stamp after subtracting neighbors, divided
+    # by the PSF-weighted flux of the full image including neighbors. So if you
+    # have no neighbors around, it's 1. If typically half the flux in one of
+    # your pixels is from your neighbors, it's 0.5, where 'typically' is in a
+    # PSF-weighted sense.
+    ffok = ((basetable[f'fracflux_{filt}'] > 0.8) & (~basetable[f'fracflux_{filt}'].mask))
     basetable[f'good_{filt}'] = allok = (qfok & spok & ffok)
     print(f"Filter {filt} has qf={qfok.sum()}, spread={spok.sum()}, fracflux={ffok.sum()} ok,"
           f" totaling {allok.sum()}.  There are {len(basetable)} total, of which "
           f"{mask.sum()} are masked and {(~mask).sum()} are unmasked. qfmasksum={qfmask.sum()}, inverse={(~qfmask).sum()}.")
+
+all_good = np.all([basetable[f'good_{filt}'] for filt in filternames], axis=0)
+long_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' in filt], axis=0)
+short_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' not in filt], axis=0)
+print(f"Of {len(all_good)} rows, {all_good.sum()} are good in all filters.")
+print(f"Of {len(all_good)} rows, {long_good.sum()} are good in long filters.")
+print(f"Of {len(all_good)} rows, {short_good.sum()} are good in short filters.")
 
 goodqflong = ((basetable['qf_f410m'] > 0.98) | (basetable['qf_f405n'] > 0.98) | (basetable['qf_f466n'] > 0.98))
 goodspreadlong = ((basetable['spread_model_f410m'] < 0.025) | (basetable['spread_model_f405n'] < 0.025) | (basetable['spread_model_f466n'] < 0.025))

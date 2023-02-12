@@ -171,7 +171,9 @@ def main(filtername, module, Observations=None):
 
         image3.run(asn_file_each)
         print(f"DONE running {asn_file_each}")
-        # don't realign now
+
+        # realignment shouldn't be necessary, but at least the diagnostics from this
+        # are useful
         realigned = realign_to_catalog(reftbl['skycoord_f410m'],
                                        filtername=filtername.lower(),
                                        module=module)
@@ -183,7 +185,7 @@ def main(filtername, module, Observations=None):
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
 
 
-    if module == 'nrcb':
+    if module in ('nrcb', 'merged'):
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules", flush=True)
         merge_a_plus_b(filtername)
@@ -260,8 +262,12 @@ def main(filtername, module, Observations=None):
         image3.run(asn_file_merged)
         print(f"DONE running {asn_file_merged}")
 
-        # realignment doesn't work
-        #realign_to_catalog(filtername=filtername.lower(), module='merged')
+        realigned = realign_to_catalog(reftbl['skycoord_f410m'],
+                                       filtername=filtername.lower(),
+                                       module=module)
+
+        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='u') as fh:
+            fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')

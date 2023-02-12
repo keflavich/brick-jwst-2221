@@ -92,8 +92,8 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
 
     with fits.open(imfile, mode='update') as hdulist:
         print("CRVAL before", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
-        hdulist[1].header['OLCRVAL1'] = hdulist[1].header['CRVAL1']
-        hdulist[1].header['OLCRVAL2'] = hdulist[1].header['CRVAL2']
+        hdulist[1].header['OLCRVAL1'] = (hdulist[1].header['CRVAL1'], "Original CRVAL before ralign")
+        hdulist[1].header['OLCRVAL2'] = (hdulist[1].header['CRVAL2'], "Original CRVAL before ralign")
         hdulist[1].header.update(ww.to_header())
         print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
 
@@ -113,8 +113,8 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
 
     with fits.open(imfile, mode='update') as hdulist:
         print("CRVAL before", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
-        hdulist[1].header['OMCRVAL1'] = hdulist[1].header['CRVAL1']
-        hdulist[1].header['OMCRVAL2'] = hdulist[1].header['CRVAL2']
+        hdulist[1].header['OMCRVAL1'] = (hdulist[1].header['CRVAL1'], "Old median CRVAL")
+        hdulist[1].header['OMCRVAL2'] = (hdulist[1].header['CRVAL2'], "Old median CRVAL")
         hdulist[1].header.update(ww.to_header())
         print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
 

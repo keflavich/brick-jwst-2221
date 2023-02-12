@@ -17,11 +17,18 @@ def main():
     sel &= tbl['sep_f405n'].quantity < 0.1*u.arcsec
 
     # reject sources with bad QFs
-    goodqflong = ((tbl['qf_f410m'] > 0.98) | (tbl['qf_f405n'] > 0.98) | (tbl['qf_f466n'] > 0.98))
-    goodspreadlong = ((tbl['spread_model_f410m'] < 0.025) | (tbl['spread_model_f405n'] < 0.025) | (tbl['spread_model_f466n'] < 0.025))
-    goodfracfluxlong = ((tbl['fracflux_f410m'] > 0.9) | (tbl['fracflux_f405n'] > 0.9) & (tbl['fracflux_f466n'] > 0.9))
+    goodqflong = ((tbl['qf_f410m'] > 0.90) |
+                  (tbl['qf_f405n'] > 0.90) |
+                  (tbl['qf_f466n'] > 0.90))
+    goodspreadlong = ((tbl['spread_model_f410m'] < 0.25) |
+                      (tbl['spread_model_f405n'] < 0.25) |
+                      (tbl['spread_model_f466n'] < 0.25))
+    goodfracfluxlong = ((tbl['fracflux_f410m'] > 0.8) |
+                        (tbl['fracflux_f405n'] > 0.8) &
+                        (tbl['fracflux_f466n'] > 0.8))
 
     sel &= goodqflong & goodspreadlong & goodfracfluxlong
+    print(f"Making the reference catalog from {sel.sum()} out of {len(tbl)} catalog entries")
 
     # include two columns to make it a table
     reftbl = tbl['skycoord_f410m', 'skycoord_f405n', ][sel]
