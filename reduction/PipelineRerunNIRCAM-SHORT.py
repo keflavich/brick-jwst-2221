@@ -178,7 +178,7 @@ def main(filtername, module, Observations=None):
                                        filtername=filtername.lower(),
                                        module=module)
 
-        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='u') as fh:
+        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
@@ -266,7 +266,7 @@ def main(filtername, module, Observations=None):
                                        filtername=filtername.lower(),
                                        module=module)
 
-        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='u') as fh:
+        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
