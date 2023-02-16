@@ -37,12 +37,13 @@ from astropy.table import Table
 from astropy import units as u
 
 from analysis_setup import (basepath, reg, regzoom, distance_modulus,
-                            filternames, basetable, ww410 as ww, plot_tools,
+                            filternames, basetable, plot_tools, basetable,
+                            basetable_merged, basetable_nrca, basetable_nrcb,
                             )
 from plot_tools import regzoomplot, starzoom
 
 
-def main(basepath):
+def main(basetable, ww):
     # FITS tables can't mask boolean columns
     # so, we have to mask the saturated mask using the mask on the flux for the filter
     any_saturated_ = [basetable[f'near_saturated_{x}_{x}'] & ~basetable[f'flux_{x}'].mask for x in filternames]
@@ -72,12 +73,14 @@ def main(basepath):
         # on the edge of a chip or a bad region and don't even have the peak on a
         # good pixel. I'd put tighter bounds if I wanted very good photometry, more
         # like 90-95%."
-        qfok = ((basetable[f'qf_{filt}'] > 0.9).data & (~(basetable[f'qf_{filt}']).mask))
+        # qf > 0.6 looks pretty decent so I'm rollin with it
+        qfok = ((basetable[f'qf_{filt}'] > 0.6).data & (~(basetable[f'qf_{filt}']).mask))
         qfmask = basetable[f'qf_{filt}'].mask
         # it's not very clear what the spread model does; Schafly points to
         # https://sextractor.readthedocs.io/en/latest/Model.html#model-based-star-galaxy-separation-spread-model
         # it may be useful for IDing extended sources
-        spok = ((np.abs(basetable[f'spread_model_{filt}']) < 0.25) & (~basetable[f'spread_model_{filt}'].mask))
+        spok = ((np.abs(basetable[f'spread_model_{filt}']) < 0.25) &
+                (~basetable[f'spread_model_{filt}'].mask))
         # fracflux is intended to be a measure of how blended the source is. It's
         # the PSF-weighted flux of the stamp after subtracting neighbors, divided
         # by the PSF-weighted flux of the full image including neighbors. So if you
@@ -91,6 +94,7 @@ def main(basepath):
               f"{mask.sum()} are masked and {(~mask).sum()} are unmasked. qfmasksum={qfmask.sum()}, inverse={(~qfmask).sum()}.")
 
     all_good = np.all([basetable[f'good_{filt}'] for filt in filternames], axis=0)
+    any_good = np.any([basetable[f'good_{filt}'] for filt in filternames], axis=0)
     long_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' in filt], axis=0)
     short_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' not in filt], axis=0)
     print(f"Of {len(all_good)} rows, {all_good.sum()} are good in all filters.")
@@ -142,15 +146,30 @@ def main(basepath):
                         (basetable['flux_f405n'] > basetable['flux_f410m']) &
                         (basetable['flux_f187n'] > basetable['flux_f182m']) &
                      (~(basetable['mag_ab_f405n'].mask)) &
+                     (~(basetable['mag_ab_f410m'].mask)) &
+                     (~(basetable['mag_ab_f187n'].mask)) &
+                     (~(basetable['mag_ab_f182m'].mask)) &
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -0.1) &
                      ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) +
                       (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.1)
                         & ~magerr_gtpt1 &
                         basetable['good_f405n'] &
-                        basetable['good_f410m'])
+                        basetable['good_f410m'] &
+                        basetable['good_f187n'] &
+                        basetable['good_f182m']
+                       )
                         #& (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
-    detected = (~basetable['mag_ab_f405n'].mask) & (~basetable['mag_ab_f410m'].mask) & (~basetable['mag_ab_f187n'].mask) & (~basetable['mag_ab_f182m'].mask)
+    detected = ((~basetable['mag_ab_f405n'].mask) &
+                (~basetable['mag_ab_f410m'].mask) &
+                (~basetable['mag_ab_f187n'].mask) &
+                (~basetable['mag_ab_f182m'].mask))
+    detected_allbands = ((~basetable['mag_ab_f405n'].mask) &
+                         (~basetable['mag_ab_f410m'].mask) &
+                         (~basetable['mag_ab_f466n'].mask) &
+                         (~basetable['mag_ab_f212n'].mask) &
+                         (~basetable['mag_ab_f187n'].mask) &
+                         (~basetable['mag_ab_f182m'].mask))
     print(f"Strongly blue [410-466] sources: {blue_410_466.sum()}")
     print(f"Somewhat blue [410-466] sources: {slightly_blue_410_466.sum()}")
     print(oklong.sum(), blue_410_466.sum(), slightly_blue_410_466.sum(), blue_405_410.sum(), blue_405_410b.sum(), blue_BrA_and_PaA.sum(), detected.sum(), blue_BrA_and_PaA.sum() / detected.sum())
@@ -211,9 +230,17 @@ if __name__ == "__main__":
                       help="module to select", metavar="module")
     (options, args) = parser.parse_args()
 
+    print(f"Selecting module {options.module}")
+
     if options.module == 'nrca':
-        main(basetable_nrca)
+        from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
+        main(basetable_nrca, ww=ww)
+        basetable = basetable_nrca
     elif options.module == 'nrcb':
-        main(basetable_nrcb)
+        from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
+        main(basetable_nrcb, ww=ww)
+        basetable = basetable_nrcb
     elif options.module == 'merged':
-        main(basetable_merged)
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        main(basetable_merged, ww=ww)
+        basetable = basetable_merged

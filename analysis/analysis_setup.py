@@ -52,9 +52,17 @@ reg = regions.Regions.read(f'{basepath}/regions/leftside_brick_zoom.reg')[0]
 regzoom = regions.Regions.read(f'{basepath}/regions/leftside_brick_rezoom.reg')[0]
 
 
-fh = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')
-ww410 = wcs.WCS(fh[1].header)
-ww = ww410
+fh_nrca = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')
+ww410_nrca = wcs.WCS(fh_nrca[1].header)
+ww_nrca = ww410_nrca
+
+fh_nrcb = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrcb_i2d.fits')
+ww410_nrcb = wcs.WCS(fh_nrcb[1].header)
+ww_nrcb = ww410_nrcb
+
+fh_merged = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits')
+ww410_merged = wcs.WCS(fh_merged[1].header)
+ww_merged = ww410_merged
 
 avm_nostars_nrca = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png')
 img_nostars_nrca = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png'))[::-1,:,:]
