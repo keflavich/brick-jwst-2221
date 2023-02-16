@@ -226,7 +226,7 @@ def cmds_withiso(basetable, sel=True,
                  fig=None,
                  ext=CT06_MWGC(),
                  iso=True,
-                 exclude=False,
+                 exclude=None,
                  alpha_k=0.5,
                  distance_modulus=0,
                  markersize=5,
@@ -270,7 +270,10 @@ def cmds_withiso(basetable, sel=True,
             yval_ = f2
         else:
             raise ValueError("yval must be f1 or f2")
-        ax.scatter(colorp[~exclude], magp[~exclude], s=markersize, alpha=alpha_k, c='k', rasterized=rasterized)
+        if exclude is None:
+            ax.scatter(colorp, magp, s=markersize, alpha=alpha_k, c='k', rasterized=rasterized)
+        else:
+            ax.scatter(colorp[~exclude], magp[~exclude], s=markersize, alpha=alpha_k, c='k', rasterized=rasterized)
         ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r', rasterized=rasterized)
         ax.set_xlabel(f"{f1} - {f2}")
         ax.axis(axlims)
@@ -395,10 +398,15 @@ def ccds_withiso(basetable, sel=True,
     return fig
 
 
-def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0.13*u.arcsec):
+def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0.13*u.arcsec,
+                sel=None, axlims=[-0.5, 0.5, -0.5, 0.5]):
     statsd = {}
     fig1 = pl.figure(1)
     fig2 = pl.figure(2)
+
+    if sel is None:
+        sel = np.ones(len(basetable), dtype='bool')
+    basetable = basetable[sel]
 
     basecrds = basetable[f'skycoord_{ref_filter}']
 
@@ -409,14 +417,18 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0
         if filtername == ref_filter:
             continue
         ax = fig1.add_subplot(gridspec[ii])
-        crds = basetable[f'skycoord_{filtername}']
-        radiff = (crds.ra-basecrds.ra).to(u.arcsec)
-        decdiff = (crds.dec-basecrds.dec).to(u.arcsec)
-        sep = basetable[f'sep_{filtername}'].quantity.to(u.arcsec)
+
+        # only include detections
+        thissel = ~basetable[f'flux_{filtername}'].mask
+
+        crds = basetable[f'skycoord_{filtername}'][thissel]
+        radiff = (crds.ra-basecrds.ra[thissel]).to(u.arcsec)
+        decdiff = (crds.dec-basecrds.dec[thissel]).to(u.arcsec)
+        sep = basetable[f'sep_{filtername}'][thissel].quantity.to(u.arcsec)
         ok = sep < maxsep
         ax.scatter(radiff, decdiff, marker=',', s=1, alpha=0.1)
         ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=0.1)
-        ax.axis([-0.5, 0.5, -0.5, 0.5])
+        ax.axis(axlims)
         ax.set_title(filtername)
 
         ax2 = fig2.add_subplot(gridspec[ii])
@@ -482,9 +494,10 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
                     center_value = data[yc,xc]
                     good_center = np.isfinite(center_value) and center_value > 2
                     maxval = None #center_value if good_center else None
-                    minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
+                    #minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
+                    minval = None
                     stretch = 'log'# if np.isfinite(center_value) else 'asinh'
-                    max_percent = 99.5
+                    max_percent = 99.95
                     min_percent = None if good_center else 1.0
                     #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
 
