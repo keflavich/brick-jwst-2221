@@ -5,6 +5,7 @@ import numpy as np
 import crowdsource
 import regions
 import numpy as np
+from functools import cache
 from astropy.convolution import convolve, Gaussian2DKernel
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
@@ -46,6 +47,65 @@ def print(*args, **kwargs):
 print("Done with imports", flush=True)
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
+
+class WrappedPSFModel(crowdsource.psf.SimplePSF):
+    """
+    wrapper for photutils GriddedPSFModel
+    """
+    def __init__(self, psfgridmodel, stampsz=19):
+        self.psfgridmodel = psfgridmodel
+        self.default_stampsz = stampsz
+
+    def __call__(self, col, row, stampsz=None, deriv=False):
+
+        if stampsz is None:
+            stampsz = self.default_stampsz
+
+        parshape = numpy.broadcast(col, row).shape
+        tparshape = parshape if len(parshape) > 0 else (1,)
+
+        # numpy uses row, column notation
+        rows, cols = np.indices((stampsz, stampsz)) - (np.array([stampsz, stampsz])-1)[:, None, None] / 2.
+
+        # explicitly broadcast
+        col = np.atleast_1d(col)
+        row = np.atleast_1d(row)
+        rows = rows[:, :, None] + row[None, None, :]
+        cols = cols[:, :, None] + col[None, None, :]
+
+        # photutils seems to use column, row notation
+        stamps = grid.evaluate(cols, rows, 1, col, row)
+        # it returns something in (nstamps, row, col) shape
+        # pretty sure that ought to be (col, row, nstamps) for crowdsource
+
+        if deriv:
+            dpsfdrow, dpsfdcol = np.gradient(stamps, axis=(0, 1))
+            dpsfdrow = dpsfdrow.T
+            dpsfdcol = dpsfdcol.T
+
+        ret = stamps.T
+        if parshape != tparshape:
+            ret = ret.reshape(stampsz, stampsz)
+            if deriv:
+                dpsfdrow = dpsfdrow.reshape(stampsz, stampsz)
+                dpsfdcol = dpsfdcol.reshape(stampsz, stampsz)
+        if deriv:
+            ret = (ret, dpsfdcol, dpsfdrow)
+
+        return ret
+
+
+    def render_model(self, col, row, stampsz=None):
+        """
+        this function likely does nothing?
+        """
+        if stampsz is not None:
+            self.stampsz = stampsz
+
+        rows, cols = np.indices(self.stampsz, dtype=float) - (np.array(self.stampsz)-1)[:, None, None] / 2.
+
+        return self.psfgridmodel.evaluate(cols, rows, 1, col, row).T.squeeze()
+
 
 def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     pl.figure(figsize=(12,12))
@@ -214,20 +274,22 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     else:
                         continue
 
-            # there's no way to use a grid across all detectors.
-            # the right way would be to use this as a grid of grids, but that apparently isn't supported.
-            if isinstance(grid, list):
-                grid = grid[0]
+            # # there's no way to use a grid across all detectors.
+            # # the right way would be to use this as a grid of grids, but that apparently isn't supported.
+            # if isinstance(grid, list):
+            #     grid = grid[0]
 
-            print("Done with WebbPSF downloading; now building model", flush=True)
-            # yy, xx = np.indices([31,31], dtype=float)
-            # grid.x_0 = grid.y_0 = 15.5
+            # print("Done with WebbPSF downloading; now building model", flush=True)
+            # # yy, xx = np.indices([31,31], dtype=float)
+            # # grid.x_0 = grid.y_0 = 15.5
+            # # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
+
+            # # bigger PSF probably needed
+            # yy, xx = np.indices([61,61], dtype=float)
+            # grid.x_0 = grid.y_0 = 30
             # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
-
-            # bigger PSF probably needed
-            yy, xx = np.indices([61,61], dtype=float)
-            grid.x_0 = grid.y_0 = 30
-            psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
+            psf_model = WrappedPSFModel(grid)
+            psf_model_blur = psf_model
 
             ww = wcs.WCS(im1[1].header)
             cen = ww.pixel_to_world(im1[1].shape[1]/2, im1[1].shape[0]/2)
@@ -382,15 +444,15 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
 
 
-            yy, xx = np.indices([61, 61], dtype=float)
-            grid.x_0 = preg.center.x+30
-            grid.y_0 = preg.center.y+30
-            gpsf2 = grid(xx+preg.center.x, yy+preg.center.y)
-            psf_model = crowdsource.psf.SimplePSF(stamp=gpsf2)
+            # yy, xx = np.indices([61, 61], dtype=float)
+            # grid.x_0 = preg.center.x+30
+            # grid.y_0 = preg.center.y+30
+            # gpsf2 = grid(xx+preg.center.x, yy+preg.center.y)
+            # psf_model = crowdsource.psf.SimplePSF(stamp=gpsf2)
 
-            smoothing_scale = smoothing_scales[filt.lower()]
-            gpsf3 = convolve(gpsf2, Gaussian2DKernel(smoothing_scale))
-            psf_model_blur = crowdsource.psf.SimplePSF(stamp=gpsf3)
+            # smoothing_scale = smoothing_scales[filt.lower()]
+            # gpsf3 = convolve(gpsf2, Gaussian2DKernel(smoothing_scale))
+            # psf_model_blur = crowdsource.psf.SimplePSF(stamp=gpsf3)
 
             fig = pl.figure(0, figsize=(10,10))
             fig.clf()

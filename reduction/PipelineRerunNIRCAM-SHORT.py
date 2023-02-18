@@ -15,7 +15,13 @@ from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, Li
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import datetime
+
+# do this before importing webb
+os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
+os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
+
 from jwst.pipeline import calwebb_image3
+from jwst.pipeline import Detector1Pipeline
 
 # Individual steps that make up calwebb_image3
 from jwst.tweakreg import TweakRegStep
@@ -73,27 +79,27 @@ def main(filtername, module, Observations=None):
 
     Observations.cache_location = output_dir
     obs_table = Observations.query_criteria(
-                                            #obs_id='jw02221-o001_t001_nircam_clear-f182m',
-                                            filters=filtername.lower(),
                                             proposal_id="2221",
                                             proposal_pi="Ginsburg*",
-                                            calib_level=3,
+                                            #calib_level=3,
                                             )
-    print(f"Observation table length: ", len(obs_table))
+    print("Obs table length:", len(obs_table))
 
-    data_products_by_obs = Observations.get_product_list(obs_table[obs_table['calib_level'] == 3])
-    print(len(data_products_by_obs))
+    msk = ((np.char.find(obs_table['filters'], filtername.upper()) >= 0) |
+           (np.char.find(obs_table['obs_id'], filtername.lower()) >= 0))
+    data_products_by_obs = Observations.get_product_list(obs_table[msk])
+    print("data prodcts by obs length: ", len(data_products_by_obs))
 
     products_asn = Observations.filter_products(data_products_by_obs, extension="json")
-    print(len(products_asn))
-    valid_obsids = products_asn['obs_id'][np.char.find(np.unique(products_asn['obs_id']), 'jw02221-o001', ) == 0]
-    match = [x for x in valid_obsids if filtername.lower() in x][0]
+    print("products_asn length:", len(products_asn))
+    #valid_obsids = products_asn['obs_id'][np.char.find(np.unique(products_asn['obs_id']), 'jw02221-o001', ) == 0]
+    #match = [x for x in valid_obsids if filtername.lower() in x][0]
 
-    asn_mast_data = products_asn[products_asn['obs_id'] == match]
-    print(asn_mast_data)
+    asn_mast_data = products_asn#[products_asn['obs_id'] == match]
+    print("asn_mast_data:", asn_mast_data)
 
     manifest = Observations.download_products(asn_mast_data, download_dir=output_dir)
-    print(manifest)
+    print("manifest:", manifest)
 
     # MAST creates deep directory structures we don't want
     for row in manifest:
@@ -102,9 +108,29 @@ def main(filtername, module, Observations=None):
         except Exception as ex:
             print(f"Failed to move file with error {ex}")
 
+    products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
+    print("products_fits length:", len(products_fits))
+    uncal_mask = np.array([uri.endswith('_uncal.fits') for uri in products_fits['dataURI']])
+    uncal_mask &= products_fits['productType'] == 'SCIENCE'
+    print("uncal length:", (uncal_mask.sum()))
 
-    if module in ('nrca', 'nrcb'):
-        print(f"Filter {filtername} module {module} ")
+    already_downloaded = np.array([os.path.exists(os.path.basename(uri)) for uri in products_fits['dataURI']])
+    uncal_mask &= ~already_downloaded
+    print(f"uncal to download: {uncal_mask.sum()}; {already_downloaded.sum()} were already downloaded")
+
+    if uncal_mask.any():
+        manifest = Observations.download_products(products_fits[uncal_mask], download_dir=output_dir)
+        print("manifest:", manifest)
+
+        # MAST creates deep directory structures we don't want
+        for row in manifest:
+            try:
+                shutil.move(row['Local Path'], os.path.join(output_dir, os.path.basename(row['Local Path'])))
+            except Exception as ex:
+                print(f"Failed to move file with error {ex}")
+
+    # all cases, except if you're just doing a merger?
+    if module in ('nrca', 'nrcb', 'merged'):
         print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json')}")
         asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
@@ -120,6 +146,28 @@ def main(filtername, module, Observations=None):
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
         print(f'Filter {filtername}: {tweakreg_parameters}')
+
+        with open(asn_file) as f_obj:
+            asn_data = json.load(f_obj)
+
+        # re-calibrate all uncal files -> cal files *without* suppressing first group
+        for member in asn_data['products'][0]['members']:
+            print(f"DETECTOR PIPELINE on {member['expname']}")
+            print("Detector1Pipeline step")
+            det1 = Detector1Pipeline()
+            det1.output_dir = output_dir
+            det1.save_results = True
+            det1.ramp_fit.suppress_one_group = False
+            det1(member['expname'].replace("_cal.fits", "_uncal.fits"))
+            print(f"IMAGE2 PIPELINE on {member['expname']}")
+            img2 = Image2Pipeline()
+            img2.output_dir = output_dir
+            img2.suffix = None # default is false, which is incorrect
+            img2.save_results = True
+            img2(member['expname'].replace("_cal.fits", "_rate.fits"))
+
+    if module in ('nrca', 'nrcb'):
+        print(f"Filter {filtername} module {module} ")
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
@@ -197,20 +245,6 @@ def main(filtername, module, Observations=None):
         log.info("Running merged frames")
         # try merging all frames & modules
 
-        asn_file_search = glob(os.path.join(output_dir, 'jw02221-*_image3_0[0-9][0-9]_asn.json'))
-        if len(asn_file_search) == 1:
-            asn_file = asn_file_search[0]
-        elif len(asn_file_search) > 1:
-            asn_file = sorted(asn_file_search)[-1]
-            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
-        else:
-            raise ValueError("Mismatch")
-
-        mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
-        tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if x[1] == filtername][0][4]
-        tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
-        tweakreg_parameters = tweakreg_asdf.tree['parameters']
-        print(f'Filter {filtername}: {tweakreg_parameters}')
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
