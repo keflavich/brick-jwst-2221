@@ -159,21 +159,21 @@ def main(filtername, module, Observations=None):
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
 
+        print(f"In cwd={os.getcwd()}")
         # re-calibrate all uncal files -> cal files *without* suppressing first group
         for member in asn_data['products'][0]['members']:
             print(f"DETECTOR PIPELINE on {member['expname']}")
             print("Detector1Pipeline step")
-            det1 = Detector1Pipeline()
-            det1.output_dir = output_dir
-            det1.save_results = True
-            det1.ramp_fit.suppress_one_group = False
-            det1(member['expname'].replace("_cal.fits", "_uncal.fits"))
+            Detector1Pipeline.call(member['expname'].replace("_cal.fits",
+                                                             "_uncal.fits"),
+                                   save_results=True, output_dir=output_dir,
+                                   steps={'ramp_fit': {'suppress_one_group':
+                                                       False}})
             print(f"IMAGE2 PIPELINE on {member['expname']}")
-            img2 = Image2Pipeline()
-            img2.output_dir = output_dir
-            img2.suffix = None # default is false, which is incorrect
-            img2.save_results = True
-            img2(member['expname'].replace("_cal.fits", "_rate.fits"))
+            Image2Pipeline.call(member['expname'].replace("_cal.fits",
+                                                          "_rate.fits"),
+                                save_results=True, output_dir=output_dir,
+                               )
 
     if module in ('nrca', 'nrcb'):
         print(f"Filter {filtername} module {module}")
@@ -196,19 +196,17 @@ def main(filtername, module, Observations=None):
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        image3 = calwebb_image3.Image3Pipeline()
+        tweakreg_parameters.update({'fit_geometry': 'general',
+                                    'brightest': 10000,
+                                    'snr_threshold': 5,
+                                    'nclip': 1,
+                                    })
 
-        image3.output_dir = output_dir
-        image3.save_results = True
-        for par in tweakreg_parameters:
-            setattr(image3.tweakreg, par, tweakreg_parameters[par])
-
-        image3.tweakreg.fit_geometry = 'general'
-        image3.tweakreg.brightest = 10000
-        image3.tweakreg.snr_threshold = 5
-        image3.tweakreg.nclip = 1
-
-        image3.run(asn_file_each)
+        calwebb_image3.Image3Pipeline.call(
+            asn_file_each,
+            steps={'tweakreg': tweakreg_parameters,},
+            output_dir=output_dir,
+            save_results=True)
         print(f"DONE running {asn_file_each}")
 
         log.info(f"Realigning to VVV (module={module}")
@@ -244,28 +242,26 @@ def main(filtername, module, Observations=None):
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
-        image3 = calwebb_image3.Image3Pipeline()
-
-        image3.output_dir = output_dir
-        image3.save_results = True
-        for par in tweakreg_parameters:
-            setattr(image3.tweakreg, par, tweakreg_parameters[par])
-
-
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
         if os.path.exists(vvvdr2fn):
-            image3.tweakreg.abs_refcat = vvvdr2fn
-            image3.tweakreg.abs_searchrad = 1
+            tweakreg_parameters['abs_refcat'] = vvvdr2fn
+            tweakreg_parameters['abs_searchrad'] = 1
         else:
             print(f"Did not find VVV catalog {vvvdr2fn}")
 
-        image3.tweakreg.fit_geometry = 'general'
-        image3.tweakreg.brightest = 10000
-        image3.tweakreg.snr_threshold = 5
-        image3.tweakreg.nclip = 1
+        tweakreg_parameters.update({'fit_geometry': 'general',
+                                    'brightest': 10000,
+                                    'snr_threshold': 5,
+                                    'nclip': 1,
 
-        image3.run(asn_file_merged)
+                                             })
+
+        calwebb_image3.Image3Pipeline.call(
+            asn_file_each,
+            steps={'tweakreg': tweakreg_parameters,},
+            output_dir=output_dir,
+            save_results=True)
         print(f"DONE running {asn_file_merged}")
 
         log.info("Realigning to VVV (module=merged)")
