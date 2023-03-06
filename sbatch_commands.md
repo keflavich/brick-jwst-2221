@@ -155,3 +155,16 @@ sbatch --job-name=webb-cat-F187N-b --output=web-cat-F187N-a%j.log  --account=ast
 sbatch --job-name=webb-cat-F182M-b --output=web-cat-F182M-b%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F182M --daophot --modules=nrcb"
 sbatch --job-name=webb-cat-F212N-b --output=web-cat-F212N-a%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F212N --daophot --modules=nrcb"
 ```
+
+bad download fix
+```
+for cur_path, directories, files in os.walk('/orange/adamginsburg/jwst/brick'):
+    for fn in files:
+        if fn.endswith('fits'):
+            try:
+                fits.open(os.path.join(cur_path, fn))
+            except OSError as ex:
+                if "No SIMPLE" in str(ex):
+                    print(os.path.join(cur_path, fn))
+                    os.remove(os.path.join(cur_path, fn))
+```
