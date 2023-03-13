@@ -10,7 +10,8 @@
 #SBATCH --job-name=brick00363_282c
 pwd; hostname; date
 
-WORK_DIR='/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X282c/group.uid___A001_X1590_X2819/member.uid___A001_X1590_X281a/calibrated/working'
+#WORK_DIR='/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X282c/group.uid___A001_X1590_X2819/member.uid___A001_X1590_X281a/calibrated/working'
+WORK_DIR='/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X282c/group.uid___A001_X1590_X282d/member.uid___A001_X1590_X282e/calibrated/working'
 
 module load git
 
