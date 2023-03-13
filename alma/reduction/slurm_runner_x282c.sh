@@ -8,6 +8,7 @@
 #SBATCH --qos=adamginsburg-b
 #SBATCH --account=adamginsburg
 #SBATCH --job-name=brick00363_282c
+#SBATCH --output=/blue/adamginsburg/adamginsburg/brick_logs/brick00363_282c_%j.log
 pwd; hostname; date
 
 WORK_DIR='/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X282c/group.uid___A001_X1590_X282d/member.uid___A001_X1590_X282e/calibrated/working'
