@@ -61,7 +61,7 @@ export LOGFILENAME="${LOG_DIR}/casa_log_mpi_2021.1.00363.S_2818_${SLURM_JOB_ID}_
 echo logfilename=$LOGFILENAME
 cwd=$(pwd)
 
-echo xvfb-run -d ${MPICASA} -n $SLURM_NTASKS ${CASA} --logfile=${LOGFILENAME} --pipeline --nogui --nologger --rcdir=$SLURM_TMPDIR -c "execfile('${script}')"
-xvfb-run -d ${MPICASA} -n $SLURM_NTASKS ${CASA} --logfile=${LOGFILENAME} --pipeline --nogui --nologger --rcdir=$SLURM_TMPDIR -c "execfile('${script}')" || exit 1
+echo xvfb-run -d ${MPICASA} -n $SLURM_NTASKS ${CASA} --logfile=${LOGFILENAME} --nogui --nologger --rcdir=$SLURM_TMPDIR -c "execfile('${script}')"
+xvfb-run -d ${MPICASA} -n $SLURM_NTASKS ${CASA} --logfile=${LOGFILENAME} --nogui --nologger --rcdir=$SLURM_TMPDIR -c "execfile('${script}')" || exit 1
 
 echo "Completed MPICASA run"
