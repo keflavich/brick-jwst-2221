@@ -44,9 +44,19 @@ from plot_tools import regzoomplot, starzoom
 
 
 def main(basetable, ww):
+
+    # empirical test: these sources are almost certainly saturated in f410m =(
+    saturated_f410m = ((basetable['mag_ab_f410m'] < 13.9) &
+                       (basetable['mag_ab_f410m'] - basetable['mag_ab_f405n'] >
+                        0))
+    basetable['mag_ab_f410m'].mask[saturated_f410m] = True
+    basetable['flux_f410m'].mask[saturated_f410m] = True
+
+
     # FITS tables can't mask boolean columns
     # so, we have to mask the saturated mask using the mask on the flux for the filter
     any_saturated_ = [basetable[f'near_saturated_{x}_{x}'] & ~basetable[f'flux_{x}'].mask for x in filternames]
+
     any_saturated = any_saturated_[0]
     for col in any_saturated_[1:]:
         print(f"{col.sum()} saturated in {col.name}")
@@ -64,6 +74,10 @@ def main(basetable, ww):
     magerr_gtpt1 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.2 for filtername in filternames])
     magerr_gtpt1.sum()
 
+    minqf = 0.60
+    maxspread = 0.25
+    minfracflux = 0.8
+
     for filt in filternames:
         filt = filt.lower()
         mask = basetable[f'mag_ab_{filt}'].mask
@@ -74,12 +88,12 @@ def main(basetable, ww):
         # good pixel. I'd put tighter bounds if I wanted very good photometry, more
         # like 90-95%."
         # qf > 0.6 looks pretty decent so I'm rollin with it
-        qfok = ((basetable[f'qf_{filt}'] > 0.6).data & (~(basetable[f'qf_{filt}']).mask))
+        qfok = ((basetable[f'qf_{filt}'] > minqf).data & (~(basetable[f'qf_{filt}']).mask))
         qfmask = basetable[f'qf_{filt}'].mask
         # it's not very clear what the spread model does; Schafly points to
         # https://sextractor.readthedocs.io/en/latest/Model.html#model-based-star-galaxy-separation-spread-model
         # it may be useful for IDing extended sources
-        spok = ((np.abs(basetable[f'spread_model_{filt}']) < 0.25) &
+        spok = ((np.abs(basetable[f'spread_model_{filt}']) < maxspread) &
                 (~basetable[f'spread_model_{filt}'].mask))
         # fracflux is intended to be a measure of how blended the source is. It's
         # the PSF-weighted flux of the stamp after subtracting neighbors, divided
@@ -87,7 +101,7 @@ def main(basetable, ww):
         # have no neighbors around, it's 1. If typically half the flux in one of
         # your pixels is from your neighbors, it's 0.5, where 'typically' is in a
         # PSF-weighted sense.
-        ffok = ((basetable[f'fracflux_{filt}'] > 0.8) & (~basetable[f'fracflux_{filt}'].mask))
+        ffok = ((basetable[f'fracflux_{filt}'] > minfracflux) & (~basetable[f'fracflux_{filt}'].mask))
         basetable[f'good_{filt}'] = allok = (qfok & spok & ffok)
         print(f"Filter {filt} has qf={qfok.sum()}, spread={spok.sum()}, fracflux={ffok.sum()} ok,"
               f" totaling {allok.sum()}.  There are {len(basetable)} total, of which "
@@ -101,19 +115,35 @@ def main(basetable, ww):
     print(f"Of {len(all_good)} rows, {long_good.sum()} are good in long filters.")
     print(f"Of {len(all_good)} rows, {short_good.sum()} are good in short filters.")
 
-    goodqflong = ((basetable['qf_f410m'] > 0.98) | (basetable['qf_f405n'] > 0.98) | (basetable['qf_f466n'] > 0.98))
-    goodspreadlong = ((basetable['spread_model_f410m'] < 0.025) | (basetable['spread_model_f405n'] < 0.025) | (basetable['spread_model_f466n'] < 0.025))
-    goodfracfluxlong = ((basetable['fracflux_f410m'] > 0.9) | (basetable['fracflux_f405n'] > 0.9) & (basetable['fracflux_f466n'] > 0.9))
+    goodqflong = ((basetable['qf_f410m'] > minqf) & (basetable['qf_f405n'] > minqf) & (basetable['qf_f466n'] > minqf))
+    goodspreadlong = ((basetable['spread_model_f410m'] < maxspread) | (basetable['spread_model_f405n'] < maxspread) | (basetable['spread_model_f466n'] < maxspread))
+    goodfracfluxlong = ((basetable['fracflux_f410m'] > minfracflux) | (basetable['fracflux_f405n'] > minfracflux) & (basetable['fracflux_f466n'] > minfracflux))
+
+    # masked arrays don't play nice
+    goodqflong = np.array(goodqflong & ~goodqflong.mask)
+    goodspreadlong = np.array(goodspreadlong & ~goodspreadlong.mask)
+    goodfracfluxlong = np.array(goodfracfluxlong & ~goodfracfluxlong.mask)
+    allgood_long = (goodqflong & goodspreadlong & goodfracfluxlong)
+
     badqflong = ~goodqflong
     badspreadlong = ~goodspreadlong
     badfracfluxlong = ~goodfracfluxlong
 
-    goodqfshort = ((basetable['qf_f212n'] > 0.98) | (basetable['qf_f182m'] > 0.98) | (basetable['qf_f187n'] > 0.98))
-    goodspreadshort = ((basetable['spread_model_f212n'] < 0.025) | (basetable['spread_model_f182m'] < 0.025) | (basetable['spread_model_f187n'] < 0.025))
-    goodfracfluxshort = ((basetable['fracflux_f212n'] > 0.9) | (basetable['fracflux_f182m'] > 0.9) & (basetable['fracflux_f187n'] > 0.9))
+    goodqfshort = ((basetable['qf_f212n'] > minqf) & (basetable['qf_f182m'] > minqf) & (basetable['qf_f187n'] > minqf))
+    goodspreadshort = ((basetable['spread_model_f212n'] < maxspread) & (basetable['spread_model_f182m'] < maxspread) & (basetable['spread_model_f187n'] < maxspread))
+    goodfracfluxshort = ((basetable['fracflux_f212n'] > minfracflux) & (basetable['fracflux_f182m'] > minfracflux) & (basetable['fracflux_f187n'] > minfracflux))
+
+    goodqfshort = np.array(goodqfshort & ~goodqfshort.mask)
+    goodspreadshort = np.array(goodspreadshort & ~goodspreadshort.mask)
+    goodfracfluxshort = np.array(goodfracfluxshort & ~goodfracfluxshort.mask)
+    allgood_short = (goodqfshort & goodspreadshort & goodfracfluxshort)
+
     badqfshort = ~goodqfshort
     badspreadshort = ~goodspreadshort
     badfracfluxshort = ~goodfracfluxshort
+
+    print(f"QFs: {goodqfshort.sum()} good short")
+    print(f"QFs: {goodqflong.sum()} good long")
 
     oksep = np.logical_or.reduce([basetable[f'sep_{filtername}'] for filtername in filternames[1:]])
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
@@ -177,17 +207,22 @@ def main(basetable, ww):
     neg_405m410 = basetable['flux_jy_405m410'] < 0
     print(f"Negative 405-410 colors: {neg_405m410.sum()}, Nonnegative: {(~neg_405m410).sum()}")
 
+    any_saturated |= saturated_f410m
+    all_good &= ~saturated_f410m
+
     exclude = (any_saturated | ~oksep | magerr_gtpt1 |
                basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask |
                badqflong | badfracfluxlong | badspreadlong)
     print(f"Excluding {exclude.sum()} of {exclude.size}")
 
-    bad = (any_saturated | ~oksep | magerr_gtpt1 | basetable['mag_ab_f212n'].mask |
-           basetable['mag_ab_f410m'].mask | badqflong | badfracfluxlong |
-           badspreadlong | badqfshort | badfracfluxshort | badspreadshort)
+    # "bad" was totally broken; (bad & all_good) is very nonzero
+    # bad = (any_saturated | ~oksep | magerr_gtpt1 | basetable['mag_ab_f212n'].mask |
+    #        basetable['mag_ab_f410m'].mask | badqflong | badfracfluxlong |
+    #        badspreadlong | badqfshort | badfracfluxshort | badspreadshort)
+    bad = ~all_good
     print("'Bad' sources are those where _any_ filter is masked out")
-    print(f"Not-bad:{(~bad).sum()}, bad: {bad.sum()}, bad.mask: {bad.mask.sum()},"
-          f" len(bad):{len(bad)}, len(table):{len(basetable)}")
+    print(f"Not-bad:{(~bad).sum()}, bad: {bad.sum()},"# bad.mask: {bad.mask.sum()},"
+          f" len(bad):{len(bad)}, len(table):{len(basetable)}.")
 
 
     # Basic selections for CMD, CCD plotting

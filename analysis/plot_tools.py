@@ -52,6 +52,53 @@ def crowdsource_diagnostic(basetable, exclude, filtername='f466n'):
     ax2.loglog();
     ax2.axis([1e1,3e5,1e1,3e5]);
 
+
+def plot_extvec_ccd(ax, color1, color2, ext=CT06_MWGC(), extvec_scale=200,
+                    start=(0, 0),
+                    color='y', head_width=0.5):
+    w1 = 4.10*u.um if color1[0] == '410m405' else 4.05*u.um if color1[0] == '405m410' else int(color1[0][1:-1])/100*u.um
+    w2 = 4.10*u.um if color1[1] == '410m405' else 4.05*u.um if color1[1] == '405m410' else int(color1[1][1:-1])/100*u.um
+    w3 = 4.10*u.um if color2[0] == '410m405' else 4.05*u.um if color2[0] == '405m410' else int(color2[0][1:-1])/100*u.um
+    w4 = 4.10*u.um if color2[1] == '410m405' else 4.05*u.um if color2[1] == '405m410' else int(color2[1][1:-1])/100*u.um
+
+    if w1 > w2:
+        w1,w2 = w2,w1
+        color1 = color1[::-1]
+    if w3 > w4:
+        w3,w4 = w4,w3
+        color2 = color2[::-1]
+
+    e_1 = ext(w1) * extvec_scale
+    e_2 = ext(w2) * extvec_scale
+    e_3 = ext(w3) * extvec_scale
+    e_4 = ext(w4) * extvec_scale
+    ax.arrow(start[0],
+             start[1],
+             e_1 - e_2,
+             e_3 - e_4,
+             color=color, head_width=head_width)
+
+def ccd(basetable,
+        ax,
+        color1, color2,
+        sel=True,
+        axlims=(-5,10,-5,10),
+        ext=CT06_MWGC(),
+        extvec_scale=200,
+         rasterized=True,
+       ):
+    keys1 = [f'mag_ab_{col}' for col in color1]
+    keys2 = [f'mag_ab_{col}' for col in color2]
+    colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
+    colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
+    ax.scatter(colorp1, colorp2, s=5, alpha=0.5, c='k', rasterized=rasterized)
+    ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r', rasterized=rasterized)
+    ax.set_xlabel(f"{color1[0]} - {color1[1]}")
+    ax.set_ylabel(f"{color2[0]} - {color2[1]}")
+    ax.axis(axlims)
+    if ext is not None:
+        plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale)
+
 def ccds(basetable, sel=True,
          colors=[('f410m', 'f466n'), ('f410m', 'f405n'), ('f405n', 'f466n'), ('410m405', 'f405n')],
          axlims=(-5,10,-5,10),
@@ -66,33 +113,9 @@ def ccds(basetable, sel=True,
     gridspec = sqgrid.get_grid(len(combos))
     for ii, (color1, color2) in enumerate(combos):
         ax = fig.add_subplot(gridspec[ii])
-        keys1 = [f'mag_ab_{col}' for col in color1]
-        keys2 = [f'mag_ab_{col}' for col in color2]
-        colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
-        colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
-        ax.scatter(colorp1, colorp2, s=5, alpha=0.5, c='k', rasterized=rasterized)
-        ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r', rasterized=rasterized)
-        ax.set_xlabel(f"{color1[0]} - {color1[1]}")
-        ax.set_ylabel(f"{color2[0]} - {color2[1]}")
-        ax.axis(axlims)
-        if ext is not None:
-            w1 = 4.10*u.um if color1[0] == '410m405' else 4.05*u.um if color1[0] == '405m410' else int(color1[0][1:-1])/100*u.um
-            w2 = 4.10*u.um if color1[1] == '410m405' else 4.05*u.um if color1[1] == '405m410' else int(color1[1][1:-1])/100*u.um
-            w3 = 4.10*u.um if color2[0] == '410m405' else 4.05*u.um if color2[0] == '405m410' else int(color2[0][1:-1])/100*u.um
-            w4 = 4.10*u.um if color2[1] == '410m405' else 4.05*u.um if color2[1] == '405m410' else int(color2[1][1:-1])/100*u.um
-
-            if w1 > w2:
-                w1,w2 = w2,w1
-                color1 = color1[::-1]
-            if w3 > w4:
-                w3,w4 = w4,w3
-                color2 = color2[::-1]
-
-            e_1 = ext(w1) * extvec_scale
-            e_2 = ext(w2) * extvec_scale
-            e_3 = ext(w3) * extvec_scale
-            e_4 = ext(w4) * extvec_scale
-            ax.arrow(0, 0, e_1-e_2, e_3-e_4, color='y', head_width=0.5)
+        ccd(basetable, ax=ax, color1=color1, color2=color2,
+            axlims=axlims, sel=sel,
+            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,)
     return fig
 
 

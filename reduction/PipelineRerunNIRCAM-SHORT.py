@@ -155,9 +155,11 @@ def main(filtername, module, Observations=None):
         for member in asn_data['products'][0]['members']:
             print(f"DETECTOR PIPELINE on {member['expname']}")
             print("Detector1Pipeline step")
+            # from Hosek: expand_large_events -> false; turn off "snowball" detection
             Detector1Pipeline.call(member['expname'].replace("_cal.fits",
                                                              "_uncal.fits"),
                                    save_results=True, output_dir=output_dir,
+                                   save_calibrated_ramp=True,
                                    steps={'ramp_fit': {'suppress_one_group':
                                                        False}})
             print(f"IMAGE2 PIPELINE on {member['expname']}")
