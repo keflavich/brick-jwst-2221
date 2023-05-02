@@ -41,7 +41,7 @@ sys.path.append(f'{basepath}/analysis/')
 sys.path.append(f'{basepath}/reduction/')
 import plot_tools
 imp.reload(plot_tools)
-from plot_tools import regzoomplot, starzoom
+from plot_tools import regzoomplot, starzoom, ccd, ccds, cmds, plot_extvec_ccd
 
 
 distance_modulus = dm = 5*np.log10(8.3*u.kpc / (10*u.pc))

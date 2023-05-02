@@ -570,6 +570,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 stars['x'] = stars['x_fit']
                 stars['y'] = stars['y_fit']
                 modsky = phot.get_residual_image()
+                fits.PrimaryHDU(data=modsky, header=im1[1].header).writeto(
+                    filename.replace(".fits", "_daophot_residual.fits"),
+                    overwrite=True)
                 try:
                     catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                     pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}")
