@@ -2,8 +2,9 @@ import glob, os, shutil
 
 
 # make sure we're here...
-os.chdir('/red/adamginsburg/brick_2828')
-assert os.getcwd() == '/red/adamginsburg/brick_2828'
+tmpdir = os.getenv('SLURM_TMPDIR')
+os.chdir(f'{tmpdir}/brick_2828')
+assert os.getcwd() == f'{tmpdir}/brick_2828'
 
 workdir = '/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X2828/group.uid___A001_X1590_X2829/member.uid___A001_X1590_X282a/calibrated/working'
 mses = ['uid___A002_Xf287d3_Xcd1e.ms','uid___A002_Xfbe192_X54c.ms','uid___A002_Xfbf8a1_Xfe1.ms']

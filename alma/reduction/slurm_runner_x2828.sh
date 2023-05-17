@@ -29,6 +29,7 @@ echo $?
 
 export CASA=/orange/adamginsburg/casa/casa-6.4.3-2-pipeline-2021.3.0.17/bin/casa
 CASAVERSION=casa-6.4.3-2-pipeline-2021.3.0.17
+CASAVERSION=casa-6.5.0-9-py3.8
 export CASAPATH=/orange/adamginsburg/casa/${CASAVERSION}
 export MPICASA=${CASAPATH}/bin/mpicasa
 export CASA=${CASAPATH}/bin/casa

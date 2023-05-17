@@ -29,6 +29,7 @@ echo $?
 
 export CASA=/orange/adamginsburg/casa/casa-6.4.3-2-pipeline-2021.3.0.17/bin/casa
 CASAVERSION=casa-6.4.3-2-pipeline-2021.3.0.17
+CASAVERSION=casa-6.5.0-9-py3.8
 export CASAPATH=/orange/adamginsburg/casa/${CASAVERSION}
 export MPICASA=${CASAPATH}/bin/mpicasa
 export CASA=${CASAPATH}/bin/casa
@@ -69,4 +70,4 @@ cwd=$(pwd)
 echo xvfb-run -d  ${CASA} --logfile=${LOGFILENAME} --nogui --nologger --rcdir=$SLURM_TMPDIR -c "execfile('${script}')"
 xvfb-run -d  ${CASA} --logfile=${LOGFILENAME} --nogui --nologger --rcdir=$SLURM_TMPDIR -c "execfile('${script}')" || exit 1
 
-echo "Completed MPICASA run"
+echo "Completed CASA run"

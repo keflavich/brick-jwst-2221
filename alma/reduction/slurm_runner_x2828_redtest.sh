@@ -7,12 +7,12 @@
 #SBATCH --time=96:00:00               # Time limit hrs:min:sec
 #SBATCH --qos=adamginsburg-b
 #SBATCH --account=adamginsburg
-#SBATCH --job-name=brick00363_2828_red
-#SBATCH --output=/blue/adamginsburg/adamginsburg/brick_logs/brick00363_2828_%j.log
+#SBATCH --job-name=cloudc00363_2828_red
+#SBATCH --output=/blue/adamginsburg/adamginsburg/brick_logs/red_cloudc00363_2828_%j.log
 pwd; hostname; date
 
 ORIG_WORK_DIR='/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X2828/group.uid___A001_X1590_X2829/member.uid___A001_X1590_X282a/calibrated/working'
-WORK_DIR='/red/adamginsburg/brick_2828'
+WORK_DIR=${SLURM_TMPDIR}/cloudc_2828
 
 module load git
 
@@ -49,6 +49,7 @@ fi
 mkdir -v $WORK_DIR
 cd ${WORK_DIR} || exit 314
 echo ${WORK_DIR}
+ls
 
 export SCRIPT_DIR=/orange/adamginsburg/jwst/brick/alma/reduction/
 export PYTHONPATH=$SCRIPT_DIR
