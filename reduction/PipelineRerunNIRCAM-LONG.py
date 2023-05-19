@@ -174,6 +174,8 @@ def main(filtername, module, Observations=None):
                                                           "_rate.fits"),
                                 save_results=True, output_dir=output_dir,
                                )
+    else:
+        raise ValueError(f"Module is {module} - not allowed!")
 
     if module in ('nrca', 'nrcb'):
         print(f"Filter {filtername} module {module}")
@@ -258,7 +260,7 @@ def main(filtername, module, Observations=None):
                                              })
 
         calwebb_image3.Image3Pipeline.call(
-            asn_file_each,
+            asn_file,
             steps={'tweakreg': tweakreg_parameters,},
             output_dir=output_dir,
             save_results=True)
@@ -288,7 +290,7 @@ if __name__ == "__main__":
     modules = options.modules.split(",")
     print(options)
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+    with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     Mast.login(api_token.strip())
     Observations.login(api_token)
