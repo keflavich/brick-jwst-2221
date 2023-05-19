@@ -54,18 +54,18 @@ print(jwst.__version__)
 medfilt_size = {'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 
-def main(filtername, module, Observations=None):
+def main(filtername, module, Observations=None, regionname='brick'):
     log.info(f"Processing filter {filtername} module {module}")
 
-    basepath = '/orange/adamginsburg/jwst/brick/'
-    os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
+    basepath = f'/orange/adamginsburg/jwst/{regionname}/'
+    os.environ["CRDS_PATH"] = f"/orange/adamginsburg/jwst/{regionname}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
 
     # Files created in this notebook will be saved
     # in a subdirectory of the base directory called `Stage3`
-    output_dir = f'/orange/adamginsburg/jwst/brick/{filtername}/pipeline/'
+    output_dir = f'/orange/adamginsburg/jwst/{regionname}/{filtername}/pipeline/'
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     os.chdir(output_dir)
@@ -141,7 +141,7 @@ def main(filtername, module, Observations=None):
         else:
             raise ValueError("Mismatch")
 
-        mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+        mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
         tweakreg_asdf_filename = [x for x in mapping.todict()['selections'] if x[1] == filtername][0][4]
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
@@ -323,7 +323,7 @@ if __name__ == "__main__":
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+    with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     Mast.login(api_token.strip())
     Observations.login(api_token)
