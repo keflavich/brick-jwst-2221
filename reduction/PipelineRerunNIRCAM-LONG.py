@@ -205,12 +205,13 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
-        if os.path.exists(vvvdr2fn):
-            tweakreg_parameters['abs_refcat'] = vvvdr2fn
-            tweakreg_parameters['abs_searchrad'] = 1
-        else:
-            print(f"Did not find VVV catalog {vvvdr2fn}")
-            raise ValueError(f"Did not find VVV catalog {vvvdr2fn}")
+        if not os.path.exists(vvvdr2fn):
+            fov_regname = {'brick': 'jwst/brick/regions/nircam_brick_fov.reg',
+                           'cloudc': 'jwst/brick/regions/nircam_cloudc_fov.reg',
+                           }
+            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
+        tweakreg_parameters['abs_refcat'] = vvvdr2fn
+        tweakreg_parameters['abs_searchrad'] = 1
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
@@ -261,12 +262,13 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
-        if os.path.exists(vvvdr2fn):
-            tweakreg_parameters['abs_refcat'] = vvvdr2fn
-            tweakreg_parameters['abs_searchrad'] = 1
-        else:
-            print(f"Did not find VVV catalog {vvvdr2fn}")
-            raise ValueError(f"Did not find VVV catalog {vvvdr2fn}")
+        if not os.path.exists(vvvdr2fn):
+            fov_regname = {'brick': 'jwst/brick/regions/nircam_brick_fov.reg',
+                           'cloudc': 'jwst/brick/regions/nircam_cloudc_fov.reg',
+                           }
+            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
+        tweakreg_parameters['abs_refcat'] = vvvdr2fn
+        tweakreg_parameters['abs_searchrad'] = 1
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
