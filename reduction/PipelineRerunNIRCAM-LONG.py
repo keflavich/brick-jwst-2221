@@ -54,11 +54,16 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-def main(filtername, module, Observations=None):
+def main(filtername, module, Observations=None, regionname='brick', field='001'):
     log.info(f"Processing filter {filtername} module {module}")
 
+    # sanity check
+    if regionname == 'brick':
+        assert field == '001'
+    elif regionname == 'cloudc':
+        assert field == '002'
 
-    basepath = '/orange/adamginsburg/jwst/brick/'
+    basepath = f'/orange/adamginsburg/jwst/{regionname}/'
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
@@ -68,7 +73,7 @@ def main(filtername, module, Observations=None):
 
     # Files created in this notebook will be saved
     # in a subdirectory of the base directory called `Stage3`
-    output_dir = f'/orange/adamginsburg/jwst/brick/{filtername}/pipeline/'
+    output_dir = f'/orange/adamginsburg/jwst/{regionname}/{filtername}/pipeline/'
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     os.chdir(output_dir)
@@ -182,7 +187,7 @@ def main(filtername, module, Observations=None):
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}'
+        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
         asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                                 if f'{module}' in row['expname']]
 
@@ -198,18 +203,19 @@ def main(filtername, module, Observations=None):
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
         if os.path.exists(vvvdr2fn):
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
         else:
             print(f"Did not find VVV catalog {vvvdr2fn}")
+            raise ValueError(f"Did not find VVV catalog {vvvdr2fn}")
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
                                     'snr_threshold': 5,
-                                    'abs_refcat': abs_refcat,
+                                    'abs_refcat': vvvdr2fn,
                                     'nclip': 1,
                                     })
 
@@ -224,7 +230,7 @@ def main(filtername, module, Observations=None):
         realign_to_vvv(filtername=filtername.lower(), module=module)
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
 
     if module == 'nrcb':
         # assume nrca is run before nrcb
@@ -248,18 +254,19 @@ def main(filtername, module, Observations=None):
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
 
-        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
+        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
-        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
         if os.path.exists(vvvdr2fn):
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
         else:
             print(f"Did not find VVV catalog {vvvdr2fn}")
+            raise ValueError(f"Did not find VVV catalog {vvvdr2fn}")
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
@@ -278,7 +285,7 @@ def main(filtername, module, Observations=None):
         realign_to_vvv(filtername=filtername.lower(), module='merged')
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
     globals().update(locals())
     return locals()
@@ -292,10 +299,14 @@ if __name__ == "__main__":
     parser.add_option("-m", "--modules", dest="modules",
                     default='merged,nrca,nrcb',
                     help="module list", metavar="modules")
+    parser.add_option("-d", "--field", dest="field",
+                    default='001,002',
+                    help="list of target fields", metavar="field")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
+    fields = options.field.split(",")
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
@@ -303,10 +314,13 @@ if __name__ == "__main__":
     Mast.login(api_token.strip())
     Observations.login(api_token)
 
-    for filtername in filternames:
-        for module in modules:
-            print(f"Main Loop: {filtername} + {module}")
-            results = main(filtername=filtername, module=module, Observations=Observations)
+    mapping = {'001': 'brick', '002': 'cloudc'}
+
+    for field in fields:
+        for filtername in filternames:
+            for module in modules:
+                print(f"Main Loop: {filtername} + {module} + {field}")
+                results = main(filtername=filtername, module=module, Observations=Observations, field=field, regionname=mapping[field])
 
 
     print("Running notebooks")
