@@ -8,7 +8,8 @@ from astropy import constants, units as u
 from astroquery.svo_fps import SvoFps
 import numpy as np
 import pyspeckitmodels
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
+
 
 import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -38,13 +39,18 @@ def fractional_absorption(temperature, column, linewidth, wavelength_table):
     return absorbed_fraction
 
 
-def make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick'):
-    wltable = get_wltable(filtername)
+def make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick',
+                                    levels=[0.01, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75, 0.9],
+                                    colors=['w', 'y', 'g', 'c', 'r', 'b', 'purple', 'orange', 'maroon', 'springgreen'],
+                                    telescope='JWST', instrument='NIRCam',
+                                   ):
+    wltable = get_wltable(filtername, telescope=telescope, instrument=instrument)
     temperatures = np.linspace(5, 150, 50)*u.K
     linewidths = np.linspace(1, 100, 24)*u.km/u.s
     grid = [[fractional_absorption(T, column, sig, wltable) for T in temperatures]
             for sig in tqdm(linewidths)]
 
+    pl.clf()
     ax = pl.gca()
     im = ax.imshow(grid,
                    #extent=[np.log10(column.min().value), np.log10(column.max().value),
@@ -79,14 +85,19 @@ def make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='
 
 
 
-def make_linewidth_column_plot(filtername, temperature=60*u.K, basepath='/orange/adamginsburg/jwst/brick'):
-    wltable = get_wltable(filtername)
+def make_linewidth_column_plot(filtername, temperature=60*u.K, basepath='/orange/adamginsburg/jwst/brick',
+                               levels=[0.01, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75, 0.9],
+                               colors=['w', 'y', 'g', 'c', 'r', 'b', 'purple', 'orange', 'maroon', 'springgreen'],
+                               telescope='JWST', instrument='NIRCam',
+                              ):
+    wltable = get_wltable(filtername, telescope=telescope, instrument=instrument)
     linewidths = np.linspace(1, 100, 24)*u.km/u.s
     column = np.logspace(15,19,24)*u.cm**-2
     grid_sigcol = [[fractional_absorption(temperature, col, sig, wltable) for col in column]
                     for sig in tqdm(linewidths)]
 
 
+    pl.clf()
     ax = pl.gca()
     im = ax.imshow(grid_sigcol,
                    #extent=[np.log10(column.min().value), np.log10(column.max().value),
@@ -137,10 +148,17 @@ def make_linewidth_column_plot(filtername, temperature=60*u.K, basepath='/orange
 
 if __name__ == "__main__":
 
+    filtername = 'I2'
+    make_linewidth_column_plot(filtername, instrument='IRAC', telescope='Spitzer')
+    make_linewidth_column_plot(filtername, temperature=20*u.K, instrument='IRAC', telescope='Spitzer')
+    make_temperature_linewidth_plot(filtername, column=1e17*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick', instrument='IRAC', telescope='Spitzer')
+    make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick', instrument='IRAC', telescope='Spitzer')
+    make_temperature_linewidth_plot(filtername, column=1e19*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick', instrument='IRAC', telescope='Spitzer')
 
-    for filtername in ('F466N', 'F470N', 'F480M', 'F444W'):
+    for filtername in ('F470N', 'F480M', 'F444W', 'F466N', ):
         make_linewidth_column_plot(filtername)
         make_linewidth_column_plot(filtername, temperature=20*u.K)
         make_temperature_linewidth_plot(filtername, column=1e17*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick')
         make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick')
         make_temperature_linewidth_plot(filtername, column=1e19*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick')
+

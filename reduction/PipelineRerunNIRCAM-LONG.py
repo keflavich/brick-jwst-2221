@@ -31,7 +31,7 @@ from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
-from align_to_catalogs import realign_to_vvv, merge_a_plus_b
+from align_to_catalogs import realign_to_vvv, merge_a_plus_b, retrieve_vvv
 from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
 
 from destreak import destreak
@@ -198,9 +198,18 @@ def main(filtername, module, Observations=None):
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        tweakreg_parameters.update({'fit_geometry': 'general',
+        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        print(f"Loaded VVV catalog {vvvdr2fn}")
+        if os.path.exists(vvvdr2fn):
+            tweakreg_parameters['abs_refcat'] = vvvdr2fn
+            tweakreg_parameters['abs_searchrad'] = 1
+        else:
+            print(f"Did not find VVV catalog {vvvdr2fn}")
+
+        tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
                                     'snr_threshold': 5,
+                                    'abs_refcat': abs_refcat,
                                     'nclip': 1,
                                     })
 
@@ -252,12 +261,11 @@ def main(filtername, module, Observations=None):
         else:
             print(f"Did not find VVV catalog {vvvdr2fn}")
 
-        tweakreg_parameters.update({'fit_geometry': 'general',
+        tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
                                     'snr_threshold': 5,
                                     'nclip': 1,
-
-                                             })
+                                    })
 
         calwebb_image3.Image3Pipeline.call(
             asn_file,
