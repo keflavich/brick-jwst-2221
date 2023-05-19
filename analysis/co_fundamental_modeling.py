@@ -57,7 +57,7 @@ def make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='
     con = ax.contour(grid, levels=levels, colors=colors)
     pl.xlabel("Temperature [K]")
     pl.ylabel("Linewidth $\sigma$")
-    pl.title(f"CO absorption at N(CO) = 10$^{{{np.log10(column.to(u.cm**-2).value:0.1f}}}$ cm$^{{-2}}$")
+    pl.title(f"CO absorption at N(CO) = 10$^{{{np.log10(column.to(u.cm**-2).value):0.1f}}}$ cm$^{{-2}}$")
 
 
     sigma_labels = [1,10,20,50,100]
@@ -79,7 +79,7 @@ def make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='
 
 
 
-def make_linewith_column_plot(filtername, temperature=60*u.K, basepath='/orange/adamginsburg/jwst/brick'):
+def make_linewidth_column_plot(filtername, temperature=60*u.K, basepath='/orange/adamginsburg/jwst/brick'):
     wltable = get_wltable(filtername)
     linewidths = np.linspace(1, 100, 24)*u.km/u.s
     column = np.logspace(15,19,24)*u.cm**-2
@@ -141,6 +141,6 @@ if __name__ == "__main__":
     for filtername in ('F466N', 'F470N', 'F480M', 'F444W'):
         make_linewidth_column_plot(filtername)
         make_linewidth_column_plot(filtername, temperature=20*u.K)
-        make_temperature_linewidth_plot(filtername, column=1e17*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick'):
-        make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick'):
-        make_temperature_linewidth_plot(filtername, column=1e19*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick'):
+        make_temperature_linewidth_plot(filtername, column=1e17*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick')
+        make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick')
+        make_temperature_linewidth_plot(filtername, column=1e19*u.cm**-2, basepath='/orange/adamginsburg/jwst/brick')
