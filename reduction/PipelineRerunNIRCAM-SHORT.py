@@ -193,13 +193,13 @@ def main(filtername, module, Observations=None, regionname='brick'):
         abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
         reftbl = Table.read(abs_refcat)
         reftblversion = reftbl.meta['VERSION']
-        print(f"Reference catalog is {image3.tweakreg.abs_refcat} with version {reftblversion}")
+        print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
         # image3.tweakreg.searchrad = 1 # 1 arcsec instead of 2
         # image3.tweakreg.separation = 0.5 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
         # image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
-        tweakreg_parameters.update({'fit_geometry': 'general',
+        tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 2000,
                                     'snr_threshold': 15,
                                     'peakmax': 1400,
@@ -276,7 +276,7 @@ def main(filtername, module, Observations=None, regionname='brick'):
         #image3.tweakreg.separation = 0.6 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
         #image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
-        tweakreg_parameters.update({'fit_geometry': 'general',
+        tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 2000,
                                     'snr_threshold': 15,
                                     'peakmax': 1400,

@@ -27,7 +27,7 @@ def main():
 
             realign_to_vvv(filtername=filtername, module=module)
 
-def realign_to_vvv(
+def retrieve_vvv(
     basepath = '/orange/adamginsburg/jwst/brick/',
     filtername = 'f212n',
     module = 'nrca',
@@ -46,13 +46,30 @@ def realign_to_vvv(
 
     if os.path.exists(vvvdr2filename):
         vvvdr2 = Table.read(vvvdr2filename)
+        vvvdr2['RA'] = vvvdr2['RAJ2000']
+        vvvdr2['DEC'] = vvvdr2['DEJ2000']
     else:
         Vizier.ROW_LIMIT = 5e4
         vvvdr2 = Vizier.query_region(coordinates=coord, width=width, height=height, catalog=['II/348/vvv2'])[0]
+        vvvdr2['RA'] = vvvdr2['RAJ2000']
+        vvvdr2['DEC'] = vvvdr2['DEJ2000']
         vvvdr2.write(vvvdr2filename, overwrite=True)
 
     # FK5 because it says 'J2000' on the Vizier page (same as twomass)
     vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
+
+    return vvvdr2_crds, vvvdr2
+
+def realign_to_vvv(
+    basepath = '/orange/adamginsburg/jwst/brick/',
+    filtername = 'f212n',
+    module = 'nrca',
+    imfile = None,
+    catfile = None,
+    fov_regname='/orange/adamginsburg/jwst/brick/regions/nircam_fov.reg',
+):
+
+    vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname)
 
     return realign_to_catalog(vvvdr2_crds, filtername=filtername,
                               module=module, basepath=basepath,
