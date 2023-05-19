@@ -48,8 +48,11 @@ def make_temperature_linewidth_plot(filtername, column=1e18*u.cm**-2, basepath='
     wltable = get_wltable(filtername, telescope=telescope, instrument=instrument)
     temperatures = np.linspace(5, 150, 50)*u.K
     linewidths = np.linspace(1, 100, 24)*u.km/u.s
-    grid = [[fractional_absorption(T, column, sig, wltable) for T in temperatures]
-            for sig in tqdm(linewidths)]
+    grid = np.array([[fractional_absorption(T, column, sig, wltable) for T in temperatures]
+                    for sig in tqdm(linewidths)])
+
+    # y,x = linewidth, temperature
+    assert grid.shape == (24, 50)
 
     pl.clf()
     ax = pl.gca()
@@ -93,10 +96,12 @@ def make_linewidth_column_plot(filtername, temperature=60*u.K, basepath='/orange
                               ):
     wltable = get_wltable(filtername, telescope=telescope, instrument=instrument)
     linewidths = np.linspace(1, 100, 24)*u.km/u.s
-    column = np.logspace(15,19,24)*u.cm**-2
-    grid_sigcol = [[fractional_absorption(temperature, col, sig, wltable) for col in column]
-                    for sig in tqdm(linewidths)]
+    column = np.logspace(15,19,25)*u.cm**-2
+    grid_sigcol = np.array([[fractional_absorption(temperature, col, sig, wltable) for col in column]
+                    for sig in tqdm(linewidths)])
 
+    # y,x = linewidth, column
+    assert grid_sigcol.shape == (24, 25)
 
     pl.clf()
     ax = pl.gca()
@@ -114,22 +119,6 @@ def make_linewidth_column_plot(filtername, temperature=60*u.K, basepath='/orange
     pl.title(f"CO absorption T={int(temperature.value):d} K")
 
 
-    # a hideous way to format the axis
-    # @pl.FuncFormatter
-    # def log_scaler(x, pos):
-    #     'The two args are the value and tick position'
-    #     try:
-    #         col = np.interp(x, np.arange(len(column)), column.value)
-    #         return f'{np.log10(col):0.1f}'
-    #     except Exception:
-    #         return None
-    # ax.xaxis.set_major_formatter(log_scaler)
-    # @pl.FuncFormatter
-    # def sig_scaler(x, pos):
-    #     'The two args are the value and tick position'
-    #     sig = np.interp(x, np.arange(len(linewidths)), linewidths.value)
-    #     return f'{sig:0.1f}'
-    # ax.yaxis.set_major_formatter(sig_scaler)
     sigma_labels = [1,10,20,50,100]
     ax.yaxis.set_ticks(np.interp(sigma_labels, linewidths.value, np.arange(len(linewidths)), right=np.nan),
                        labels=sigma_labels)
@@ -185,7 +174,7 @@ def fractional_absorption_ice(ice_column, center, width, ice_bandstrength,
 def fracfluxplot(filtername, telescope='JWST', instrument='NIRCam', basepath='/orange/adamginsburg/jwst/brick',):
 
     # includes the CO ice bandstrengths, etc.
-    from icemodels.gaussian_model_components import *
+    from icemodels.gaussian_model_components import co_ice_wls, co_ice_widths, co_ice_bandstrength, ocn_center, ocn_width, ocn_bandstrength
 
     column = np.logspace(16, 21, 100)*u.cm**-2
     grid_co_in_co2_ice = [fractional_absorption_ice(col, co_ice_wls[0], co_ice_widths[0], co_ice_bandstrength, filtername=filtername, telescope=telescope, instrument=instrument) for col in column]

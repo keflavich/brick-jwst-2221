@@ -54,8 +54,14 @@ print(jwst.__version__)
 medfilt_size = {'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 
-def main(filtername, module, Observations=None, regionname='brick'):
+def main(filtername, module, Observations=None, regionname='brick', field='001'):
     log.info(f"Processing filter {filtername} module {module}")
+
+    # sanity check
+    if regionname == 'brick':
+        assert field == '001'
+    elif regionname == 'cloudc':
+        assert field == '002'
 
     basepath = f'/orange/adamginsburg/jwst/{regionname}/'
     os.environ["CRDS_PATH"] = f"/orange/adamginsburg/jwst/{regionname}/crds/"
@@ -173,7 +179,7 @@ def main(filtername, module, Observations=None, regionname='brick'):
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}'
+        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
         asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                             if f'{module}' in row['expname']]
 
@@ -224,11 +230,11 @@ def main(filtername, module, Observations=None, regionname='brick'):
                                        filtername=filtername.lower(),
                                        module=module)
 
-        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
+        with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
 
 
     if module in ('nrcb', 'merged'):
@@ -246,7 +252,7 @@ def main(filtername, module, Observations=None, regionname='brick'):
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged'
+        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
 
         for member in asn_data['products'][0]['members']:
             hdr = fits.getheader(member['expname'])
@@ -299,11 +305,11 @@ def main(filtername, module, Observations=None, regionname='brick'):
                                        filtername=filtername.lower(),
                                        module=module)
 
-        with fits.open(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
+        with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
 
 
     globals().update(locals())
@@ -318,20 +324,27 @@ if __name__ == "__main__":
     # merged requires >512 GB of memory, apparently - it fails with OOM kill
     parser.add_option("-m", "--modules", dest="modules", default='nrca,nrcb',
                       help="module list", metavar="modules")
+    parser.add_option("-d", "--field", dest="field",
+                    default='001,002',
+                    help="list of target fields", metavar="field")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
+    fields = options.field.split(",")
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     Mast.login(api_token.strip())
     Observations.login(api_token)
 
+    mapping = {'001': 'brick', '002': 'cloudc'}
 
-    for filtername in filternames:
-        for module in modules:
-            results = main(filtername=filtername, module=module, Observations=Observations)
+    for field in fields:
+        for filtername in filternames:
+            for module in modules:
+                print(f"Main Loop: {filtername} + {module} + {field}")
+                results = main(filtername=filtername, module=module, Observations=Observations, field=field, regionname=mapping[field])
 
 
     from run_notebook import run_notebook
