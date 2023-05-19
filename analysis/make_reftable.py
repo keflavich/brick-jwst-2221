@@ -10,7 +10,10 @@ def main():
     # filtername = 'F410M'
     # module = 'merged'
     # tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_nsky0.fits"
-    tblfilename = (f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
+    
+    # May 19, 2023: changed this to 'merged' b/c we can't keep going on with half a field; the workflow
+    # relies on having a common catalog for both!
+    tblfilename = (f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
     tbl = Table.read(tblfilename)
 
     # reject sources with nondetections in F405N or F466N or bad matches
@@ -59,6 +62,7 @@ def main():
     reftbl.meta['PARENT_VERSION'] = tbl.meta['VERSION']
 
     reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv', overwrite=True)
+    reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.fits', overwrite=True)
 
 if __name__ == "__main__":
     main()
