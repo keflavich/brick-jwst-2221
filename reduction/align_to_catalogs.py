@@ -33,9 +33,9 @@ def retrieve_vvv(
     module = 'nrca',
     imfile = None,
     catfile = None,
-    fov_regname='jwst/brick/regions/nircam_brick_fov.reg',
+    fov_regname='regions/nircam_brick_fov.reg',
 ):
-    fov = regions.Regions.read(os.path.join(basename, fov_regname))
+    fov = regions.Regions.read(os.path.join(basepath, fov_regname))
 
     coord = fov[0].center
     height = fov[0].height
@@ -66,7 +66,7 @@ def realign_to_vvv(
     module = 'nrca',
     imfile = None,
     catfile = None,
-    fov_regname='/orange/adamginsburg/jwst/brick/regions/nircam_fov.reg',
+    fov_regname='regions/nircam_brick_fov.reg',
 ):
 
     vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname)

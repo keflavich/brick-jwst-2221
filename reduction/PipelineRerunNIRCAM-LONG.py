@@ -206,8 +206,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
         if not os.path.exists(vvvdr2fn):
-            fov_regname = {'brick': 'jwst/brick/regions/nircam_brick_fov.reg',
-                           'cloudc': 'jwst/brick/regions/nircam_cloudc_fov.reg',
+            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                           'cloudc': 'regions/nircam_cloudc_fov.reg',
                            }
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
@@ -228,7 +228,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_each}")
 
         log.info(f"Realigning to VVV (module={module}")
-        realign_to_vvv(filtername=filtername.lower(), module=module)
+        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module)
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
@@ -263,8 +263,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
         if not os.path.exists(vvvdr2fn):
-            fov_regname = {'brick': 'jwst/brick/regions/nircam_brick_fov.reg',
-                           'cloudc': 'jwst/brick/regions/nircam_cloudc_fov.reg',
+            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                           'cloudc': 'regions/nircam_cloudc_fov.reg',
                            }
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
@@ -284,7 +284,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_merged}")
 
         log.info("Realigning to VVV (module=merged)")
-        realign_to_vvv(filtername=filtername.lower(), module='merged')
+        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged')
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
