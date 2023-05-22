@@ -205,10 +205,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
+        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                       'cloudc': 'regions/nircam_cloudc_fov.reg',
+                       }
         if not os.path.exists(vvvdr2fn):
-            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                           'cloudc': 'regions/nircam_cloudc_fov.reg',
-                           }
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
         tweakreg_parameters['abs_searchrad'] = 1
@@ -262,10 +262,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
+        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                       'cloudc': 'regions/nircam_cloudc_fov.reg',
+                       }
         if not os.path.exists(vvvdr2fn):
-            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                           'cloudc': 'regions/nircam_cloudc_fov.reg',
-                           }
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
         tweakreg_parameters['abs_searchrad'] = 1
@@ -316,13 +316,13 @@ if __name__ == "__main__":
     Mast.login(api_token.strip())
     Observations.login(api_token)
 
-    mapping = {'001': 'brick', '002': 'cloudc'}
+    field_to_reg_mapping = {'001': 'brick', '002': 'cloudc'}
 
     for field in fields:
         for filtername in filternames:
             for module in modules:
                 print(f"Main Loop: {filtername} + {module} + {field}")
-                results = main(filtername=filtername, module=module, Observations=Observations, field=field, regionname=mapping[field])
+                results = main(filtername=filtername, module=module, Observations=Observations, field=field, regionname=field_to_reg_mapping[field])
 
 
     print("Running notebooks")
