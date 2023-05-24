@@ -1,7 +1,7 @@
 print("Starting cataloging", flush=True)
 import glob
 import time
-import numpy as np
+import numpy
 import crowdsource
 import regions
 import numpy as np
@@ -56,6 +56,19 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         self.psfgridmodel = psfgridmodel
         self.default_stampsz = stampsz
 
+    def evaluate(self, x, y, flux, x_0, y_0):
+        """
+        Evaluate the `GriddedPSFModel` for the input parameters.
+        """
+        grid = self.psfgridmodel
+
+        # Get the local PSF at the (x_0,y_0)
+        psfmodel = grid._compute_local_model(x_0+slcs[1].start, y_0+slcs[0].start)
+
+        # now evaluate the PSF at the (x_0, y_0) subpixel position on
+        # the input (x, y) values
+        return psfmodel.evaluate(x, y, flux, x_0, y_0)
+
     def __call__(self, col, row, stampsz=None, deriv=False):
 
         if stampsz is None:
@@ -74,7 +87,7 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         cols = cols[:, :, None] + col[None, None, :]
 
         # photutils seems to use column, row notation
-        stamps = grid.evaluate(cols, rows, 1, col, row)
+        stamps = self.evaluate(cols, rows, 1, col, row)
         # it returns something in (nstamps, row, col) shape
         # pretty sure that ought to be (col, row, nstamps) for crowdsource
 
@@ -288,7 +301,11 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             # yy, xx = np.indices([61,61], dtype=float)
             # grid.x_0 = grid.y_0 = 30
             # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
-            psf_model = WrappedPSFModel(grid)
+            if isinstance(grid, list):
+                print(f"Grid is a list: {grid}")
+                psf_model = WrappedPSFModel(grid[0])
+            else:
+                psf_model = WrappedPSFModel(grid)
             psf_model_blur = psf_model
 
             ww = wcs.WCS(im1[1].header)
