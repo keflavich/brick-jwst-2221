@@ -18,10 +18,10 @@ should be.
   * `saturated_star_finding.py` performs PSF fitting on saturated stars and removes them.  (this is run by the pipeline)
   * `crowdsource_catalogs_long.py` runs the crowsource extraction algorithm.  This must be run on the long-wavelength channels before running the short-wavelength pipeline to provide the reference catalog we use for the shortwave data.
   * `merge_catalogs.py` merges the multiwavelength catalogs.
-  * `make_reftable.py` makes the reference table from the long-wavelength (F410M) data to be used on the short-wavelength data (this is run by merge_catalogs)
+  * `make_reftable.py` makes the reference table from the long-wavelength (F410M) data to be used on the short-wavelength data (this is run by merge_catalogs) - note that this is in analysis/
   * `PipelineRerunNIRCAM-SHORT.py` run the JWST pipeline with modifications to the tweakwcs stage including a reference catalog generated from F410M
-  * `crowdsource_catalogs_long.py` on the short data (it has _long in the name, but I merged both into this one; the _short version is deprecated)
-  * `merge_catalogs.py` again to finally merge
+  * `crowdsource_catalogs_long.py` on the short data (it has _long in the name, but I merged both into this one; the _short version is deprecated)  - note that this is in analysis/
+  * `merge_catalogs.py` again to finally merge wavelengths - note that this is in analysis/
 
  2. Notebooks.  There are a lot of these.
   * `BrA_separation_nrc{a,b}.ipynb` should be run after the pipeline.  They subtract BrA from F410M, then subtract the rescaled continuum from the BrA image.
@@ -33,5 +33,11 @@ should be.
   Most of the rest are test / WIP things.
 
 
+## Analysis
 
+The analysis has been done haphazardly in notebooks, but then I tried to reconcile different notebooks and merge them.
 
+ * `analysis_setup.py` - loads the latest versions of 3-color images and catalogs.  Meant to be called before running plotting things.
+ * `co_fundamental_modeling.py` - extracts from the CO2_PhoenixModel.ipynb, CO2_Phoenix_Example.ipynb, and COFundamentalModeling_and_IceModeling.ipynb notebooks.  This script produces a wider range of models than those notebooks
+ * `plot_tools.py` - contains many plot templates for color-color, color-magnitude, etc.
+ * `selections.py` - downselects from the full merged catalog of NIRCAM data of the brick, in all 6 filters, to the subset(s) that are reliable

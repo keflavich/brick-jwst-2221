@@ -5,7 +5,7 @@ import os
 import shutil
 import numpy as np
 import json
-# import requests
+import requests
 import asdf
 from astropy import log
 from astropy.io import ascii, fits
@@ -140,15 +140,15 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     # all cases, except if you're just doing a merger?
     if module in ('nrca', 'nrcb', 'merged'):
-        print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json')}")
-        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_0[0-9][0-9]_asn.json'))
+        print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_*0[0-9][0-9]_asn.json')}")
+        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_*0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
             asn_file = asn_file_search[0]
         elif len(asn_file_search) > 1:
             asn_file = sorted(asn_file_search)[-1]
             print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
         else:
-            raise ValueError("Mismatch")
+            raise ValueError(f"Mismatch: Did not find any asn files for module {module}")
 
         mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
         print(f"Mapping: {mapping.todict()['selections']}")
@@ -201,6 +201,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
+            
             json.dump(asn_data, fh)
 
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
@@ -231,7 +232,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module)
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        try:
+            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
+            print("Failed to run remove_saturated_stars with failure {ex}")
 
     if module == 'nrcb':
         # assume nrca is run before nrcb
@@ -287,7 +291,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged')
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        try:
+            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
+            print("Failed to run remove_saturated_stars with failure {ex}")
 
     globals().update(locals())
     return locals()
@@ -313,8 +320,10 @@ if __name__ == "__main__":
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
+        os.environ['MAST_API_TOKEN'] = api_token.strip()
     Mast.login(api_token.strip())
     Observations.login(api_token)
+
 
     field_to_reg_mapping = {'001': 'brick', '002': 'cloudc'}
 
