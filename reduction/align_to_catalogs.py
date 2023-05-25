@@ -93,6 +93,10 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     # it seems to hold for all of the fields, kinda?
     sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
 
+    if sel.sum() == 0:
+        print(f"min flux: {np.nanmin(flux)}, max flux: {np.nanmax(flux)}")
+        raise ValueError("No sources passed basic selection criteria")
+
     skycrds_cat_orig = cat['sky_centroid']
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -104,6 +108,14 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
     print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+
+    if np.isnan(np.median(dra)):
+        print(f'len(refcoords) = {len(reference_coordinates)}')
+        print(f'len(cat) = {len(cat)}')
+        print(f'len(idx) = {len(idx)}')
+        print(f'len(sidx) = {len(sidx)}')
+        print(cat, sel, idx, sidx, sep)
+        raise ValueError(f"median(dra) = {np.median(dra)}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
 
     ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
 

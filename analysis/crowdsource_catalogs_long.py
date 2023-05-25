@@ -56,19 +56,6 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         self.psfgridmodel = psfgridmodel
         self.default_stampsz = stampsz
 
-    def evaluate(self, x, y, flux, x_0, y_0):
-        """
-        Evaluate the `GriddedPSFModel` for the input parameters.
-        """
-        grid = self.psfgridmodel
-
-        # Get the local PSF at the (x_0,y_0)
-        psfmodel = grid._compute_local_model(x_0+slcs[1].start, y_0+slcs[0].start)
-
-        # now evaluate the PSF at the (x_0, y_0) subpixel position on
-        # the input (x, y) values
-        return psfmodel.evaluate(x, y, flux, x_0, y_0)
-
     def __call__(self, col, row, stampsz=None, deriv=False):
 
         if stampsz is None:
@@ -87,7 +74,7 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         cols = cols[:, :, None] + col[None, None, :]
 
         # photutils seems to use column, row notation
-        stamps = self.evaluate(cols, rows, 1, col, row)
+        stamps = self.psfgridmodel.evaluate(cols, rows, 1, col, row)
         # it returns something in (nstamps, row, col) shape
         # pretty sure that ought to be (col, row, nstamps) for crowdsource
 
