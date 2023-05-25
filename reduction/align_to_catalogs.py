@@ -54,6 +54,7 @@ def retrieve_vvv(
         vvvdr2['RA'] = vvvdr2['RAJ2000']
         vvvdr2['DEC'] = vvvdr2['DEJ2000']
         vvvdr2.write(vvvdr2filename, overwrite=True)
+        vvvdr2.write(vvvdr2filename.replace(".ecsv", ".fits"), overwrite=True)
 
     # FK5 because it says 'J2000' on the Vizier page (same as twomass)
     vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
@@ -107,7 +108,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+    print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}.  Found {len(idx)} matches.')
 
     if np.isnan(np.median(dra)):
         print(f'len(refcoords) = {len(reference_coordinates)}')

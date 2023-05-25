@@ -116,7 +116,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
-    uncal_mask = np.array([uri.endswith('_uncal.fits') for uri in products_fits['dataURI']])
+    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221-{field}' in uri for uri in products_fits['dataURI']])
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
@@ -137,8 +137,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     # all cases, except if you're just doing a merger?
     if module in ('nrca', 'nrcb', 'merged'):
-        print(f"Searching for {os.path.join(output_dir, f'jw02221-*_image3_*0[0-9][0-9]_asn.json')}")
-        asn_file_search = glob(os.path.join(output_dir, f'jw02221-*_image3_*0[0-9][0-9]_asn.json'))
+        print(f"Searching for {os.path.join(output_dir, f'jw02221-{field}*_image3_*0[0-9][0-9]_asn.json')}")
+        asn_file_search = glob(os.path.join(output_dir, f'jw02221-{field}*_image3_*0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
             asn_file = asn_file_search[0]
         elif len(asn_file_search) > 1:
@@ -159,6 +159,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"In cwd={os.getcwd()}")
         # re-calibrate all uncal files -> cal files *without* suppressing first group
         for member in asn_data['products'][0]['members']:
+            # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
+            assert f'jw02221{field}' in member['expname']
             print(f"DETECTOR PIPELINE on {member['expname']}")
             print("Detector1Pipeline step")
             # from Hosek: expand_large_events -> false; turn off "snowball" detection
