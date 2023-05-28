@@ -13,12 +13,12 @@ for spw in (25,27,29,31):
     splitnames = [msname.replace(".ms", f'_{spw}.split') for msname in mses]
     for msname in mses:
         split(f'{workdir}/{msname}', msname.replace(".ms", f'_{spw}.split'),
+              spw=[str(spw)],
               datacolumn='corrected', field='CloudC')
     tclean(vis=splitnames,
            imagename=f'uid___A001_X1590_X282a.CloudC_sci.spw{spw}.cube.I.manual',
            field='CloudC',
            #datacolumn='corrected',
-           spw=[str(spw)],
            specmode='cube',
            threshold='0.1mJy',
            imsize=[6000,7000],
