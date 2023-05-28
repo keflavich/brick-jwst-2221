@@ -1,0 +1,75 @@
+import glob, os, shutil
+
+
+# this script has to be run interactively, so casalog should be in the namespace
+def logprint(string, origin='jwbrickjob', priority='INFO'):
+    print(string)
+    casalog.post(string, origin=origin, priority=priority)
+
+
+# make sure we're here...
+tmpdir = os.getenv('SLURM_TMPDIR')
+fieldname = os.getenv('FIELDNAME') or 'cloudc_2828'
+
+fulltmpdir = f'{tmpdir}/{fieldname}'
+if not os.path.exists(fulltmpdir):
+    os.mkdir(fulltmpdir)
+os.chdir(fulltmpdir)
+assert os.getcwd() == fulltmpdir
+
+field = os.getenv('FIELD') or 'CloudC'
+mous = os.getenv('MOUS') or 'uid___A001_X1590_X282a'
+
+spw = os.getenv('SPW')
+if spw is None:
+    raise ValueError("Specify SPW")
+logprint(f"SPW = {spw}")
+
+nchan = int(os.getenv('NCHAN') or 16)
+start = int(os.getenv('STARTCHAN') or 0)
+
+workdir = os.getenv('WORK_DIR') or '/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.uid___A001_X1590_X2828/group.uid___A001_X1590_X2829/member.uid___A001_X1590_X282a/calibrated/working'
+mses = os.getenv('MSES').split() or ['uid___A002_Xf287d3_Xcd1e.ms','uid___A002_Xfbe192_X54c.ms','uid___A002_Xfbf8a1_Xfe1.ms']
+
+logprint(f"Working in {tmpdir} based on files in {workdir}, using MSes ${mses}")
+logprint(f"Variables are: startchan={start}, nchan={nchan}, spw={spw}, mous={mous}, field={field}, fieldname={fieldname}, tmpdir={tmpdir}, fulltmpdir={fulltimpdir}")
+
+splitnames = [msname.replace(".ms", f'_{spw}.split') for msname in mses]
+for msname in mses:
+    split(f'{workdir}/{msname}', msname.replace(".ms", f'_{spw}.split'),
+          spw=str(spw),
+          datacolumn='corrected', field=field)
+
+tclean(vis=splitnames,
+       imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual',
+       field=field,
+       start=start,
+       nchan=nchan,
+       specmode='cube',
+       threshold='0.1mJy',
+       imsize=[6000,7000],
+       cell=['0.03arcsec'],
+       niter=1000,
+       deconvolver='hogbom',
+       phasecenter='J2000 17:46:19.157 -028.35.15.041',
+       gridder='mosaic',
+       weighting='briggs',
+       robust=0.5,
+       pbcor=True,
+       pblimit=0.2,
+       interactive=False)
+
+
+
+#Create fits datacubes for science targets
+exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.image.pbcor', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.image.pbcor.fits')
+exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.pb', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.pb.fits')
+exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.mask', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.mask.fits')
+
+for fn in glob.glob(f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual*'):
+    logprint(f"Moving {fn} to {workdir}")
+    shutil.move(fn, workdir)
+
+for fn in splitnames:
+    logprint(f"Removing {fn}")
+    shutil.rmtree(fn)
