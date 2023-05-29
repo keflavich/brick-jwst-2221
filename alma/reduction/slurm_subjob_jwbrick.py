@@ -32,11 +32,11 @@ workdir = os.getenv('WORK_DIR') or '/orange/adamginsburg/jwst/brick/alma/2021.1.
 mses = os.getenv('MSES').split() or ['uid___A002_Xf287d3_Xcd1e.ms','uid___A002_Xfbe192_X54c.ms','uid___A002_Xfbf8a1_Xfe1.ms']
 
 logprint(f"Working in {tmpdir} based on files in {workdir}, using MSes ${mses}")
-logprint(f"Variables are: startchan={start}, nchan={nchan}, spw={spw}, mous={mous}, field={field}, fieldname={fieldname}, tmpdir={tmpdir}, fulltmpdir={fulltimpdir}")
+logprint(f"Variables are: startchan={start:04d}, nchan={nchan}, spw={spw}, mous={mous}, field={field}, fieldname={fieldname}, tmpdir={tmpdir}, fulltmpdir={fulltmpdir}")
 
 if os.path.exists(os.path.join(workdir,
-                               f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.image')):
-    results = glob.glob(f'{workdir}/{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual*')
+                               f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.image')):
+    results = glob.glob(f'{workdir}/{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual*')
     logprint(f"Found completed results {results}.  Finishing without doing any more work.")
 else:
     splitnames = [msname.replace(".ms", f'_{spw}.split') for msname in mses]
@@ -51,7 +51,7 @@ else:
         split(**split_kwargs)
 
     tclean_kwargs = dict(vis=splitnames,
-           imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual',
+                         imagename=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual',
            field=field,
            start=start,
            nchan=nchan,
@@ -75,11 +75,11 @@ else:
 
 
     #Create fits datacubes for science targets
-    exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.image.pbcor', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.image.pbcor.fits')
-    exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.pb', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.pb.fits')
-    exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.mask', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual.mask.fits')
+    exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.image.pbcor', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.image.pbcor.fits')
+    exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.pb', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.pb.fits')
+    exportfits(imagename=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.mask', fitsimage=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual.mask.fits')
 
-    for fn in glob.glob(f'{mous}.{field}_sci.spw{spw}.{start}-{start+nchan}.cube.I.manual*'):
+    for fn in glob.glob(f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual*'):
         logprint(f"Moving {fn} to {workdir}")
         shutil.move(fn, workdir)
 
