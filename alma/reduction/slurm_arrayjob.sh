@@ -1,12 +1,15 @@
 #!/bin/sh
-#SBATCH --job-name=cloudc_spw27_array   # Job name
-#SBATCH --mail-type=NONE         # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --nodes=1                   # Use one node
-#SBATCH --ntasks=4                  # Run a single task
-#SBATCH --mem-per-cpu=4gb           # Memory per processor
-#SBATCH --time=96:00:00             # Time limit hrs:min:sec
-#SBATCH --output=/blue/adamginsburg/adamginsburg/brick_logs/cloudc_spw27_%A-%a.out    # Standard output and error log
-#SBATCH --array=1-490                 # Array range
+
+### backup SBATCH --mail-type=NONE         # Mail events (NONE, BEGIN, END, FAIL, ALL)
+### backup SBATCH --nodes=1                   # Use one node
+### backup SBATCH --ntasks=4                  # Run a single task
+### backup SBATCH --mem-per-cpu=4gb           # Memory per processor
+### backup SBATCH --time=96:00:00             # Time limit hrs:min:sec
+### backup SBATCH --qos=astronomy-dept-b
+### backup SBATCH --account=astronomy-dept
+### backup SBATCH --output=/blue/adamginsburg/adamginsburg/brick_logs/cloudc_spw25_%A_%a.out    # Standard output and error log
+### backup SBATCH --job-name=cloudc_spw25_array   # Job name
+### backup SBATCH --array=1-490                 # Array range
 
 
 export FIELDNAME=${FIELDNAME:-'cloudc_2828'}
@@ -17,12 +20,12 @@ export GOUS=${GOUS:-'uid___A001_X1590_X2829'}
 
 export WORK_DIR=${WORK_DIR:-"/orange/adamginsburg/jwst/brick/alma/2021.1.00363.S/science_goal.${SOUS}/group.${GOUS}/member.${MOUS}/calibrated/working"}
 export MSES=${MSES:-"uid___A002_Xf287d3_Xcd1e.ms uid___A002_Xfbe192_X54c.ms uid___A002_Xfbf8a1_Xfe1.ms"}
-export SPW=${SPW:-27}
+export SPW=${SPW:-25}
 export NCHAN=${NCHAN:-4}
 export TOTALNCHAN=${TOTALNCHAN:-1960}
 export START=${START:-0}
 
-export STARTCHAN=$(eval ${SLURM_ARRAY_TASK_ID} * ${NCHAN})
+export STARTCHAN=$(( ${SLURM_ARRAY_TASK_ID} * ${NCHAN}))
 
 fnbase="${MOUS}.${FIELD}_sci.spw${SPW}.$(printf %04d $STARTCHAN)+$(printf %03d $NCHAN).cube.I.manual"
 fullfn="${WORK_DIR}/${fnbase}.image"
@@ -30,15 +33,20 @@ fullfn="${WORK_DIR}/${fnbase}.image"
 export STARTCHAN
 
 if [ ! $(bash -c 'echo $SPW') ]; then echo "SPW not exported"; exit 1; fi
+if [ ! $(bash -c 'echo $STARTCHAN') ]; then echo "STARTCHAN not exported"; exit 1; fi
 
 JOBNAME=${FIELDNAME}_spw${SPW}_ch${STARTCHAN}_a${SLURM_ARRAY_TASK_ID}
 
-env
-exit
 
 
 if [ -e $fullfn ]; then
-    echo SKIPPING: ${fnbase} is done!
+    echo "SKIPPING job ${JOBNAME}: ${fnbase} is done!"
+    # this extra verbosity is OK b/c we're using an array job anyway
+    echo ${FIELDNAME}_spw${SPW}_ch${STARTCHAN} $fnbase
+    echo $(bash -c 'echo "Key environmental variables: startchan=$STARTCHAN, nchan=$NCHAN, workdir=$WORK_DIR, mses=$MSES, spw=$SPW, MOUS=$MOUS, field=$FIELD, fieldname=$FIELDNAME"')
+    echo $fnbase $fullfn
+    # print just a number so we don't flood the screen
+    #echo -n ${SLURM_ARRAY_TASK_ID}.
 else
     # use sacct to check for jobname
     #job_running=$(sacct --format="JobID,JobName%45,Account%15,QOS%17,State" | grep RUNNING | grep $JOBNAME)
