@@ -16,25 +16,33 @@ export START=0
 
 #for STARTCHAN in seq 0 32 3960; do
 for STARTCHAN in `seq $START $NCHAN $TOTALNCHAN`; do
-    echo ${FIELDNAME}_spw${SPW}_ch${STARTCHAN}
-    echo $(bash -c 'echo "Key environmental variables: startchan=$STARTCHAN, nchan=$NCHAN, workdir=$WORK_DIR, mses=$MSES, spw=$SPW, MOUS=$MOUS, field=$FIELD, fieldname=$FIELDNAME"')
 
     fnbase="${MOUS}.${FIELD}_sci.spw${SPW}.$(printf %04d $STARTCHAN)+$(printf %03d $NCHAN).cube.I.manual"
     fullfn="${WORK_DIR}/${fnbase}.image"
-    echo $fnbase $fullfn
 
     export STARTCHAN
 
     if [ ! $(bash -c 'echo $SPW') ]; then echo "SPW not exported"; exit 1; fi
 
+    JOBNAME=${FIELDNAME}_spw${SPW}_ch${STARTCHAN}
 
     if [ -e $fullfn ]; then
-        echo SKIPPING: ${fullfn} is done!
+        echo SKIPPING: ${fnbase} is done!
     else
-        echo ${fullfn} does not exist.  Running.
-        sbatch --job-name=${FIELDNAME}_spw${SPW}_ch${STARTCHAN} \
-            --output="/blue/adamginsburg/adamginsburg/brick_logs/${FIELDNAME}_spw${SPW}_ch${STARTCHAN}_%j.log" \
-            --export=ALL \
-            /orange/adamginsburg/jwst/brick/alma/reduction/slurm_runner_splitjobs.sh
+        # use sacct to check for jobname
+        job_running=$(sacct --format="JobID,JobName%45,Account%15,QOS%17,State" | grep RUNNING | grep $JOBNAME)
+        if [[ $job_running ]]; then
+            echo -n "SKIPPING: ${fnbase} job $jobname because it's running"
+            echo ${FIELDNAME}_spw${SPW}_ch${STARTCHAN} $fnbase
+        else
+            echo "RUNNING ${fnbase}: ${fullfn} does not exist.  Running."
+            echo ${FIELDNAME}_spw${SPW}_ch${STARTCHAN} $fnbase
+            echo $(bash -c 'echo "Key environmental variables: startchan=$STARTCHAN, nchan=$NCHAN, workdir=$WORK_DIR, mses=$MSES, spw=$SPW, MOUS=$MOUS, field=$FIELD, fieldname=$FIELDNAME"')
+            echo $fnbase $fullfn
+            sbatch --job-name=$JOBNAME \
+                --output="/blue/adamginsburg/adamginsburg/brick_logs/${FIELDNAME}_spw${SPW}_ch${STARTCHAN}_%j.log" \
+                --export=ALL \
+                /orange/adamginsburg/jwst/brick/alma/reduction/slurm_runner_splitjobs.sh
+        fi
     fi
 done
