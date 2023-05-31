@@ -148,7 +148,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             asn_file = sorted(asn_file_search)[-1]
             print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
         else:
-            raise ValueError(f"Mismatch: Did not find any asn files for module {module}")
+            raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
 
         mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
         print(f"Mapping: {mapping.todict()['selections']}")
@@ -333,7 +333,8 @@ if __name__ == "__main__":
         for filtername in filternames:
             for module in modules:
                 print(f"Main Loop: {filtername} + {module} + {field}")
-                results = main(filtername=filtername, module=module, Observations=Observations, field=field, regionname=field_to_reg_mapping[field])
+                results = main(filtername=filtername, module=module, Observations=Observations, field=field,
+                               regionname=field_to_reg_mapping[field])
 
 
     print("Running notebooks")

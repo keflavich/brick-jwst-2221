@@ -88,7 +88,7 @@ else
         export script=${SCRIPT_DIR}/slurm_subjob_jwbrick.py
 
         export LOG_DIR=/blue/adamginsburg/adamginsburg/brick_logs/
-        export LOGFILENAME="${LOG_DIR}/casa_log${mpistr}_2021.1.00363.S_${FIELDNAME}_spw${SPW}_ch${STARTCHAN}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}_$(date +%Y-%m-%d_%H_%M_%S).log"
+        export LOGFILENAME="${LOG_DIR}/casa_log${mpistr}_2021.1.00363.S_${FIELDNAME}_spw${SPW}_ch${STARTCHAN}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_$(date +%Y-%m-%d_%H_%M_%S).log"
         echo logfilename=$LOGFILENAME
         cwd=$(pwd)
 
