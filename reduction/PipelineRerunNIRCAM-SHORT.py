@@ -116,7 +116,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
-    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221-{field}' in uri for uri in products_fits['dataURI']])
+    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221{field}' in uri for uri in products_fits['dataURI']])
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
@@ -176,7 +176,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                 save_results=True, output_dir=output_dir,
                                )
 
-    if module in ('nrca', 'nrcb'):
+    if module in ('nrca', 'nrcb',):
         print(f"Filter {filtername} module {module} ")
 
         with open(asn_file) as f_obj:
@@ -246,7 +246,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print("DONE Merging already-combined nrca + nrcb modules")
 
     if module == 'merged':
-        raise ValueError("Don't try merging on disk any more, instead do the merging the other way.")
+        # May 31, 2023: commented this out to see if the problem was a memory problem or something else
+        # it's not clear this code hsa ever been used or even makes sense.  But maybe?
+        # raise ValueError("Don't try merging on disk any more, instead do the merging the other way.")
         print(f"Filter {filtername} module = merged nrca + nrcb ")
         log.info("Running merged frames")
         # try merging all frames & modules
@@ -297,7 +299,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                    })
 
         calwebb_image3.Image3Pipeline.call(
-            asn_file_each,
+            asn_file_merged,
             steps={'tweakreg': tweakreg_parameters,},
             output_dir=output_dir,
             save_results=True)

@@ -34,6 +34,7 @@ def retrieve_vvv(
     imfile = None,
     catfile = None,
     fov_regname='regions/nircam_brick_fov.reg',
+    fieldnumber='001',
 ):
     fov = regions.Regions.read(os.path.join(basepath, fov_regname))
 
@@ -42,7 +43,7 @@ def retrieve_vvv(
     width = fov[0].width
     height, width = width, height # CARTA wrote it wrong
 
-    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
+    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
 
     if os.path.exists(vvvdr2filename):
         vvvdr2 = Table.read(vvvdr2filename)
@@ -68,9 +69,10 @@ def realign_to_vvv(
     imfile = None,
     catfile = None,
     fov_regname='regions/nircam_brick_fov.reg',
+    fieldnumber='001',
 ):
 
-    vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname)
+    vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname, fieldnumber=fieldnumber)
 
     return realign_to_catalog(vvvdr2_crds, filtername=filtername,
                               module=module, basepath=basepath,

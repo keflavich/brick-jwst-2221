@@ -118,7 +118,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
-    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221-{field}' in uri for uri in products_fits['dataURI']])
+    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221{field}' in uri for uri in products_fits['dataURI']])
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
@@ -211,7 +211,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                        'cloudc': 'regions/nircam_cloudc_fov.reg',
                        }
         if not os.path.exists(vvvdr2fn):
-            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
+            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
         tweakreg_parameters['abs_searchrad'] = 1
 
@@ -230,7 +230,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_each}")
 
         log.info(f"Realigning to VVV (module={module}")
-        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module)
+        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field)
 
         log.info("Removing saturated stars")
         try:
@@ -271,7 +271,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                        'cloudc': 'regions/nircam_cloudc_fov.reg',
                        }
         if not os.path.exists(vvvdr2fn):
-            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module)
+            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
         tweakreg_parameters['abs_searchrad'] = 1
 
@@ -289,7 +289,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_merged}")
 
         log.info("Realigning to VVV (module=merged)")
-        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged')
+        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged', fieldnumber=field)
 
         log.info("Removing saturated stars")
         try:
