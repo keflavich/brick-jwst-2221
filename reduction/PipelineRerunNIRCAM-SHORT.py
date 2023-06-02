@@ -230,7 +230,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         # are useful
         realigned = realign_to_catalog(reftbl['skycoord_f410m'],
                                        filtername=filtername.lower(),
-                                       module=module)
+                                       module=module,
+                                       fieldnumber=field)
 
         with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
@@ -307,7 +308,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         realigned = realign_to_catalog(reftbl['skycoord_f410m'],
                                        filtername=filtername.lower(),
-                                       module=module)
+                                       module=module,
+                                       fieldnumber=field)
 
         with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion

@@ -82,11 +82,12 @@ def realign_to_vvv(
 def realign_to_catalog(reference_coordinates, filtername='f212n',
                        module='nrca',
                        basepath='/orange/adamginsburg/jwst/brick/',
+                       fieldnumber='001',
                        catfile=None, imfile=None):
     if catfile is None:
-        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
+        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
     if imfile is None:
-        imfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_i2d.fits'
+        imfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_i2d.fits'
 
     cat = Table.read(catfile)
 
@@ -167,11 +168,12 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
 def merge_a_plus_b(filtername, 
     basepath = '/orange/adamginsburg/jwst/brick/',
     parallel=True,
+    fieldnumber='001',
     ):
     import reproject
     from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
-    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-nrca_i2d.fits'
-    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-nrcb_i2d.fits'
+    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_i2d.fits'
+    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_i2d.fits'
     files = [filename_nrca, filename_nrcb]
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
@@ -202,7 +204,7 @@ def merge_a_plus_b(filtername,
                          fits.ImageHDU(data=merged_err, name='ERR', header=header),
                          fits.ImageHDU(data=weightmap, name='WHT', header=header),
                         ])
-    hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
+    hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
 
 def mihais_versin():
     """
