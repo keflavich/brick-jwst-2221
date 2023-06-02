@@ -241,7 +241,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
     if module == 'nrcb':
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules")
-        merge_a_plus_b(filtername)
+        merge_a_plus_b(filtername, fieldnumber=field)
         print("DONE Merging already-combined nrca + nrcb modules")
 
     if module == 'merged':
