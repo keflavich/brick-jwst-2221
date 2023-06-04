@@ -6,6 +6,7 @@ from astropy.wcs import WCS
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
+# these were created in notebooks/MedianFilterBackground.ipynb
 background_mapping = {
     'f212n': 'jw02221-o001_t001_nircam_clear-f212n_i2d_medfilt256.fits',
     'f187n': 'jw02221-o001_t001_nircam_clear-f187n_i2d_medfilt256.fits',
@@ -64,6 +65,10 @@ def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
 
 
 def nozero_percentile(arr, pct, **kwargs):
+    """
+    nanpercentile([nan, nan, nan]) gives nan, but we want zero, so this function
+    returns zero if everything is nan
+    """
     arr = arr.copy()
     arr[arr == 0] = np.nan
     rslt = np.nanpercentile(arr, pct, **kwargs)
