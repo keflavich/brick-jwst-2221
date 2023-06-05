@@ -232,12 +232,14 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                        filtername=filtername.lower(),
                                        module=module,
                                        fieldnumber=field)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_realigned-to-refcat.fits', overwrite=True)
 
         with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned_to_refcat.fits')
 
 
     if module in ('nrcb', 'merged'):
@@ -310,12 +312,14 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                        filtername=filtername.lower(),
                                        module=module,
                                        fieldnumber=field)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_realigned-to-refcat.fits', overwrite=True)
 
         with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned_to_refcat.fits')
 
 
     globals().update(locals())

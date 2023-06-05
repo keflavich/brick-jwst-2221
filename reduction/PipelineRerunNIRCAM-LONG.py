@@ -205,13 +205,15 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        
+        # for the VVV cat, use the merged version: no need for independent versions
+        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
         fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
                        'cloudc': 'regions/nircam_cloudc_fov.reg',
                        }
         if not os.path.exists(vvvdr2fn):
-            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
+            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
         tweakreg_parameters['abs_refcat'] = vvvdr2fn
         tweakreg_parameters['abs_searchrad'] = 1
 
@@ -230,19 +232,29 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_each}")
 
         log.info(f"Realigning to VVV (module={module}")
-        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field)
+        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_realigned-to-vvv.fits', overwrite=True)
 
         log.info("Removing saturated stars")
         try:
             remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
         except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
             print("Failed to run remove_saturated_stars with failure {ex}")
+
 
     if module == 'nrcb':
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules")
         merge_a_plus_b(filtername, fieldnumber=field)
         print("DONE Merging already-combined nrca + nrcb modules")
+
+        #try:
+        #    # this is probably wrong / has wrong path names.
+        #    remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}-reproject_i2d.fits')
+        #    remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
+        #except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
+        #    print("Failed to run remove_saturated_stars with failure {ex}")
 
     if module == 'merged':
         # try merging all frames & modules
@@ -256,8 +268,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             hdr = fits.getheader(member['expname'])
             if filtername in (hdr['PUPIL'], hdr['FILTER']):
                 outname = destreak(member['expname'],
-                                    use_background_map=True,
-                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+                                   use_background_map=True,
+                                   median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
 
         asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
@@ -278,6 +290,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
                                     'snr_threshold': 5,
+                                    'abs_refcat': vvvdr2fn,
                                     'nclip': 1,
                                     })
 
@@ -289,11 +302,13 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_merged}")
 
         log.info("Realigning to VVV (module=merged)")
-        realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged', fieldnumber=field)
+        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged', fieldnumber=field)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_realigned-to-vvv.fits', overwrite=True)
 
         log.info("Removing saturated stars")
         try:
             remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
         except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
             print("Failed to run remove_saturated_stars with failure {ex}")
 
