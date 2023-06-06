@@ -507,7 +507,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 for nsky in (0, 1, ):
                     t0 = time.time()
                     print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
-                    print(f"data.shape={data.shape} weight_shape={weight.shape}")
+                    print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
                     results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                         nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True)
                     print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
