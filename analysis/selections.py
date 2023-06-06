@@ -256,7 +256,7 @@ def main(basetable, ww):
     badblue = blue_410_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2) |
                               ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )
 
-    globals().update(locals())
+    return locals()
 
 if __name__ == "__main__":
     from optparse import OptionParser
@@ -269,13 +269,16 @@ if __name__ == "__main__":
 
     if options.module == 'nrca':
         from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
-        main(basetable_nrca, ww=ww)
+        result = main(basetable_nrca, ww=ww)
+        globals().update(result)
         basetable = basetable_nrca
     elif options.module == 'nrcb':
         from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
-        main(basetable_nrcb, ww=ww)
+        result = main(basetable_nrcb, ww=ww)
+        globals().update(result)
         basetable = basetable_nrcb
     elif options.module == 'merged':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-        main(basetable_merged, ww=ww)
+        result = main(basetable_merged, ww=ww)
+        globals().update(result)
         basetable = basetable_merged

@@ -205,7 +205,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        
+
         # for the VVV cat, use the merged version: no need for independent versions
         vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
         print(f"Loaded VVV catalog {vvvdr2fn}")
