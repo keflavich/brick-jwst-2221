@@ -34,6 +34,7 @@ def retrieve_vvv(
     imfile = None,
     catfile = None,
     fov_regname='regions/nircam_brick_fov.reg',
+    fieldnumber='001',
 ):
     fov = regions.Regions.read(os.path.join(basepath, fov_regname))
 
@@ -42,7 +43,7 @@ def retrieve_vvv(
     width = fov[0].width
     height, width = width, height # CARTA wrote it wrong
 
-    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
+    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
 
     if os.path.exists(vvvdr2filename):
         vvvdr2 = Table.read(vvvdr2filename)
@@ -54,6 +55,7 @@ def retrieve_vvv(
         vvvdr2['RA'] = vvvdr2['RAJ2000']
         vvvdr2['DEC'] = vvvdr2['DEJ2000']
         vvvdr2.write(vvvdr2filename, overwrite=True)
+        vvvdr2.write(vvvdr2filename.replace(".ecsv", ".fits"), overwrite=True)
 
     # FK5 because it says 'J2000' on the Vizier page (same as twomass)
     vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
@@ -67,9 +69,10 @@ def realign_to_vvv(
     imfile = None,
     catfile = None,
     fov_regname='regions/nircam_brick_fov.reg',
+    fieldnumber='001',
 ):
 
-    vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname)
+    vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname, fieldnumber=fieldnumber)
 
     return realign_to_catalog(vvvdr2_crds, filtername=filtername,
                               module=module, basepath=basepath,
@@ -79,11 +82,12 @@ def realign_to_vvv(
 def realign_to_catalog(reference_coordinates, filtername='f212n',
                        module='nrca',
                        basepath='/orange/adamginsburg/jwst/brick/',
+                       fieldnumber='001',
                        catfile=None, imfile=None):
     if catfile is None:
-        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
+        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
     if imfile is None:
-        imfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_i2d.fits'
+        imfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_i2d.fits'
 
     cat = Table.read(catfile)
 
@@ -92,6 +96,10 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     # 7e-8 is the empirical MJy/sr in one pixel-to-ABmag-flux conversion
     # it seems to hold for all of the fields, kinda?
     sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
+
+    if sel.sum() == 0:
+        print(f"min flux: {np.nanmin(flux)}, max flux: {np.nanmax(flux)}")
+        raise ValueError("No sources passed basic selection criteria")
 
     skycrds_cat_orig = cat['sky_centroid']
     with warnings.catch_warnings():
@@ -103,7 +111,15 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+    print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}.  Found {len(idx)} matches.')
+
+    if np.isnan(np.median(dra)):
+        print(f'len(refcoords) = {len(reference_coordinates)}')
+        print(f'len(cat) = {len(cat)}')
+        print(f'len(idx) = {len(idx)}')
+        print(f'len(sidx) = {len(sidx)}')
+        print(cat, sel, idx, sidx, sep)
+        raise ValueError(f"median(dra) = {np.median(dra)}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
 
     ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
 
@@ -135,8 +151,6 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         hdulist[1].header.update(ww.to_header())
         print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
 
-    hdulist = fits.open(imfile)
-
     # re-load the WCS to make sure it worked
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -154,11 +168,12 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
 def merge_a_plus_b(filtername, 
     basepath = '/orange/adamginsburg/jwst/brick/',
     parallel=True,
+    fieldnumber='001',
     ):
     import reproject
     from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
-    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-nrca_i2d.fits'
-    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-nrcb_i2d.fits'
+    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_i2d.fits'
+    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_i2d.fits'
     files = [filename_nrca, filename_nrcb]
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
@@ -189,7 +204,7 @@ def merge_a_plus_b(filtername,
                          fits.ImageHDU(data=merged_err, name='ERR', header=header),
                          fits.ImageHDU(data=weightmap, name='WHT', header=header),
                         ])
-    hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
+    hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
 
 def mihais_versin():
     """
