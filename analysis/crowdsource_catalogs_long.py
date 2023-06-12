@@ -17,6 +17,7 @@ from astropy import stats
 from astropy import units as u
 from astropy.io import fits
 import requests
+import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
@@ -242,7 +243,14 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
                 api_token = fh.read().strip()
             from astroquery.mast import Mast
-            Mast.login(api_token.strip())
+
+            for ii in range(10):
+                try:
+                    Mast.login(api_token.strip())
+                    break
+                except (requests.exceptions.ReadTimeout, urllib3.exceptions.ReadTimeoutError, TimeoutError) as ex:
+                    print(f"Attempt {ii} to log in to MAST: {ex}")
+                    time.sleep(5)
             os.environ['MAST_API_TOKEN'] = api_token.strip()
 
             has_downloaded = False
