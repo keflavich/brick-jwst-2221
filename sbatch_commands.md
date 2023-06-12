@@ -70,7 +70,7 @@ sbatch --job-name=webb-cat-F466N --output=web-cat-F466N%j.log  --account=adamgin
 Bigger groups:
 ```
 sbatch --job-name=webb-cat-long --output=web-cat-long%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py"
-sbatch --job-name=webb-cat-short --output=web-cat-short%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py"
+# short-> long, doesn't work sbatch --job-name=webb-cat-short --output=web-cat-short%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py"
 ```
 
 Merge the catalogs (this means merge different filters - this doesn't merge nrca+nrcb):
