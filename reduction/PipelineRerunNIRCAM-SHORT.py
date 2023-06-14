@@ -325,7 +325,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         log.info("Removing saturated stars")
         remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned_to_refcat.fits')
+        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits')
 
 
     globals().update(locals())
