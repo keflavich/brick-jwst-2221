@@ -151,6 +151,9 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         hdulist[1].header.update(ww.to_header())
         print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
 
+
+    hdulist = fits.open(imfile)
+
     # re-load the WCS to make sure it worked
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')

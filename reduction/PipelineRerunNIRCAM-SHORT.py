@@ -308,6 +308,12 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             save_results=True)
         print(f"DONE running {asn_file_merged}")
 
+
+        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        reftbl = Table.read(abs_refcat)
+        reftblversion = reftbl.meta['VERSION']
+        print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
+
         realigned = realign_to_catalog(reftbl['skycoord_f410m'],
                                        filtername=filtername.lower(),
                                        module=module,

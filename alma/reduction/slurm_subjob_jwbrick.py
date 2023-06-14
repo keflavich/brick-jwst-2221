@@ -39,7 +39,7 @@ if os.getenv('DOMERGE') and int(os.getenv('DOMERGE')) == 1:
     totalnchan = int(os.getenv('TOTALNCHAN'))
     for suffix in (".image.pbcor", ".model", ".mask", ".pb", ".psf", ".residual", ".weight",".image", ".sumwt"):
         ia.imageconcat(outfile=f'{mous}.{field}.spw{spw}.merge.m{suffix}',
-                       infiles=[f'{mous}.{field}.spw{spw}.{ii:04d}+004.cube.I.manual{suffix}'
+                       infiles=[f'{mous}.{field}_sci.spw{spw}.{ii:04d}+004.cube.I.manual{suffix}'
                                 for ii in range(0, totalnchan+1, nchan)], mode='m', relax=True)
 else:
     if os.path.exists(os.path.join(workdir,
