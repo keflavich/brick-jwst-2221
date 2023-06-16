@@ -143,14 +143,15 @@ def get_psf(header, path_prefix='.'):
     with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     from astroquery.mast import Mast
-    Mast.login(api_token.strip())
-    os.environ['MAST_API_TOKEN'] = api_token.strip()
 
     loaded_psfgen = False
     ntries = 0
     while not loaded_psfgen:
         print(f"Attempting to load PSF for {obsdate}")
         try:
+            Mast.login(api_token.strip())
+            os.environ['MAST_API_TOKEN'] = api_token.strip()
+
             psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
             loaded_psfgen = True
         except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
