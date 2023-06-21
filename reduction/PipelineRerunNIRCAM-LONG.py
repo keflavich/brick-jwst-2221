@@ -303,7 +303,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         log.info("Realigning to VVV (module=merged)")
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged', fieldnumber=field)
-        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_realigned-to-vvv.fits', overwrite=True)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits', overwrite=True)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:

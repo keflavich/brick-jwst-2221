@@ -168,7 +168,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
 
     return hdulist
 
-def merge_a_plus_b(filtername, 
+def merge_a_plus_b(filtername,
     basepath = '/orange/adamginsburg/jwst/brick/',
     parallel=True,
     fieldnumber='001',
