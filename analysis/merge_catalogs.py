@@ -429,7 +429,7 @@ def replace_saturated(cat, filtername, radius=None):
 def main():
     for desat in (False, True):
         for bgsub in (False, True):
-            for module in ( 'merged', 'nrca', 'nrcb', ):
+            for module in ( 'merged-reproject', 'merged', 'nrca', 'nrcb', ):
                 print(f'crowdsource {module} desat={desat} bgsub={bgsub}')
                 try:
                     merge_crowdsource(module=module, desat=desat, bgsub=bgsub)
