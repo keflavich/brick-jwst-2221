@@ -291,3 +291,8 @@ if __name__ == "__main__":
         result = main(basetable_merged, ww=ww)
         globals().update(result)
         basetable = basetable_merged
+    elif options.module == 'merged-reproject':
+        from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
+        result = main(basetable_merged_reproject, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged_reproject

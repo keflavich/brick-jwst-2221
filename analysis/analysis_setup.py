@@ -64,6 +64,10 @@ fh_merged = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear
 ww410_merged = wcs.WCS(fh_merged[1].header)
 ww_merged = ww410_merged
 
+fh_merged_reproject = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged-reproject_i2d.fits')
+ww410_merged_reproject = wcs.WCS(fh_merged_reproject[1].header)
+ww_merged_reproject = ww410_merged_reproject
+
 avm_nostars_nrca = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png')
 img_nostars_nrca = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png'))[::-1,:,:]
 wwi_nostars_nrca = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
@@ -85,6 +89,7 @@ wwi_nostars_merged = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FIT
 # the merged version is the one I *want* to work with, but nrca is the one I've tested most
 # and can really vouch for
 basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
+basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
 basetable_merged = basetable
 basetable_nrca = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
 basetable_nrcb = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrcb_photometry_tables_merged.fits')

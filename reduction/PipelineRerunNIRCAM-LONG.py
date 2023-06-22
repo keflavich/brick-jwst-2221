@@ -206,16 +206,24 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             json.dump(asn_data, fh)
 
 
-        # for the VVV cat, use the merged version: no need for independent versions
-        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
-        print(f"Loaded VVV catalog {vvvdr2fn}")
-        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                       'cloudc': 'regions/nircam_cloudc_fov.reg',
-                       }
-        if not os.path.exists(vvvdr2fn):
-            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
-        tweakreg_parameters['abs_refcat'] = vvvdr2fn
-        tweakreg_parameters['abs_searchrad'] = 1
+        if filtername.lower() == 'f410m':
+            # for the VVV cat, use the merged version: no need for independent versions
+            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
+            print(f"Loaded VVV catalog {vvvdr2fn}")
+            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                        'cloudc': 'regions/nircam_cloudc_fov.reg',
+                        }
+            if not os.path.exists(vvvdr2fn):
+                retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
+            tweakreg_parameters['abs_refcat'] = vvvdr2fn
+            tweakreg_parameters['abs_searchrad'] = 1
+        else:
+            # For non-F410M, try aligning to F410M instead of VVV?
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+            reftbl = Table.read(abs_refcat)
+            reftblversion = reftbl.meta['VERSION']
+            tweakreg_parameters['abs_searchrad'] = 0.5
+            print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
@@ -277,21 +285,30 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
-        vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
-        print(f"Loaded VVV catalog {vvvdr2fn}")
-        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                       'cloudc': 'regions/nircam_cloudc_fov.reg',
-                       }
-        if not os.path.exists(vvvdr2fn):
-            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
-        tweakreg_parameters['abs_refcat'] = vvvdr2fn
-        tweakreg_parameters['abs_searchrad'] = 1
+        if filtername.lower() == 'f410m':
+            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+            print(f"Loaded VVV catalog {vvvdr2fn}")
+            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                        'cloudc': 'regions/nircam_cloudc_fov.reg',
+                        }
+            if not os.path.exists(vvvdr2fn):
+                retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
+            tweakreg_parameters['abs_refcat'] = abs_refcat = vvvdr2fn
+            tweakreg_parameters['abs_searchrad'] = 1
+        else:
+            # For non-F410M, try aligning to F410M instead of VVV?
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+            reftbl = Table.read(abs_refcat)
+            reftblversion = reftbl.meta['VERSION']
+            tweakreg_parameters['abs_searchrad'] = 0.5
+            print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
+
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 10000,
                                     'snr_threshold': 5,
-                                    'abs_refcat': vvvdr2fn,
-                                    'nclip': 1,
+                                    'abs_refcat': abs_refcat,
+                                    'nclip': 3,
                                     })
 
         calwebb_image3.Image3Pipeline.call(
