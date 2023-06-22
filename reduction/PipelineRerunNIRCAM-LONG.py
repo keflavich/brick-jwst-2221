@@ -11,6 +11,7 @@ from astropy import log
 from astropy.io import ascii, fits
 from astropy.utils.data import download_file
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
+from astropy.table import Table
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
@@ -226,12 +227,13 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 10000,
+                                    'brightest': 5000,
                                     'snr_threshold': 5,
                                     'abs_refcat': vvvdr2fn,
                                     'nclip': 1,
                                     })
 
+        log.info(f"Running tweakreg ({module})")
         calwebb_image3.Image3Pipeline.call(
             asn_file_each,
             steps={'tweakreg': tweakreg_parameters,},
@@ -241,7 +243,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         log.info(f"Realigning to VVV (module={module}")
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field)
-        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_realigned-to-vvv.fits', overwrite=True)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits', overwrite=True)
 
         log.info("Removing saturated stars")
         try:
@@ -305,12 +307,13 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 10000,
+                                    'brightest': 5000,
                                     'snr_threshold': 5,
                                     'abs_refcat': abs_refcat,
                                     'nclip': 3,
                                     })
 
+        log.info("Running tweakreg (merged)")
         calwebb_image3.Image3Pipeline.call(
             asn_file,
             steps={'tweakreg': tweakreg_parameters,},
