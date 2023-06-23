@@ -207,13 +207,13 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             json.dump(asn_data, fh)
 
 
+        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                      'cloudc': 'regions/nircam_cloudc_fov.reg',
+                      }
         if filtername.lower() == 'f410m':
-            # for the VVV cat, use the merged version: no need for independent versions
+        # for the VVV cat, use the merged version: no need for independent versions
             vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
-            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                        'cloudc': 'regions/nircam_cloudc_fov.reg',
-                        }
             if not os.path.exists(vvvdr2fn):
                 retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
@@ -228,9 +228,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 5000,
-                                    'snr_threshold': 5,
+                                    'snr_threshold': 20, # was 5, but that produced too many stars
                                     'abs_refcat': vvvdr2fn,
                                     'nclip': 1,
+                                    # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
                                     })
 
         log.info(f"Running tweakreg ({module})")
@@ -287,12 +288,12 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
+        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
+                       'cloudc': 'regions/nircam_cloudc_fov.reg',
+                      }
         if filtername.lower() == 'f410m':
             vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
-            fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                        'cloudc': 'regions/nircam_cloudc_fov.reg',
-                        }
             if not os.path.exists(vvvdr2fn):
                 retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
             tweakreg_parameters['abs_refcat'] = abs_refcat = vvvdr2fn
@@ -308,7 +309,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 5000,
-                                    'snr_threshold': 5,
+                                    'snr_threshold': 20,
                                     'abs_refcat': abs_refcat,
                                     'nclip': 3,
                                     })
