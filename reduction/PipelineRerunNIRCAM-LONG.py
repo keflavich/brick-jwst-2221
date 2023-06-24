@@ -212,7 +212,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                       }
         if filtername.lower() == 'f410m':
         # for the VVV cat, use the merged version: no need for independent versions
-            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
+            abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
             if not os.path.exists(vvvdr2fn):
                 retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
@@ -223,14 +223,19 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
             reftblversion = reftbl.meta['VERSION']
-            tweakreg_parameters['abs_searchrad'] = 0.5
+
+            # truncate to top 10,000 sources
+            reftbl[:10000].writeto(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv')
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv'
+
+            tweakreg_parameters['abs_searchrad'] = 0.2
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 5000,
-                                    'snr_threshold': 20, # was 5, but that produced too many stars
-                                    'abs_refcat': vvvdr2fn,
-                                    'nclip': 1,
+                                    'snr_threshold': 15, # was 5, but that produced too many stars
+                                    'abs_refcat': abs_refcat,
+                                    'nclip': 5,
                                     # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
                                     })
 
@@ -303,15 +308,20 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
             reftblversion = reftbl.meta['VERSION']
-            tweakreg_parameters['abs_searchrad'] = 0.5
+
+            # truncate to top 10,000 sources
+            reftbl[:10000].writeto(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv')
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv'
+
+            tweakreg_parameters['abs_searchrad'] = 0.2
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 5000,
-                                    'snr_threshold': 20,
+                                    'snr_threshold': 15,
                                     'abs_refcat': abs_refcat,
-                                    'nclip': 3,
+                                    'nclip': 5,
                                     })
 
         log.info("Running tweakreg (merged)")

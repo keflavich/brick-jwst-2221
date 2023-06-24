@@ -10,10 +10,11 @@ def main():
     # filtername = 'F410M'
     # module = 'merged'
     # tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}_crowdsource_nsky0.fits"
-    
+
     # May 19, 2023: changed this to 'merged' b/c we can't keep going on with half a field; the workflow
     # relies on having a common catalog for both!
-    tblfilename = (f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
+    # June 24, 2023: changed to merged-reproject, which worked, while merged did not.
+    tblfilename = (f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
     tbl = Table.read(tblfilename)
 
     # reject sources with nondetections in F405N or F466N or bad matches
@@ -53,10 +54,11 @@ def main():
     sel &= ~any_saturated
     print(f"Making the reference catalog from {sel.sum()} out of {len(tbl)} catalog entries")
 
-    # include two columns to make it a table
-    reftbl = tbl['skycoord_f410m', 'skycoord_f405n', ][sel]
+    # include two columns to make it a table, plus abmag for sorting
+    reftbl = tbl['skycoord_f410m', 'skycoord_f405n', 'mag_ab_f410m' ][sel]
     reftbl['RA'] = reftbl['skycoord_f410m'].ra
     reftbl['DEC'] = reftbl['skycoord_f410m'].dec
+    reftbl.sort('mag_ab_f410m')
 
     reftbl.meta['VERSION'] = datetime.datetime.now().isoformat()
     reftbl.meta['PARENT_VERSION'] = tbl.meta['VERSION']
@@ -64,5 +66,7 @@ def main():
     reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv', overwrite=True)
     reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.fits', overwrite=True)
 
+    return reftbl
+
 if __name__ == "__main__":
-    main()
+    reftbl = main()
