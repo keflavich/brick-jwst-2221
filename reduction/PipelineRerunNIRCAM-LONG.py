@@ -32,7 +32,7 @@ from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
-from align_to_catalogs import realign_to_vvv, merge_a_plus_b, retrieve_vvv
+from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
 from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
 
 from destreak import destreak
@@ -58,6 +58,7 @@ basepath = '/orange/adamginsburg/jwst/brick/'
 def main(filtername, module, Observations=None, regionname='brick', field='001'):
     log.info(f"Processing filter {filtername} module {module}")
 
+    basepath = f'/orange/adamginsburg/jwst/{regionname}/'
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -69,7 +70,6 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
     elif regionname == 'cloudc':
         assert field == '002'
 
-    basepath = f'/orange/adamginsburg/jwst/{regionname}/'
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
@@ -215,6 +215,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
                       'cloudc': 'regions/nircam_cloudc_fov.reg',
                       }
+        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        reftbl = Table.read(abs_refcat)
+
         if filtername.lower() == 'f410m':
         # for the VVV cat, use the merged version: no need for independent versions
             abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
@@ -225,8 +228,6 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             tweakreg_parameters['abs_searchrad'] = 1
         else:
             # For non-F410M, try aligning to F410M instead of VVV?
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
-            reftbl = Table.read(abs_refcat)
             reftblversion = reftbl.meta['VERSION']
 
             # truncate to top 10,000 sources
@@ -242,7 +243,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
-                                    'brightest': 5000,
+                                    'brightest': 500,
                                     'snr_threshold': 30, # was 5, but that produced too many stars
                                     'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
@@ -277,8 +278,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
-        realigned = realign_to_catalog(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
-                                       catfile=abs_refcat, imfile=realigned_refcat_filename)
+        realigned = realign_to_catalog(reftbl['skycoord_f410m'],
+                                       filtername=filtername.lower(),
+                                       basepath=basepath, module=module,
+                                       fieldnumber=field,
+                                       imfile=realigned_refcat_filename)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
@@ -322,6 +326,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
+        reftbl = Table.read(abs_refcat)
+        reftblversion = reftbl.meta['VERSION']
+
         fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
                        'cloudc': 'regions/nircam_cloudc_fov.reg',
                       }
@@ -335,8 +342,6 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         else:
             # For non-F410M, try aligning to F410M instead of VVV?
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
-            reftbl = Table.read(abs_refcat)
-            reftblversion = reftbl.meta['VERSION']
 
             # truncate to top 10,000 sources
             reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
@@ -348,7 +353,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 5000,
+                                    'brightest': 500,
                                     'snr_threshold': 30,
                                     'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
@@ -381,8 +386,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
-        realigned = realign_to_catalog(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
-                                       catfile=abs_refcat, imfile=realigned_refcat_filename)
+        realigned = realign_to_catalog(reftbl['skycoord_f410m'],
+                                       filtername=filtername.lower(),
+                                       basepath=basepath, module=module,
+                                       fieldnumber=field,
+                                       imfile=realigned_refcat_filename)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:

@@ -6,6 +6,7 @@ from astroquery.gaia import Gaia
 import regions
 from astroquery.vizier import Vizier
 from astropy.visualization import quantity_support
+from astropy import log
 from astropy.table import Table
 import warnings
 
@@ -96,6 +97,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     # 7e-8 is the empirical MJy/sr in one pixel-to-ABmag-flux conversion
     # it seems to hold for all of the fields, kinda?
     sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
+    log.info(f"For {filtername} {module} {fieldnumber} catalog {catfile}, found {sel.sum()} of {sel.size} sources meeting criteria")
 
     if sel.sum() == 0:
         print(f"min flux: {np.nanmin(flux)}, max flux: {np.nanmax(flux)}")
