@@ -58,6 +58,11 @@ basepath = '/orange/adamginsburg/jwst/brick/'
 def main(filtername, module, Observations=None, regionname='brick', field='001'):
     log.info(f"Processing filter {filtername} module {module}")
 
+    fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
+    row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
+    fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
+    fwhm_pix = float(row['PSF FWHM (pixel)'][0])
+
     # sanity check
     if regionname == 'brick':
         assert field == '001'
@@ -238,10 +243,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
                                     'brightest': 5000,
-                                    'snr_threshold': 15, # was 5, but that produced too many stars
+                                    'snr_threshold': 30, # was 5, but that produced too many stars
                                     'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
                                     'catalog_format': 'ecsv',
+                                    'kernel_fwhm': fwhm_pix,
                                     'nclip': 5,
                                     # based on DebugReproduceTweakregStep
                                     'sharplo': 0.3,
@@ -343,10 +349,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     'brightest': 5000,
-                                    'snr_threshold': 15,
+                                    'snr_threshold': 30,
                                     'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
                                     'catalog_format': 'ecsv',
+                                    'kernel_fwhm': fwhm_pix,
                                     'nclip': 5,
                                     'sharplo': 0.3,
                                     'sharphi': 0.9,
