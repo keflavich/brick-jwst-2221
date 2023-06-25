@@ -225,17 +225,30 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             reftblversion = reftbl.meta['VERSION']
 
             # truncate to top 10,000 sources
-            reftbl[:10000].writeto(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv')
+            reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv'
 
             tweakreg_parameters['abs_searchrad'] = 0.2
+            # try forcing searchrad to be tighter to avoid bad crossmatches
+            # (the raw data are very well-aligned to begin with, though CARTA
+            # can't display them b/c they are using SIP)
+            tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
         tweakreg_parameters.update({'fitgeometry': 'general',
+                                    # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
                                     'brightest': 5000,
                                     'snr_threshold': 15, # was 5, but that produced too many stars
                                     'abs_refcat': abs_refcat,
+                                    'save_catalogs': True,
+                                    'catalog_format': 'ecsv',
                                     'nclip': 5,
+                                    # based on DebugReproduceTweakregStep
+                                    'sharplo': 0.3,
+                                    'sharphi': 0.9,
+                                    'roundlo': -0.25,
+                                    'roundhi': 0.25,
+                                    'separation': 0.5, # minimum separation; default is 1
                                     # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
                                     })
 
@@ -248,10 +261,20 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_each}")
 
         log.info(f"Realigning to VVV (module={module}")
-        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field)
-        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits', overwrite=True)
+        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                    realigned_vvv_filename)
+        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
+                                   imfile=realigned_vvv_filename)
 
-        log.info("Removing saturated stars")
+        log.info(f"Realigning to refcat (module={module}")
+        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                    realigned_refcat_filename)
+        realigned = realign_to_catalog(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
+                                       catfile=abs_refcat, imfile=realigned_refcat_filename)
+
+        log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
             remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
             remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
@@ -310,10 +333,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             reftblversion = reftbl.meta['VERSION']
 
             # truncate to top 10,000 sources
-            reftbl[:10000].writeto(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv')
+            reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog_truncated10000.ecsv'
 
             tweakreg_parameters['abs_searchrad'] = 0.2
+            tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
 
@@ -321,7 +345,14 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                     'brightest': 5000,
                                     'snr_threshold': 15,
                                     'abs_refcat': abs_refcat,
+                                    'save_catalogs': True,
+                                    'catalog_format': 'ecsv',
                                     'nclip': 5,
+                                    'sharplo': 0.3,
+                                    'sharphi': 0.9,
+                                    'roundlo': -0.25,
+                                    'roundhi': 0.25,
+                                    'separation': 0.5, # minimum separation; default is 1
                                     })
 
         log.info("Running tweakreg (merged)")
@@ -332,9 +363,19 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             save_results=True)
         print(f"DONE running {asn_file_merged}")
 
-        log.info("Realigning to VVV (module=merged)")
-        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module='merged', fieldnumber=field)
-        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits', overwrite=True)
+        log.info(f"Realigning to VVV (module={module}")
+        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                    realigned_vvv_filename)
+        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
+                                   imfile=realigned_vvv_filename)
+
+        log.info(f"Realigning to refcat (module={module}")
+        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                    realigned_refcat_filename)
+        realigned = realign_to_catalog(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
+                                       catfile=abs_refcat, imfile=realigned_refcat_filename)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
