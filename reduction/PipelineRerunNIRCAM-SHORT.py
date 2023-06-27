@@ -208,7 +208,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         # image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 2000,
+                                    'brightest': 500,
                                     'snr_threshold': 15,
                                     'peakmax': 1400,
                                     'nclip': 7,
@@ -217,6 +217,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                     'abs_refcat': abs_refcat,
                                     'separation': 0.5,
                                     'tolerance': 0.3,
+                                    'sharplo': 0.3,
+                                    'sharphi': 0.9,
+                                    'roundlo': -0.25,
+                                    'roundhi': 0.25,
                                              })
 
         calwebb_image3.Image3Pipeline.call(
@@ -290,7 +294,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         #image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 2000,
+                                    'brightest': 500,
                                     'snr_threshold': 15,
                                     'peakmax': 1400,
                                     'nclip': 7,
@@ -299,6 +303,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                     'abs_refcat': abs_refcat,
                                     'separation': 0.6,
                                     'tolerance': 0.3,
+                                    'sharplo': 0.3,
+                                    'sharphi': 0.9,
+                                    'roundlo': -0.25,
+                                    'roundhi': 0.25,
                                    })
 
         calwebb_image3.Image3Pipeline.call(

@@ -1,4 +1,6 @@
 import numpy as np
+import datetime
+import os
 import sys, imp
 import regions
 import warnings
@@ -93,3 +95,10 @@ basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_
 basetable_merged = basetable
 basetable_nrca = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
 basetable_nrcb = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrcb_photometry_tables_merged.fits')
+
+def getmtime(x):
+    datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
+
+for module in ('nrca', 'nrcb', 'merged', 'merged-reproject'):
+    fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
+    print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")

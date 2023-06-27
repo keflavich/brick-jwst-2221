@@ -430,8 +430,7 @@ if __name__ == "__main__":
 
     field_to_reg_mapping = {'001': 'brick', '002': 'cloudc'}
 
-    #for field in fields:
-    for field in ('001',):
+    for field in fields:
         for filtername in filternames:
             for module in modules:
                 print(f"Main Loop: {filtername} + {module} + {field}")
