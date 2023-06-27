@@ -38,6 +38,7 @@ from astropy import units as u
 
 from analysis_setup import (basepath, reg, regzoom, distance_modulus,
                             filternames, basetable, plot_tools, basetable,
+                            basetable_merged_reproject,
                             basetable_merged, basetable_nrca, basetable_nrcb,
                             )
 from plot_tools import regzoomplot, starzoom
