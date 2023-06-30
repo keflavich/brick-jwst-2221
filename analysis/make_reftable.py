@@ -3,7 +3,40 @@ import datetime
 from astropy import units as u
 from astropy.table import Table
 
+
+
 def main():
+    """
+    June 28, 2023: decided to switch to F405N-only reference
+    """
+    basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
+
+    tblfilename = (f'{basepath}/F405N/f405n_merged-reproject_crowdsource_nsky0.fits')
+    tbl = Table.read(tblfilename)
+
+    sel = ((tbl['qf'] > 0.95) & (tbl['spread_model'] < 0.25) & (tbl['fracflux'] > 0.9) & (tbl['flux'] > 0))
+
+    print(f"QFs are good for {sel.sum()} out of {len(tbl)} catalog entries")
+    print(f"Making the reference catalog from {sel.sum()} out of {len(tbl)} catalog entries")
+
+    # include two columns to make it a table, plus abmag for sorting
+    reftbl = tbl['skycoord', 'flux' ][sel]
+    reftbl['RA'] = reftbl['skycoord'].ra
+    reftbl['DEC'] = reftbl['skycoord'].dec
+    reftbl.sort('flux', reverse=True) # descending
+
+    reftbl.meta['VERSION'] = datetime.datetime.now().isoformat()
+    if 'VERSION' in tbl.meta:
+        reftbl.meta['PARENT_VERSION'] = tbl.meta['VERSION']
+
+    reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv', overwrite=True)
+    reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', overwrite=True)
+
+    return reftbl
+
+
+
+def main_old():
     basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
     long_filternames = ['f410m', 'f405n', 'f466n']
 
