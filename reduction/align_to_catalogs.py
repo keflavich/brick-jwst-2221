@@ -1,4 +1,5 @@
 import numpy as np
+import shutil
 import os
 import astropy.units as u
 from astropy.coordinates import SkyCoord
@@ -20,13 +21,40 @@ def print(*args, **kwargs):
     from builtins import print as printfunc
     return printfunc(f"{now}:", *args, **kwargs)
 
-def main():
-    for filtername in ('f182m', 'f187n', 'f212n', 'f405n', 'f410m', 'f466n'):
-        for module in ('nrca', 'nrcb'):
+def main(field='001', 
+         basepath = '/orange/adamginsburg/jwst/brick/',):
+    for filtername in ( 'f405n', 'f410m', 'f466n', 'f182m', 'f187n', 'f212n',):
+        print()
+        print(f"Filter = {filtername}")
+        for module in ('nrca', 'nrcb', 'merged', ): #'merged-reproject'):
+            # merged-reproject shouldn't need realignment b/c it should be made from realigned images
 
             print(filtername, module)
+            log.info(f"Realigning to vvv (module={module}")
 
-            realign_to_vvv(filtername=filtername, module=module)
+            realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                        realigned_vvv_filename)
+            realigned = realign_to_vvv(filtername=filtername.lower(),
+                                    basepath=basepath, module=module, fieldnumber=field,
+                                    imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m'
+                                    else 11, mag_limit=15)
+
+            log.info(f"Realigning to refcat (module={module}")
+    
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            reftbl = Table.read(abs_refcat)
+
+            realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                        realigned_refcat_filename)
+            realigned = realign_to_catalog(reftbl['skycoord'],
+                                        filtername=filtername.lower(),
+                                        basepath=basepath, module=module,
+                                        fieldnumber=field,
+                                        mag_limit=20,
+                                        imfile=realigned_refcat_filename)
+
 
 def retrieve_vvv(
     basepath = '/orange/adamginsburg/jwst/brick/',
@@ -71,19 +99,33 @@ def realign_to_vvv(
     catfile = None,
     fov_regname='regions/nircam_brick_fov.reg',
     fieldnumber='001',
+    ksmag_limit=15,
+    mag_limit=15,
 ):
+    """
+    ksmag_limit is a *lower* limit (we want fainter sources from VVV), while mag_limit is an *upper limit* - we want brighter sources from JWST
+    """
 
     vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname, fieldnumber=fieldnumber)
 
+    if ksmag_limit:
+        ksmag_sel = vvvdr2['Ksmag3'] > ksmag_limit
+        log.info(f"Kept {ksmag_sel.sum()} out of {len(vvvdr2)} VVV stars using ksmag_limit>{ksmag_limit}")
+        vvvdr2_crds = vvvdr2_crds[ksmag_sel]
+
     return realign_to_catalog(vvvdr2_crds, filtername=filtername,
                               module=module, basepath=basepath,
-                              catfile=catfile, imfile=imfile)
+                              catfile=catfile, imfile=imfile,
+                              mag_limit=15,
+                              )
 
 
 def realign_to_catalog(reference_coordinates, filtername='f212n',
                        module='nrca',
                        basepath='/orange/adamginsburg/jwst/brick/',
                        fieldnumber='001',
+                       max_offset=0.4*u.arcsec,
+                       mag_limit=15,
                        catfile=None, imfile=None):
     if catfile is None:
         catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
@@ -93,14 +135,18 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     cat = Table.read(catfile)
 
     # HACKETY HACK HACK filtering by flux
-    flux = (cat['aper30_abmag'].value * u.ABmag).to(u.Jy)
+    #flux = (cat['aper30_abmag'].value * u.ABmag).to(u.Jy)
     # 7e-8 is the empirical MJy/sr in one pixel-to-ABmag-flux conversion
     # it seems to hold for all of the fields, kinda?
-    sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
-    log.info(f"For {filtername} {module} {fieldnumber} catalog {catfile}, found {sel.sum()} of {sel.size} sources meeting criteria")
+    #sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
+    
+    # Manual checking in CARTA: didn't look like any good matches at mag>15
+    mag = cat['aper_total_vegamag']
+    sel = mag < mag_limit
+    log.info(f"For {filtername} {module} {fieldnumber} catalog {catfile}, found {sel.sum()} of {sel.size} sources meeting criteria mag<{mag_limit}")
 
     if sel.sum() == 0:
-        print(f"min flux: {np.nanmin(flux)}, max flux: {np.nanmax(flux)}")
+        print(f"min mag: {np.nanmin(mag)}, max mag: {np.nanmax(mag)}")
         raise ValueError("No sources passed basic selection criteria")
 
     skycrds_cat_orig = cat['sky_centroid']
@@ -109,7 +155,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         ww =  WCS(fits.getheader(imfile, ext=('SCI', 1)))
     skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], 0.4*u.arcsec)
+    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
     dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
@@ -174,11 +220,14 @@ def merge_a_plus_b(filtername,
     basepath = '/orange/adamginsburg/jwst/brick/',
     parallel=True,
     fieldnumber='001',
+    suffix='realigned-to-vvv',
+    outsuffix='merged-reproject'
     ):
+    """suffix can be realigned-to-vvv, realigned-to-refcat, or i2d"""
     import reproject
     from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
-    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_i2d.fits'
-    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_i2d.fits'
+    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_{suffix}.fits'
+    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_{suffix}.fits'
     files = [filename_nrca, filename_nrcb]
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
@@ -209,7 +258,9 @@ def merge_a_plus_b(filtername,
                          fits.ImageHDU(data=merged_err, name='ERR', header=header),
                          fits.ImageHDU(data=weightmap, name='WHT', header=header),
                         ])
-    hdul.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-merged-reproject_i2d.fits', overwrite=True)
+    outfn = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-{outsuffix}_i2d.fits'
+    hdul.writeto(outfn, overwrite=True)
+    return outfn
 
 def mihais_versin():
     """

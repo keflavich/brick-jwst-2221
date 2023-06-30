@@ -198,7 +198,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             json.dump(asn_data, fh)
 
         # reference to long-wavelength catalogs
-        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
         reftbl = Table.read(abs_refcat)
         reftblversion = reftbl.meta['VERSION']
         print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
@@ -246,7 +246,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits')
 
 
-    if module in ('nrcb', 'merged'):
+    if module in ('nrcb', ):
+        # June 30, 2023: previously, this was also being done for 'merged', but it timed out at that step, which appears to take >3 days
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules", flush=True)
         merge_a_plus_b(filtername)
@@ -287,7 +288,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         # else:
         #     print(f"Did not find VVV catalog {vvvdr2fn}")
 
-        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
 
         #image3.tweakreg.searchrad = 1 # 1 arcsec instead of 2
         #image3.tweakreg.separation = 0.6 # min separation 0.4 arcsec instead of 1 (Mihai suggesteed separation = 2x tolerance)
@@ -317,7 +318,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_merged}")
 
 
-        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-long_reference_astrometric_catalog.ecsv'
+        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
         reftbl = Table.read(abs_refcat)
         reftblversion = reftbl.meta['VERSION']
         print(f"Reference catalog is {abs_refcat} with version {reftblversion}")

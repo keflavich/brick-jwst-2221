@@ -421,8 +421,9 @@ def ccds_withiso(basetable, sel=True,
     return fig
 
 
-def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0.13*u.arcsec,
-                sel=None, axlims=[-0.5, 0.5, -0.5, 0.5]):
+def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames,
+                maxsep=0.13*u.arcsec, obsid='001', sel=None, axlims=[-0.5, 0.5, -0.5, 0.5],
+                regs=['brick_nrca.reg', 'brick_nrcb.reg']):
     statsd = {}
     fig1 = pl.figure(1)
     fig2 = pl.figure(2)
@@ -432,6 +433,9 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0
     basetable = basetable[sel]
 
     basecrds = basetable[f'skycoord_{ref_filter}']
+
+    refhdr = fits.getheader(f'{basepath}/{ref_filter.upper()}/pipeline/jw02221-o{obsid}_t001_nircam_clear-{ref_filter}-merged-reproject_i2d.fits')
+    refwcs = WCS(refhdr)
 
     gridspec = sqgrid.get_grid(5)
     ii = 0
@@ -449,8 +453,16 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames, maxsep=0
         decdiff = (crds.dec-basecrds.dec[thissel]).to(u.arcsec)
         sep = basetable[f'sep_{filtername}'][thissel].quantity.to(u.arcsec)
         ok = sep < maxsep
+
         ax.scatter(radiff, decdiff, marker=',', s=1, alpha=0.1)
-        ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=0.1)
+        if regs is None:
+            ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=0.1)
+        else:
+            for reg in regs:
+                reg = regions.Regions.read(f'{basepath}/regions/{reg}')[0]
+                match = reg.contains(crds, refwcs)
+                ax.scatter(radiff[ok & match], decdiff[ok & match], marker=',', s=1, alpha=0.1)
+
         ax.axis(axlims)
         ax.set_title(filtername)
 

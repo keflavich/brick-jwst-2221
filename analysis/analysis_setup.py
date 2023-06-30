@@ -97,7 +97,7 @@ basetable_nrca = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photome
 basetable_nrcb = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrcb_photometry_tables_merged.fits')
 
 def getmtime(x):
-    datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
 for module in ('nrca', 'nrcb', 'merged', 'merged-reproject'):
     fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
