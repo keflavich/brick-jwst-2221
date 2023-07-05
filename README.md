@@ -41,3 +41,4 @@ The analysis has been done haphazardly in notebooks, but then I tried to reconci
  * `co_fundamental_modeling.py` - extracts from the CO2_PhoenixModel.ipynb, CO2_Phoenix_Example.ipynb, and COFundamentalModeling_and_IceModeling.ipynb notebooks.  This script produces a wider range of models than those notebooks
  * `plot_tools.py` - contains many plot templates for color-color, color-magnitude, etc.
  * `selections.py` - downselects from the full merged catalog of NIRCAM data of the brick, in all 6 filters, to the subset(s) that are reliable
+ * `ColorVsCOIceAnalysis.ipynb` - makes several color-color plots

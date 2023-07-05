@@ -21,7 +21,7 @@ def print(*args, **kwargs):
     from builtins import print as printfunc
     return printfunc(f"{now}:", *args, **kwargs)
 
-def main(field='001', 
+def main(field='001',
          basepath = '/orange/adamginsburg/jwst/brick/',):
     for filtername in ( 'f405n', 'f410m', 'f466n', 'f182m', 'f187n', 'f212n',):
         print()
@@ -41,7 +41,7 @@ def main(field='001',
                                     else 11, mag_limit=15)
 
             log.info(f"Realigning to refcat (module={module}")
-    
+
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
 
@@ -139,7 +139,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     # 7e-8 is the empirical MJy/sr in one pixel-to-ABmag-flux conversion
     # it seems to hold for all of the fields, kinda?
     #sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
-    
+
     # Manual checking in CARTA: didn't look like any good matches at mag>15
     mag = cat['aper_total_vegamag']
     sel = mag < mag_limit

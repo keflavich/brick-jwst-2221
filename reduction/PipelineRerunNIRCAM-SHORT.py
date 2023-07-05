@@ -208,9 +208,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         # image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 500,
+                                    'brightest': 200,
                                     'snr_threshold': 15,
-                                    'peakmax': 1400,
+                                    #'peakmax': 1400,
                                     'nclip': 7,
                                     'searchrad': 1,
                                     'abs_searchrad': 0.5,
@@ -225,14 +225,18 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         calwebb_image3.Image3Pipeline.call(
             asn_file_each,
-            steps={'tweakreg': tweakreg_parameters,},
+            steps={'tweakreg': tweakreg_parameters,
+                   # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
+                   'skymatch': {'save_results': True, 'skip': True,
+                                'skymethod': 'match', 'match_down': False},
+                  },
             output_dir=output_dir,
             save_results=True)
         print(f"DONE running {asn_file_each}")
 
         # realignment shouldn't be necessary, but at least the diagnostics from this
         # are useful
-        realigned = realign_to_catalog(reftbl['skycoord_f410m'],
+        realigned = realign_to_catalog(reftbl['skycoord'],
                                        filtername=filtername.lower(),
                                        module=module,
                                        fieldnumber=field)
@@ -295,9 +299,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         #image3.tweakreg.tolerance = 0.3 # max tolerance 0.2 instead of 0.7
 
         tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 500,
+                                    'brightest': 200,
                                     'snr_threshold': 15,
-                                    'peakmax': 1400,
+                                    #'peakmax': 1400,
                                     'nclip': 7,
                                     'searchrad': 1,
                                     'abs_searchrad': 0.5,
@@ -312,7 +316,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         calwebb_image3.Image3Pipeline.call(
             asn_file_merged,
-            steps={'tweakreg': tweakreg_parameters,},
+            steps={'tweakreg': tweakreg_parameters,
+                   # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
+                   'skymatch': {'save_results': True, 'skip': True,
+                                'skymethod': 'match', 'match_down': False},
+                  },
             output_dir=output_dir,
             save_results=True)
         print(f"DONE running {asn_file_merged}")
@@ -323,7 +331,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         reftblversion = reftbl.meta['VERSION']
         print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
-        realigned = realign_to_catalog(reftbl['skycoord_f410m'],
+        realigned = realign_to_catalog(reftbl['skycoord'],
                                        filtername=filtername.lower(),
                                        module=module,
                                        fieldnumber=field)

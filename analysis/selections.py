@@ -270,12 +270,29 @@ if __name__ == "__main__":
     print(f"Selecting module {options.module}")
 
     # save nrca and nrcb result tables
+    print()
+    print("NRCA")
     from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
     result = main(basetable_nrca, ww=ww)
     globals().update({key+"_a": val for key, val in result.items()})
+
+    print()
+    print("NRCB")
     from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
     result = main(basetable_nrcb, ww=ww)
     globals().update({key+"_b": val for key, val in result.items()})
+
+    print()
+    print("merged-reproject")
+    from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
+    result = main(basetable_merged_reproject, ww=ww)
+    globals().update({key+"_mr": val for key, val in result.items()})
+
+    print()
+    print("merged")
+    from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+    result = main(basetable_merged, ww=ww)
+    globals().update({key+"_m": val for key, val in result.items()})
 
     if options.module == 'nrca':
         from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww

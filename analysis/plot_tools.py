@@ -478,6 +478,12 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames,
             'med_thr': np.median(sep[ok]),
             'mad_thr': stats.mad_std(sep[ok]),
             'std_thr': np.std(sep[ok]),
+            '10pct': np.percentile(sep, 10),
+            '1pct': np.percentile(sep, 1),
+            '0.1pct': np.percentile(sep, 0.1),
+            '90pct': np.percentile(sep, 90),
+            '99pct': np.percentile(sep, 99),
+            '99.9pct': np.percentile(sep, 99.9),
         }
         ii+=1
 
