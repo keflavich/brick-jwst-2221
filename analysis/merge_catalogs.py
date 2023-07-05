@@ -29,8 +29,12 @@ pl.rcParams['figure.dpi'] = 100
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 
+
+def getmtime(x):
+    return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
+
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
-                   ref_filter='f410m',
+                   ref_filter='f405n',
                    max_offset=0.15*u.arcsec):
     basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
@@ -176,6 +180,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
 
 def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
+    print()
     imgfns = [x
           for filn in filternames
           for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/"
@@ -192,6 +197,8 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
              ]
     if len(catfns) != 6:
         raise ValueError(f"len(catfns) = {len(catfns)}.  catfns: {catfns}")
+    for catfn in catfns:
+        print(catfn, getmtime(catfn))
     tbls = [Table.read(catfn) for catfn in catfns]
 
     for catfn, tbl in zip(catfns, tbls):
