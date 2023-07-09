@@ -1,0 +1,30 @@
+# Region file format: DS9 version 4.1
+global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1
+galactic
+point(0.2708176,0.0294995) # point=x
+point(0.2678877,0.0213613) # point=x
+point(0.2658047,0.0157515) # point=x
+point(0.2733126,0.0389353) # point=x
+point(0.2786164,0.0373779) # point=x
+point(0.2802291,0.0329700) # point=x
+point(0.2613465,0.0131490) # point=x
+point(0.2588993,0.0080538) # point=x
+point(0.2508713,0.0033902) # point=x
+point(0.2501965,0.0044776) # point=x
+point(0.2487719,0.0037243) # point=x
+point(0.2441802,-0.0004108) # point=x
+point(0.2371447,0.0020825) # point=x
+point(0.2397733,0.0025438) # point=x
+point(0.2341759,-0.0009127) # point=x
+point(0.2300046,-0.0031660) # point=x
+point(0.2311767,-0.0039857) # point=x
+point(0.2330941,0.0038361) # point=x
+point(0.2272421,-0.0126387) # point=x
+point(0.2490355,0.0050243) # point=x
+point(0.2660201,0.0210765) # point=x
+point(0.2734985,0.0391708) # point=x
+point(0.2741683,0.0395589) # point=x
+point(0.2769080,0.0389461) # point=x
+point(0.2775056,0.0393192) # point=x
+point(0.2769927,0.0424023) # point=x
+point(0.2786695,0.0333382) # point=x

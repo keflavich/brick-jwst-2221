@@ -1,4 +1,4 @@
 # Region file format: DS9 CARTA 3.0.0-beta.3
 global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1
 fk5
-ellipse(-93.455710351, -28.704933061, 19.2174", 19.1296", 90) # color=#2EE6D6 width=2
+ellipse(-93.455710351, -28.704933061, 19.2174", 19.1296", 90) # color=#2EE6D6 width=2 text={Dan's region}
