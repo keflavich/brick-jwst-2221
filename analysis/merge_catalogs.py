@@ -238,7 +238,9 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
         if hasattr(tbl['flux'], 'mask'):
             print(f'ab mag has mask sum = {tbl["flux"].mask.sum()} masked values')
 
-    merge_catalogs(tbls, catalog_type=f'crowdsource{suffix}', module=module)
+    merge_catalogs(tbls,
+                   catalog_type=f'crowdsource{suffix}{"_desat" if desat else ""}{"_bgsub" if bgsub else ""}',
+                   module=module)
 
 
 def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False):
