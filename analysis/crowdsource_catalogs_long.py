@@ -305,8 +305,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             if isinstance(grid, list):
                 print(f"Grid is a list: {grid}")
                 psf_model = WrappedPSFModel(grid[0])
+                dao_psf_model = grid[0]
             else:
                 psf_model = WrappedPSFModel(grid)
+                dao_psf_model = grid
             psf_model_blur = psf_model
 
             ww = wcs.WCS(im1[1].header)
@@ -574,7 +576,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 phot = BasicPSFPhotometry(finder=daofind_tuned,#finder_maker(),
                                         group_maker=daogroup,
                                         bkg_estimator=None, # must be none or it un-saturates pixels
-                                        psf_model=grid,
+                                        psf_model=dao_psf_model,
                                         fitter=LevMarLSQFitter(),
                                         fitshape=(11, 11),
                                         aperture_radius=5*fwhm_pix)
@@ -620,7 +622,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 # iterative takes for-ev-er
                 phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_tuned, group_maker=daogroup,
                                                             bkg_estimator=mmm_bkg,
-                                                            psf_model=grid,
+                                                            psf_model=dao_psf_model,
                                                             fitter=LevMarLSQFitter(),
                                                             niters=2, fitshape=(11, 11),
                                                             aperture_radius=2*fwhm_pix)
