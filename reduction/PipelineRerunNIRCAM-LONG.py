@@ -215,8 +215,6 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
                       'cloudc': 'regions/nircam_cloudc_fov.reg',
                       }
-        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
-        reftbl = Table.read(abs_refcat)
 
         if filtername.lower() == 'f405n':
         # for the VVV cat, use the merged version: no need for independent versions
@@ -227,6 +225,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
         else:
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            reftbl = Table.read(abs_refcat)
             # For non-F410M, try aligning to F410M instead of VVV?
             reftblversion = reftbl.meta['VERSION']
 
@@ -327,9 +327,6 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
-        abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
-        reftbl = Table.read(abs_refcat)
-        reftblversion = reftbl.meta['VERSION']
 
         fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
                        'cloudc': 'regions/nircam_cloudc_fov.reg',
@@ -341,7 +338,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                 retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
             tweakreg_parameters['abs_refcat'] = abs_refcat = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
+            reftbl = Table.read(abs_refcat)
         else:
+            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            reftbl = Table.read(abs_refcat)
+            reftblversion = reftbl.meta['VERSION']
             # For non-F410M, try aligning to F410M instead of VVV?
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
 
