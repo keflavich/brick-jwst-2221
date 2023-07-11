@@ -21,9 +21,14 @@ import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
+from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars
+from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
 from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D
 
+import warnings
+from astropy.utils.exceptions import AstropyWarning, AstropyDeprecationWarning
+warnings.simplefilter('ignore', category=AstropyWarning)
+warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
@@ -356,7 +361,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             pixscale = ww.proj_plane_pixel_area()**0.5
             #fwhm_pix = (fwhm / pixscale).decompose().value
 
-            daogroup = DAOGroup(2 * fwhm_pix)
+            #daogroup = DAOGroup(2 * fwhm_pix)
+            grouper = SourceGrouper(2 * fwhm_pix)
             mmm_bkg = MMMBackground()
 
             filtered_errest = stats.sigma_clipped_stats(data, stdfunc='mad_std')
@@ -369,6 +375,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                           sharplo=0.30, sharphi=1.40)
             print("Finding stars with daofind_tuned", flush=True)
             finstars = daofind_tuned(np.nan_to_num(data))
+
+            print(f"Found {len(finstars)} with daofind_tuned", flush=True)
             # for diagnostic plotting convenience
             finstars['x'] = finstars['xcentroid']
             finstars['y'] = finstars['ycentroid']
@@ -573,17 +581,20 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             if options.daophot:
                 t0 = time.time()
                 print("Starting basic PSF photometry", flush=True)
-                phot = BasicPSFPhotometry(finder=daofind_tuned,#finder_maker(),
-                                        group_maker=daogroup,
-                                        bkg_estimator=None, # must be none or it un-saturates pixels
-                                        psf_model=dao_psf_model,
-                                        fitter=LevMarLSQFitter(),
-                                        fitshape=(11, 11),
-                                        aperture_radius=5*fwhm_pix)
+
+                phot = PSFPhotometry(finder=daofind_tuned,#finder_maker(),
+                                     #grouper=grouper,
+                                     localbkg_estimator=None, # must be none or it un-saturates pixels
+                                     psf_model=dao_psf_model,
+                                     fitter=LevMarLSQFitter(),
+                                     fit_shape=(5, 5),
+                                     aperture_radius=2*fwhm_pix,
+                                     progress_bar=True,
+                                    )
 
                 print("About to do BASIC photometry....")
                 result = phot(np.nan_to_num(data))
-                print(f"Done with BASIC photometry.  dt={time.time() - t0}")
+                print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
                 coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
                 print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
                 result['skycoord_centroid'] = coords
@@ -620,15 +631,20 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             if options.daophot:
                 t0 = time.time()
                 # iterative takes for-ev-er
-                phot_ = IterativelySubtractedPSFPhotometry(finder=daofind_tuned, group_maker=daogroup,
-                                                            bkg_estimator=mmm_bkg,
-                                                            psf_model=dao_psf_model,
-                                                            fitter=LevMarLSQFitter(),
-                                                            niters=2, fitshape=(11, 11),
-                                                            aperture_radius=2*fwhm_pix)
+                phot_ = IterativePSFPhotometry(finder=daofind_tuned,
+                                               #grouper=grouper,
+                                               bkg_estimator=mmm_bkg,
+                                               psf_model=dao_psf_model,
+                                               fitter=LevMarLSQFitter(),
+                                               maxiters=2,
+                                               fit_shape=(5, 5),
+                                               aperture_radius=2*fwhm_pix,
+                                               progress_bar=True
+                                              )
 
+                print("About to do ITERATIVE photometry....")
                 result2 = phot_(data)
-                print(f"Done with ITERATIVE photometry.  dt={time.time() - t0}")
+                print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
                 coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
                 result2['skycoord_centroid'] = coords2
                 print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
