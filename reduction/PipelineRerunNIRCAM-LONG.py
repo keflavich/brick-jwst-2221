@@ -372,11 +372,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         log.info("Running tweakreg (merged)")
         calwebb_image3.Image3Pipeline.call(
-            asn_file,
+            asn_file_merged,
             steps={'tweakreg': tweakreg_parameters,},
             output_dir=output_dir,
             save_results=True)
-        print(f"DONE running {asn_file_merged}")
+        print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
         log.info(f"Realigning to VVV (module={module}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
