@@ -633,7 +633,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 # iterative takes for-ev-er
                 phot_ = IterativePSFPhotometry(finder=daofind_tuned,
                                                #grouper=grouper,
-                                               bkg_estimator=mmm_bkg,
+                                               localbkg_estimator=mmm_bkg,
                                                psf_model=dao_psf_model,
                                                fitter=LevMarLSQFitter(),
                                                maxiters=2,

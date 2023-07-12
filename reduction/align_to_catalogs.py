@@ -78,17 +78,27 @@ def retrieve_vvv(
         vvvdr2 = Table.read(vvvdr2filename)
         vvvdr2['RA'] = vvvdr2['RAJ2000']
         vvvdr2['DEC'] = vvvdr2['DEJ2000']
+
+        # FK5 because it says 'J2000' on the Vizier page (same as twomass)
+        vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
+        if 'skycoord' not in vvvdr2.colnames:
+            vvvdr2['skycoord'] = vvvdr2_crds
+            vvvdr2.write(vvvdr2filename, overwrite=True)
+            vvvdr2.write(vvvdr2filename.replace(".ecsv", ".fits"), overwrite=True)
     else:
         Vizier.ROW_LIMIT = 5e4
         vvvdr2 = Vizier.query_region(coordinates=coord, width=width, height=height, catalog=['II/348/vvv2'])[0]
         vvvdr2['RA'] = vvvdr2['RAJ2000']
         vvvdr2['DEC'] = vvvdr2['DEJ2000']
+
+        # FK5 because it says 'J2000' on the Vizier page (same as twomass)
+        vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
+        vvvdr2['skycoord'] = vvvdr2_crds
+
         vvvdr2.write(vvvdr2filename, overwrite=True)
         vvvdr2.write(vvvdr2filename.replace(".ecsv", ".fits"), overwrite=True)
 
-    # FK5 because it says 'J2000' on the Vizier page (same as twomass)
-    vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
-
+    assert 'skycoord' in vvvdr2.colnames
     return vvvdr2_crds, vvvdr2
 
 def realign_to_vvv(
