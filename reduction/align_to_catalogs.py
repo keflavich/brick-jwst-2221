@@ -125,6 +125,7 @@ def realign_to_vvv(
 
     return realign_to_catalog(vvvdr2_crds, filtername=filtername,
                               module=module, basepath=basepath,
+                              fieldnumber=fieldnumber,
                               catfile=catfile, imfile=imfile,
                               mag_limit=15,
                               )
