@@ -224,6 +224,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                 retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
+            assert 'skycoord' in reftbl.colnames
         else:
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
@@ -339,12 +340,12 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             tweakreg_parameters['abs_refcat'] = abs_refcat = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
             reftbl = Table.read(abs_refcat)
+            assert 'skycoord' in reftbl.colnames
         else:
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
+            assert 'skycoord' in reftbl.colnames
             reftblversion = reftbl.meta['VERSION']
-            # For non-F410M, try aligning to F410M instead of VVV?
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
 
             # truncate to top 10,000 sources
             reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)

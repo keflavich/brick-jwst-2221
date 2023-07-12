@@ -323,7 +323,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                   },
             output_dir=output_dir,
             save_results=True)
-        print(f"DONE running {asn_file_merged}")
+        print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
 
         abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
