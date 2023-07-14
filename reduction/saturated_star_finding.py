@@ -140,7 +140,7 @@ def get_psf(header, path_prefix='.'):
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+    with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     from astroquery.mast import Mast
 
