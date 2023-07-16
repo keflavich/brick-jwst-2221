@@ -471,9 +471,10 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames,
         #ax2.set_xlabel("Separation (\")")
         ax2.set_title(filtername)
 
+        print(f"sep: {sep}, std(sep): {np.std(sep)}")
         statsd[filtername] = {
             'med': np.median(sep),
-            'mad': stats.mad_std(sep),
+            'mad': stats.mad_std(sep.copy()),
             'std': np.std(sep),
             'med_thr': np.median(sep[ok]),
             'mad_thr': stats.mad_std(sep[ok]),
