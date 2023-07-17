@@ -297,7 +297,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
     if module == 'nrcb':
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules")
-        merge_a_plus_b(filtername, fieldnumber=field, suffix='realigned-to-refcat')
+        merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix='realigned-to-refcat')
         print("DONE Merging already-combined nrca + nrcb modules")
 
         #try:
