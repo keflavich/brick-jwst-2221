@@ -22,7 +22,7 @@ import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars
+from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, EPSFStars
 from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
 from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
 
@@ -592,12 +592,33 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
                 if options.epsf:
                     print("Building EPSF")
-                    epsf_builder = EPSFBuilder(oversampling=4, maxiters=3,
+                    epsf_builder = EPSFBuilder(oversampling=3, maxiters=10,
+                                               smoothing_kernel='quadratic',
                                                progress_bar=True)
 
-                    stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars, size=25)
+                    epsfsel = ((finstars['peak'] > 200) &
+                               (finstars['roundness1'] > -0.25) &
+                               (finstars['roundness1'] < 0.25) &
+                               (finstars['roundness2'] > -0.25) &
+                               (finstars['roundness2'] < 0.25) &
+                               (finstars['sharpness'] > 0.4) &
+                               (finstars['sharpness'] < 0.8))
+
+                    print(f"Extracting {epsfsel.sum()} stars")
+                    stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars[epsfsel], size=25)
+
+                    # reject stars with negative pixels
+                    #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
+                    # apparently this failed - too restrictive?
+
+                    for star in stars:
+                        # background subtraction
+                        star.data[:] -= np.nanpercentile(star.data, 5)
 
                     epsf, fitted_stars = epsf_builder(stars)
+
+                    # trim edges
+                    epsf._data = epsf.data[2:-2, 2:-2]
 
                     norm = simple_norm(epsf.data, 'log', percent=99.0)
                     pl.figure(1).clf()
@@ -666,12 +687,34 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 print("Iterative PSF photometry")
                 if options.epsf:
                     print("Building EPSF")
-                    epsf_builder = EPSFBuilder(oversampling=4, maxiters=3,
+                    epsf_builder = EPSFBuilder(oversampling=3, maxiters=10,
+                                               smoothing_kernel='quadratic',
                                                progress_bar=True)
 
-                    stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars, size=25)
+                    epsfsel = ((finstars['peak'] > 200) &
+                               (finstars['roundness1'] > -0.25) &
+                               (finstars['roundness1'] < 0.25) &
+                               (finstars['roundness2'] > -0.25) &
+                               (finstars['roundness2'] < 0.25) &
+                               (finstars['sharpness'] > 0.4) &
+                               (finstars['sharpness'] < 0.8))
+
+                    print(f"Extracting {epsfsel.sum()} stars")
+                    stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars[epsfsel], size=35)
+
+                    # reject stars with negative pixels
+                    #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
+                    # apparently this failed - too restrictive?
+
+                    for star in stars:
+                        # background subtraction
+                        star.data[:] -= np.nanpercentile(star.data, 5)
+
 
                     epsf, fitted_stars = epsf_builder(stars)
+
+                    # trim edges
+                    epsf._data = epsf.data[2:-2, 2:-2]
 
                     norm = simple_norm(epsf.data, 'log', percent=99.0)
                     pl.figure(1).clf()
@@ -697,7 +740,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
                 coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
                 result2['skycoord_centroid'] = coords2
-                print(f'len(result2) = {len(result2)}, len(coords) = {len(coords)}', flush=True)
+                print(f'len(result2) = {len(result2)}, len(coords) = {len(coords2)}', flush=True)
                 result2.write(f"{basepath}/{filtername}/{filtername.lower()}"
                               f"_{module}{detector}{desat}{bgsub}{epsf_}"
                               f"_daophot_iterative.fits", overwrite=True)
