@@ -183,11 +183,11 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
 
     with fits.open(imfile, mode='update') as hdulist:
-        print("CRVAL before", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
-        hdulist[1].header['OLCRVAL1'] = (hdulist[1].header['CRVAL1'], "Original CRVAL before ralign")
-        hdulist[1].header['OLCRVAL2'] = (hdulist[1].header['CRVAL2'], "Original CRVAL before ralign")
-        hdulist[1].header.update(ww.to_header())
-        print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
+        print("CRVAL before", hdulist['SCI'].header['CRVAL1'], hdulist['SCI'].header['CRVAL2'])
+        hdulist['SCI'].header['OLCRVAL1'] = (hdulist['SCI'].header['CRVAL1'], "Original CRVAL before ralign")
+        hdulist['SCI'].header['OLCRVAL2'] = (hdulist['SCI'].header['CRVAL2'], "Original CRVAL before ralign")
+        hdulist['SCI'].header.update(ww.to_header())
+        print("CRVAL after", hdulist['SCI'].header['CRVAL1'], hdulist['SCI'].header['CRVAL2'])
 
     # re-load the WCS to make sure it worked
     with warnings.catch_warnings():
@@ -195,22 +195,24 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
+    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
     dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+    print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)} with {len(idx)} mathces')
 
-    ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
+    # redundant
+    # ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
+    # with fits.open(imfile, mode='update') as hdulist:
+    #     print("CRVAL before", hdulist['SCI'].header['CRVAL1'], hdulist['SCI'].header['CRVAL2'])
+    #     hdulist['SCI'].header['OMCRVAL1'] = (hdulist['SCI'].header['CRVAL1'], "Old median CRVAL")
+    #     hdulist['SCI'].header['OMCRVAL2'] = (hdulist['SCI'].header['CRVAL2'], "Old median CRVAL")
+    #     hdulist['SCI'].header.update(ww.to_header())
+    #     print("CRVAL after", hdulist['SCI'].header['CRVAL1'], hdulist['SCI'].header['CRVAL2'])
 
-    with fits.open(imfile, mode='update') as hdulist:
-        print("CRVAL before", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
-        hdulist[1].header['OMCRVAL1'] = (hdulist[1].header['CRVAL1'], "Old median CRVAL")
-        hdulist[1].header['OMCRVAL2'] = (hdulist[1].header['CRVAL2'], "Old median CRVAL")
-        hdulist[1].header.update(ww.to_header())
-        print("CRVAL after", hdulist[1].header['CRVAL1'], hdulist[1].header['CRVAL2'])
 
-
+    # re-reload the file by reading from disk, with non-update mode
+    # this is a double-double-check that the solution was written to disk
     hdulist = fits.open(imfile)
 
     # re-load the WCS to make sure it worked
@@ -219,11 +221,11 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], 0.2*u.arcsec)
+    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
     dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    print(f'After re-realignment, offset is {np.median(dra)}, {np.median(ddec)}')
+    print(f'After re-realignment, offset is {np.median(dra)}, {np.median(ddec)} using {len(idx)} matches')
 
     return hdulist
 
