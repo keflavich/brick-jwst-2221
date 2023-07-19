@@ -179,7 +179,9 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds")
 
 
-def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
+def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=False):
+    if epsf:
+        raise NotImplementedError
     print()
     imgfns = [x
           for filn in filternames
@@ -243,13 +245,14 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False):
                    module=module)
 
 
-def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False):
+def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False, epsf=False):
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
+    epsf = "epsf" if epsf else ""
 
     catfns = daocatfns = [
-        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}_daophot_{daophot_type}.fits"
+        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf}_daophot_{daophot_type}.fits"
         for filtername in filternames
     ]
     imgfns = [x
@@ -438,37 +441,49 @@ def replace_saturated(cat, filtername, radius=None):
           f"{satstar_not_inc.sum()} are newly added.  The total replaced stars={replaced_sat_.sum()}")
 
     cat.add_column(replaced_sat_, name='replaced_saturated')
-    cat.rename_column('flux_fit', 'flux')
+    if 'flux_fit' in cat.colnames:
+        cat.rename_column('flux_fit', 'flux')
+    else:
+        print(f"Catalog did not have flux_fit.  colnames={cat.colnames}")
     # DEBUG print(f"DEBUG: cat['replaced_saturated'].sum(): {cat['replaced_saturated'].sum()}")
 
 def main():
-    for desat in (False, True):
-        for bgsub in (False, True):
-            for module in ( 'merged-reproject', 'merged', 'nrca', 'nrcb', ):
-                print(f'crowdsource {module} desat={desat} bgsub={bgsub}')
-                try:
-                    merge_crowdsource(module=module, desat=desat, bgsub=bgsub)
-                except ValueError as ex:
-                    print("Living with this error:", ex)
-                try:
-                    print(f'crowdsource unweighted {module}', flush=True)
-                    merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub)
-                    for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
-                        print(f'crowdsource {suffix} {module}')
-                        merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub)
-                except Exception as ex:
-                    print(f"Exception: {ex}")
-                try:
-                    print(f'daophot basic {module}')
-                    merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub)
-                except Exception as ex:
-                    print(f"Exception: {ex}")
-                try:
-                    print(f'daophot iterative {module}')
-                    merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub)
-                except Exception as ex:
-                    print(f"Exception: {ex}")
-                print()
+    import time
+    t0 = time.time()
+    for module in ( 'merged-reproject', 'merged', 'nrca', 'nrcb', ):
+        for desat in (False, True):
+            for bgsub in (False, True):
+                for epsf in (False, True):
+                    t0 = time.time()
+                    print()
+                    print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf}. ')
+                    try:
+                        merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf)
+                    except ValueError as ex:
+                        print("Living with this error:", ex)
+                    try:
+                        print(f'crowdsource unweighted {module}', flush=True)
+                        merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf)
+                        for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
+                            print(f'crowdsource {suffix} {module}')
+                            merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf)
+                    except Exception as ex:
+                        print(f"Exception: {ex}")
+                    print(f'crowdsource phase done.  time elapsed={time.time()-t0}')
+                    t0 = time.time()
+                    print()
+                    try:
+                        print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf}')
+                        merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf)
+                    except Exception as ex:
+                        print(f"Exception: {ex}")
+                    try:
+                        print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf}')
+                        merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf)
+                    except Exception as ex:
+                        print(f"Exception: {ex}")
+                    print(f'dao phase done.  time elapsed={time.time()-t0}')
+                    print()
 
 if __name__ == "__main__":
     main()
