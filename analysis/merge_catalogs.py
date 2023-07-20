@@ -296,7 +296,10 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
             abmag = flux_jy.to(u.ABmag)
-            eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+            try:
+                eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+            except KeyError:
+                eflux_jy = (tbl['flux_err'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
             abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy
         tbl.add_column(flux_jy, name='flux_jy')
         tbl.add_column(abmag, name='mag_ab')
@@ -402,12 +405,12 @@ def replace_saturated(cat, filtername, radius=None):
     elif 'flux_fit' in cat.colnames:
         # DAOPHOT
         cat['flux_fit'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
-        cat['flux_unc'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
+        cat['flux_err'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
         cat['skycoord'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
         cat['x_fit'][idx_cat] = satstar_cat['x_fit'][idx_sat]
         cat['y_fit'][idx_cat] = satstar_cat['y_fit'][idx_sat]
-        cat['x_0_unc'][idx_cat] = satstar_cat['x_0_unc'][idx_sat]
-        cat['y_0_unc'][idx_cat] = satstar_cat['y_0_unc'][idx_sat]
+        cat['x_err'][idx_cat] = satstar_cat['x_0_unc'][idx_sat]
+        cat['y_err'][idx_cat] = satstar_cat['y_0_unc'][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
@@ -459,7 +462,7 @@ def main():
                     print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf}. ')
                     try:
                         merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf)
-                    except ValueError as ex:
+                    except Exception as ex:
                         print("Living with this error:", ex)
                     try:
                         print(f'crowdsource unweighted {module}', flush=True)
