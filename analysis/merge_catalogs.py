@@ -247,7 +247,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
 
     merge_catalogs(tbls,
                    catalog_type=f'crowdsource{suffix}{"_desat" if desat else ""}{"_bgsub" if bgsub else ""}',
-                   module=module)
+                   module=module, bgsub=bgsub, desat=desat, epsf=epsf)
 
 
 def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False, epsf=False):
