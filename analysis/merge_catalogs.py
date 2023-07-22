@@ -35,9 +35,14 @@ def getmtime(x):
 
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f405n',
+                   epsf=False, bgsub=False, desat=False,
                    max_offset=0.15*u.arcsec):
     basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
+
+    desat = "_unsatstar" if desat else ""
+    bgsub = '_bgsub' if bgsub else ''
+    epsf = "_epsf" if epsf else ""
 
     # build up a reference coordinate catalog by adding in those with no matches each time
     basecrds = basetable['skycoord']
@@ -161,7 +166,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         assert '212PXDG' in meta
         assert '212PXDG' in basetable.meta
 
-        tablename = f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged"
+        tablename = f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged{desat}{bgsub}{epsf}"
         t0 = time.time()
         print(f"Writing table {tablename}")
         # use caps b/c FITS will force it to caps anyway
@@ -249,7 +254,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
-    epsf = "epsf" if epsf else ""
+    epsf = "_epsf" if epsf else ""
 
     catfns = daocatfns = [
         f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf}_daophot_{daophot_type}.fits"
@@ -306,7 +311,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         tbl.add_column(eflux_jy, name='eflux_jy')
         tbl.add_column(abmag_err, name='emag_ab')
 
-    merge_catalogs(tbls, catalog_type=daophot_type, module=module)
+    merge_catalogs(tbls, catalog_type=daophot_type, module=module, bgsub=bgsub, desat=desat, epsf=epsf)
 
 
 def flag_near_saturated(cat, filtername, radius=None):
