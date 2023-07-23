@@ -6,9 +6,11 @@ import warnings
 from astropy.io import fits
 import glob
 from photutils.background import MMMBackground, MADStdBackgroundRMS
-from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
-from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
+from photutils.aperture import CircularAperture, CircularAnnulus
+from photutils.detection import DAOStarFinder, IRAFStarFinder, find_peaks
+from photutils.psf import (DAOGroup, IntegratedGaussianPRF, extract_stars,
+                           IterativelySubtractedPSFPhotometry,
+                           BasicPSFPhotometry, EPSFBuilder)
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy import stats
 from astropy.table import Table, Column, MaskedColumn
@@ -293,18 +295,18 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         filtername = tbl.meta['filter']
 
         row = fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]
-        fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
+        fwhm = fwhm_arcsec = u.Quantity(float(row['PSF FWHM (arcsec)'][0]), u.arcsec)
         fwhm_pix = float(row['PSF FWHM (pixel)'][0])
         tbl.meta['fwhm_arcsec'] = fwhm
         tbl.meta['fwhm_pix'] = fwhm_pix
 
         with np.errstate(all='ignore'):
-            flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+            flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
             abmag = flux_jy.to(u.ABmag)
             try:
-                eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+                eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
             except KeyError:
-                eflux_jy = (tbl['flux_err'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+                eflux_jy = (tbl['flux_err'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
             abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy
         tbl.add_column(flux_jy, name='flux_jy')
         tbl.add_column(abmag, name='mag_ab')
@@ -456,6 +458,7 @@ def replace_saturated(cat, filtername, radius=None):
     # DEBUG print(f"DEBUG: cat['replaced_saturated'].sum(): {cat['replaced_saturated'].sum()}")
 
 def main():
+    print("Starting main")
     import time
     t0 = time.time()
     for module in ( 'merged-reproject', 'merged', 'nrca', 'nrcb', ):
@@ -468,7 +471,7 @@ def main():
                     try:
                         merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf)
                     except Exception as ex:
-                        print("Living with this error:", ex)
+                        print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
                     try:
                         print(f'crowdsource unweighted {module}', flush=True)
                         merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf)
@@ -476,20 +479,20 @@ def main():
                             print(f'crowdsource {suffix} {module}')
                             merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf)
                     except Exception as ex:
-                        print(f"Exception: {ex}")
+                        print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                     print(f'crowdsource phase done.  time elapsed={time.time()-t0}')
                     t0 = time.time()
                     print()
                     try:
-                        print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf}')
+                        print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf}', flush=True)
                         merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf)
                     except Exception as ex:
-                        print(f"Exception: {ex}")
+                        print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                     try:
                         print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf}')
                         merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf)
                     except Exception as ex:
-                        print(f"Exception: {ex}")
+                        print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                     print(f'dao phase done.  time elapsed={time.time()-t0}')
                     print()
 

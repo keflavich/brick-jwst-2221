@@ -211,7 +211,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
             desat = '_unsatstar' if use_desaturated else ''
             bgsub = '_bgsub' if options.bgsub else ''
-            epsf_ = "epsf" if options.epsf else ""
+            epsf_ = "_epsf" if options.epsf else ""
 
             try:
                 pupil = 'clear'
