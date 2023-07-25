@@ -188,8 +188,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
             Detector1Pipeline.call(member['expname'].replace("_cal.fits",
                                                              "_uncal.fits"),
                                    save_results=True, output_dir=output_dir,
-                                   steps={'ramp_fit': {'suppress_one_group':
-                                                       False}})
+                                   steps={'ramp_fit': {'suppress_one_group':False}, 
+                                          "refpix": {"use_side_ref_pixels": True}})
             print(f"IMAGE2 PIPELINE on {member['expname']}")
             Image2Pipeline.call(member['expname'].replace("_cal.fits",
                                                           "_rate.fits"),
