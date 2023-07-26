@@ -164,7 +164,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         else:
             raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
 
-        mapping = crds.rmap.load_mapping('/orange/adamginsburg/jwst/brick/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+        mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
         print(f"Mapping: {mapping.todict()['selections']}")
         print(f"Filtername: {filtername}")
         filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
