@@ -18,7 +18,7 @@ globals().update(result)
 all_good = result['all_good']
 globals().update({key+"_mr": val for key, val in result.items()})
 
-stats = plot_tools.xmatch_plot(basetable, sel=all_good, axlims=[-0.2,0.2,-0.2,0.2], ref_filter='f405n');
+stats = plot_tools.xmatch_plot(basetable, sel=all_good, axlims=[-0.2,0.2,-0.2,0.2], ref_filter='f405n')
 
 
 sfilternames = sorted(filternames)
@@ -30,11 +30,15 @@ astrom_tbl = Table({'Filter Name': [fil.upper() for fil in sfilternames],
                     r'\# of sources': [basetable[f'good_{fil}'].sum() for fil in sfilternames],
                    })
 astrom_tbl['RMS Offset'].format = "%0.2g"
-#astrom_tbl['RMS Offset'][np.isnan(astrom_tbl['RMS Offset'])] = '-'
 astrom_tbl['90th percentile'].format = "%0.1f"
 astrom_tbl['90th percentile'].unit = u.ABmag
 ld = ascii.latex.latexdicts['AA'].copy()
-ld.update({'tabletype': 'table'})
+ld.update({'tabletype': 'table',
+           'tablefoot': ("\par\nThe RMS offset reports the standard deviation of the source position difference between the specified filter and the reference filter, F405N.\n"
+                         "The 90th percentile column reports the 90th percentile magnitude in the catalog to give a general sense of depth.\n"
+                         r"% this table is produced by \texttt{make\_observations\_table.py}"
+                        )
+          })
 astrom_tbl.write(f'{basepath}/paper_co/observations_table.tex',
                  caption=r'Observations \label{tab:observations}',
                  latexdict=ld,
