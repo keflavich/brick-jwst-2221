@@ -152,14 +152,28 @@ def main(basetable, ww):
 
     oksep = np.logical_or.reduce([basetable[f'sep_{filtername}'] for filtername in filternames[1:]])
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
-    blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
-                    ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.75)
-                    & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
     slightly_blue_410_466 =  (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.00)
                     & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+
+    veryblue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
+                    ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1.75)
+                    )
+    veryblue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
+                    ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -1.75
+                    ))
+
+    blue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
+                    (((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
+                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5) < -0.75)
+                    )
+    blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
+                    (((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
+                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5) < -0.75)
+                    )
     assert (blue_410_466 & basetable['mag_ab_410m405'].mask).sum() == 0
     blue_410_405 = oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) & ((basetable['mag_ab_410m405'] - basetable['mag_ab_f405n']) + (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -2)
     blue_405_410 = (oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) &
@@ -258,8 +272,9 @@ def main(basetable, ww):
     # not sure these are legitimately bad?
     # Feb 11, 2023: these are the same objects as 'weird blue'
     # This is needed by some plots, but isn't obviously useful
-    badblue = blue_410_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2) |
-                              ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )
+    badblue = blue_410m405_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2) |
+                                   ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )
+
 
     return locals()
 
@@ -319,9 +334,23 @@ def main_dao(basetable, ww):
 
     oksep = np.logical_or.reduce([basetable[f'sep_{filtername}'] for filtername in filternames[1:]])
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask))
-    blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
+
+    veryblue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
+                    ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1.75)
+                    )
+    veryblue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
+                    ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -1.75
+                    ))
+
+    blue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.75)
+                    )
+    blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
+                    ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -0.75)
                     )
     slightly_blue_410_466 =  (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
@@ -427,6 +456,7 @@ def main_dao(basetable, ww):
     badblue = blue_410_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2) |
                               ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )
 
+    assert 'blue_410m405_466' in locals()
     return locals()
 
 if __name__ == "__main__":
@@ -468,21 +498,25 @@ if __name__ == "__main__":
         result = main(basetable_nrca, ww=ww)
         globals().update(result)
         basetable = basetable_nrca
+        print("Loaded nrca")
     elif options.module == 'nrcb':
         from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
         result = main(basetable_nrcb, ww=ww)
         globals().update(result)
         basetable = basetable_nrcb
+        print("Loaded nrcb")
     elif options.module == 'merged':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         result = main(basetable_merged, ww=ww)
         globals().update(result)
         basetable = basetable_merged
+        print("Loaded merged")
     elif options.module == 'merged-reproject':
         from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
         result = main(basetable_merged_reproject, ww=ww)
         globals().update(result)
         basetable = basetable_merged_reproject
+        print("Loaded merged-reproject")
     elif options.module == 'merged-reproject-iterative-bg-epsf':
         print("Merged DAOPHOT iterative")
         from analysis_setup import (fh_merged_reproject as fh,
@@ -491,3 +525,8 @@ if __name__ == "__main__":
         result = main_dao(basetable_merged_reproject_dao_iter_bg_epsf, ww=ww)
         globals().update(result)
         basetable = basetable_merged_reproject_dao_iter_bg_epsf
+        print("Loaded merged-reproject-iterative-bg-epsf")
+    else:
+        print("Loaded nothing")
+
+    assert 'blue_410m405_466' in globals()
