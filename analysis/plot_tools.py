@@ -421,7 +421,7 @@ def ccds_withiso(basetable, sel=True,
     return fig
 
 
-def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames,
+def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
                 maxsep=0.13*u.arcsec, obsid='001', sel=None, axlims=[-0.5, 0.5, -0.5, 0.5],
                 regs=['brick_nrca.reg', 'brick_nrcb.reg']):
     statsd = {}
@@ -451,8 +451,12 @@ def xmatch_plot(basetable, ref_filter='f410m', filternames=filternames,
         crds = basetable[f'skycoord_{filtername}'][thissel]
         radiff = (crds.ra-basecrds.ra[thissel]).to(u.arcsec)
         decdiff = (crds.dec-basecrds.dec[thissel]).to(u.arcsec)
+
         sep = basetable[f'sep_{filtername}'][thissel].quantity.to(u.arcsec)
-        ok = sep < maxsep
+
+        # sep = 0 implies it's matched to itself
+        ok = (sep < maxsep) & (sep > 0)
+        print(f"For filter {filtername}, found {ok.sum()} out of {len(ok)} data points")
 
         ax.scatter(radiff, decdiff, marker=',', s=1, alpha=0.1)
         if regs is None:

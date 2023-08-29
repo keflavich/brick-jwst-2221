@@ -150,7 +150,9 @@ def main(basetable, ww):
     print(f"QFs: {goodqfshort.sum()} good short")
     print(f"QFs: {goodqflong.sum()} good long")
 
-    oksep = np.logical_or.reduce([basetable[f'sep_{filtername}'] for filtername in filternames[1:]])
+    # threshold = 0.1 arcsec
+    oksep = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames[1:]])
+    print(f"Found {oksep.sum()} of {len(oksep)} sources with separations < 0.1 arcsec")
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
     slightly_blue_410_466 =  (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
@@ -228,6 +230,13 @@ def main(basetable, ww):
 
     any_saturated |= saturated_f410m
     all_good &= ~saturated_f410m
+    print(f"There are {all_good.sum()} before flagging out any_saturated (there are {any_saturated.sum()} any_saturated)")
+    all_good &= ~any_saturated
+    print(f"There are {all_good.sum()} after flagging out any_saturated")
+
+    print(f"There are {oksep.sum()} out of {len(oksep)} oksep, and {(oksep & all_good).sum()} all_good & oksep")
+    all_good_phot = all_good.copy()
+    all_good = all_good_phot & oksep
 
     exclude = (any_saturated | ~oksep | magerr_gtpt1 |
                basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask |
@@ -332,7 +341,9 @@ def main_dao(basetable, ww):
 
     allgood_short = (basetable['good_f212n'] & basetable['good_f187n'] & basetable['good_f182m'])
 
-    oksep = np.logical_or.reduce([basetable[f'sep_{filtername}'] for filtername in filternames[1:]])
+    # threshold = 0.1 arcsec
+    oksep = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames[1:]])
+    print(f"Found {oksep.sum()} of {len(oksep)} sources with separations < 0.1 arcsec")
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask))
 
     veryblue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &

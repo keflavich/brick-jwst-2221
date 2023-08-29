@@ -15,16 +15,21 @@ print()
 print("merged-reproject")
 result = main(basetable_merged_reproject, ww=ww)
 globals().update(result)
-all_good = result['all_good']
+# we want to measure the RMS before excludign...
+all_good = result['all_good_phot']
 globals().update({key+"_mr": val for key, val in result.items()})
 
-stats = plot_tools.xmatch_plot(basetable, sel=all_good, axlims=[-0.2,0.2,-0.2,0.2], ref_filter='f405n')
+oksep = result['oksep']
+print(f"There are {oksep.sum()} out of {len(oksep)} oksep, and {(oksep & all_good).sum()} all_good & oksep")
+
+# because we're computing stats, we don't want to exclude the big offsets
+stats = plot_tools.xmatch_plot(basetable, sel=all_good, axlims=[-0.2,0.2,-0.2,0.2], ref_filter='f405n', maxsep=1*u.arcsec)
 
 
 sfilternames = sorted(filternames)
 astrom_tbl = Table({'Filter Name': [fil.upper() for fil in sfilternames],
                     'RMS Offset': u.Quantity([stats[fil]['std'] if fil in stats else np.nan*u.arcsec for fil in sfilternames], u.arcsec),
-                    #'mad': u.Quantity([stats[fil]['mad'] if fil in stats else np.nan*u.arcsec for fil in sfilternames], u.arcsec), 
+                    #'mad': u.Quantity([stats[fil]['mad'] if fil in stats else np.nan*u.arcsec for fil in sfilternames], u.arcsec),
                     '90th percentile': [np.nanpercentile(np.array(basetable[all_good][f'mag_ab_{fil}']), 90)
                                               for fil in sfilternames],
                     r'\# of sources': [basetable[f'good_{fil}'].sum() for fil in sfilternames],

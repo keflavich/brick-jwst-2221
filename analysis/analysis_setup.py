@@ -95,6 +95,8 @@ basetable_merged = basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky
 # use locked-in 2023/07/02 version to make sure analysis stays stable
 # (this version is confirmed to have good long-wave astrometry, at least)
 basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20230702.fits')
+# updated version: has metadata about which filter was used as the reference
+basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20230827.fits')
 
 basetable_nrca = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
 basetable_nrcb = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrcb_photometry_tables_merged.fits')

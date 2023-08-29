@@ -46,6 +46,9 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
     bgsub = '_bgsub' if bgsub else ''
     epsf = "_epsf" if epsf else ""
 
+    reffiltercol = [ref_filter] * len(basetable)
+    print(f"Started with {len(basetable)} in filter {ref_filter}")
+
     # build up a reference coordinate catalog by adding in those with no matches each time
     basecrds = basetable['skycoord']
     for tb in tbls:
@@ -55,10 +58,13 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
         newcrds = crds[sep > max_offset]
         basecrds = SkyCoord([basecrds, newcrds])
+        reffiltercol += [tb.meta['filter']] * len(newcrds)
+        print(f"Added {len(newcrds)} new sources in filter {tb.meta['filter']}")
     print(f"Base coordinate length = {len(basecrds)}")
 
     basetable = Table()
     basetable['skycoord_ref'] = basecrds
+    basetable['skycoord_ref_filtername'] = reffiltercol
 
     # flag_near_saturated(basetable, filtername=ref_filter)
     # # replace_saturated adds more rows
