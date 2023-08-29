@@ -291,7 +291,9 @@ def iteratively_remove_saturated_stars(data, header,
 
         # do the search on data b/c PSF subtraction can change zeros to non-zeros
         if np.any(resid == 0):
-            sources = finder(resid, mask=ndimage.binary_dilation(resid==0, iterations=1), raise_for_nosources=False, rindsize=rsz)
+            sources = finder(resid,
+                             mask=ndimage.binary_dilation(resid==0, iterations=1),
+                             raise_for_nosources=False, rindsize=rsz)
         else:
             log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
             continue
