@@ -21,6 +21,9 @@ from dust_extinction.averages import RRP89_MWGC, CT06_MWGC, F11_MWGC
 from dust_extinction.parameter_averages import CCM89
 import matplotlib as mpl
 
+from matplotlib.path import Path
+import matplotlib.patches as patches
+
 from filtering import get_fwhm
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
@@ -34,6 +37,17 @@ mist = Table.read(f'{basepath}/isochrones/MIST_iso_633a08f2d8bb1.iso.cmd', heade
 mist['410M405'] = mist['F410M']
 mist['405M410'] = mist['F405N']
 padova = Table.read(f'{basepath}/isochrones/padova_isochrone_package.dat', header_start=14, data_start=15, format='ascii', delimiter=' ', comment='#')
+
+
+
+offset_crosshair = Path([
+    (-1, 0),
+    (-2, 0),
+    (0, -1),
+    (0, -2),
+],
+     codes=(1,2,1,2),
+)
 
 def crowdsource_diagnostic(basetable, exclude, filtername='f466n'):
     pl.figure(figsize=(10,6))
@@ -525,12 +539,6 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
                 hdr = fits.getheader(fn, ext=('SCI', 1))
                 ww = wcs.WCS(hdr)
                 if ww.footprint_contains(coords):
-                    try:
-                        hdr['OLCRVAL1']
-                        #print(fn, fits.getheader(fn, ext=("SCI", 1))['OLCRVAL1'])
-                    except Exception as ex:
-                        #print(ex)
-                        continue
                     data = fits.getdata(fn, ext=('SCI',1))
                     mask = reg.to_pixel(ww).to_mask()
                     slcs,_ = mask.get_overlap_slices(data.shape)
@@ -542,9 +550,10 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
                     maxval = None #center_value if good_center else None
                     #minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
                     minval = None
-                    stretch = 'log'# if np.isfinite(center_value) else 'asinh'
+                    stretch = 'asinh'# if np.isfinite(center_value) else 'asinh'
                     max_percent = 99.95
-                    min_percent = None if good_center else 1.0
+                    min_percent = 0.1 if good_center else 1.0
+                    min_percent = 1
                     #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
 
                     ax = axes[ii]
@@ -556,7 +565,7 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
                                                            max_cut=maxval),
                               origin='lower', cmap='gray_r')
                     xx, yy = ww[slcs].world_to_pixel(coords)
-                    ax.plot(xx, yy, 'rx')
+                    ax.plot(xx, yy, 'r', marker=offset_crosshair, markersize=15)
                     pixscale = ww.proj_plane_pixel_area()**0.5
                     quartas = (0.25*u.arcsec/pixscale).decompose().value
 
@@ -567,7 +576,10 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
 
                     shp = data[slcs].shape
 
-                    unit = u.Unit(hdr['BUNIT'])
+                    try:
+                        unit = u.Unit(hdr['BUNIT'])
+                    except Exception as ex:
+                        unit = u.MJy/u.sr
                     fwhm, fwhm_pix = get_fwhm(hdr0)
                     fwhm = u.Quantity(fwhm, u.arcsec)
                     # debug print(unit, fwhm, pixscale)
@@ -653,7 +665,7 @@ def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14,
                                                            max_cut=maxval),
                               origin='lower', cmap='gray_r')
                     xx, yy = ww[slcs].world_to_pixel(coords)
-                    ax.plot(xx, yy, 'rx')
+                    ax.plot(xx, yy, 'r', marker=offset_crosshair, markersize=15)
                     pixscale = ww.proj_plane_pixel_area()**0.5
                     quartas = (1*u.arcsec/pixscale).decompose().value
 
@@ -689,13 +701,14 @@ def starzoom_spitzer(coords, cutoutsize=15*u.arcsec, fontsize=14,
             #    print(f'Coordinate {coords} not in footprint')
     return fig
 
-def make_sed(coord, basetable, radius=0.5*u.arcsec):
-    skycrds_cat = basetable['skycoord_f410m']
-    idx = coord.separation(skycrds_cat) < radius
-    if len(idx) == 0:
-        raise
-    else:
-        idx = np.argmin(coord.separation(skycrds_cat))
+def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
+    if idx is None:
+        skycrds_cat = basetable['skycoord_f410m']
+        idx = coord.separation(skycrds_cat) < radius
+        if len(idx) == 0:
+            raise
+        else:
+            idx = np.argmin(coord.separation(skycrds_cat))
 
     try:
         spitzer = Vizier.query_region(coordinates=coord, radius=radius, catalog=['II/295/SSTGC'])[0]
@@ -706,7 +719,7 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
             spitzermatch = spitzer[spitzindex]
     except Exception as ex:
         spitzer = []
-        log.info(f"No matches for spitzer: {ex}")
+        log.debug(f"No matches for spitzer: {ex}")
 
 
     wavelengths = []
@@ -782,7 +795,7 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
             #print(len(vvvindex))
             vvvmatch = vvvdr2_[vvvindex]
     else:
-        log.info("No VVV match")
+        log.debug("No VVV match")
 
 
     telescope = 'Paranal'
@@ -815,7 +828,7 @@ def make_sed(coord, basetable, radius=0.5*u.arcsec):
     return wavelengths, widths, fluxes, lims
 
 
-def sed_and_starzoom_plot(coord, basetable, fignum=1, title=None, module='merged'):
+def sed_and_starzoom_plot(coord, basetable, idx=None, fignum=1, title=None, module='merged-reproject'):
     fig = pl.figure(figsize=(12, 12), num=fignum)
     fig.clf()
     ax = pl.subplot(2, 1, 1)
@@ -823,7 +836,7 @@ def sed_and_starzoom_plot(coord, basetable, fignum=1, title=None, module='merged
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
 
-            wavelengths, widths, fluxes, lims = map(u.Quantity, make_sed(coord, basetable=basetable, radius=1*u.arcsec))
+            wavelengths, widths, fluxes, lims = map(u.Quantity, make_sed(coord, basetable=basetable, radius=1*u.arcsec, idx=idx))
             lamflam = (fluxes * wavelengths.to(u.Hz, u.spectral())).to(u.erg/u.s/u.cm**2)
             lamflamlim = (lims * wavelengths.to(u.Hz, u.spectral())).to(u.erg/u.s/u.cm**2)
             ax.errorbar(u.Quantity(wavelengths, u.um), 
@@ -906,7 +919,7 @@ def regzoomplot(reg, fontsize=14, axes=None,
                         subset = ((cat['x'] > slcs[1].start) & (cat['x'] < slcs[1].stop) &
                                   (cat['y'] > slcs[0].start) & (cat['y'] < slcs[0].stop))
                         ax.scatter(cat['x'][subset]-slcs[1].start,
-                                   cat['y'][subset]-slcs[0].start, marker='x',
+                                   cat['y'][subset]-slcs[0].start, marker=offset_crosshair,
                                    color='r', s=8, linewidth=0.5)
                         ax.axis(axlims)
 
