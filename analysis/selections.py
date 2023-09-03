@@ -285,6 +285,12 @@ def main(basetable, ww):
                                    ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )
 
 
+    c187_212 = basetable['mag_ab_f187n'] - basetable['mag_ab_f212n']
+    c212_405 = basetable['mag_ab_f212n'] - basetable['mag_ab_f405n']
+
+    # Coarse color cut eyeballed in CatalogExploration_Sep2023
+    recomb_excess_over_212 = c212_405 > c187_212 * (4/3.) + 0.35
+
     return locals()
 
 
