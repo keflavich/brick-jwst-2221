@@ -63,7 +63,7 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-def main(filtername, module, Observations=None, regionname='brick', field='001'):
+def main(filtername, module, Observations=None, regionname='brick', field='001', proposal_id='2221', `n):
     log.info(f"Processing filter {filtername} module {module}")
 
     basepath = f'/orange/adamginsburg/jwst/{regionname}/'
@@ -101,8 +101,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     Observations.cache_location = output_dir
     obs_table = Observations.query_criteria(
-                                            proposal_id="2221",
-                                            proposal_pi="Ginsburg*",
+                                            proposal_id=proposal_id,
+                                            #proposal_pi="Ginsburg*",
                                             #calib_level=3,
                                             )
     print("Obs table length:", len(obs_table))
@@ -132,7 +132,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
-    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221{field}' in uri for uri in products_fits['dataURI']])
+    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw0{proposal_id}{field}' in uri for uri in products_fits['dataURI']])
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
@@ -154,8 +154,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     # all cases, except if you're just doing a merger?
     if module in ('nrca', 'nrcb', 'merged'):
-        print(f"Searching for {os.path.join(output_dir, f'jw02221-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
-        asn_file_search = glob(os.path.join(output_dir, f'jw02221-o{field}*_image3_*0[0-9][0-9]_asn.json'))
+        print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
+        asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
             asn_file = asn_file_search[0]
         elif len(asn_file_search) > 1:
@@ -182,7 +182,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         # re-calibrate all uncal files -> cal files *without* suppressing first group
         for member in asn_data['products'][0]['members']:
             # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
-            assert f'jw02221{field}' in member['expname']
+            assert f'jw0{proposal_id}{field}' in member['expname']
             print(f"DETECTOR PIPELINE on {member['expname']}")
             print("Detector1Pipeline step")
             Detector1Pipeline.call(member['expname'].replace("_cal.fits",
@@ -203,7 +203,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
+        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
         asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                                 if f'{module}' in row['expname']]
 
@@ -226,7 +226,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         if filtername.lower() == 'f405n':
         # for the VVV cat, use the merged version: no need for independent versions
-            abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
+            abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
@@ -277,15 +277,15 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_each}")
 
         log.info(f"Realigning to VVV (module={module}")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
                                    imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15)
 
         log.info(f"Realigning to refcat (module={module}")
-        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
         realigned = realign_to_catalog(reftbl['skycoord'],
                                        filtername=filtername.lower(),
@@ -296,8 +296,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
-            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
-            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
+            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
         except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
             print("Failed to run remove_saturated_stars with failure {ex}")
 
@@ -310,8 +310,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         #try:
         #    # this is probably wrong / has wrong path names.
-        #    remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}-reproject_i2d.fits')
-        #    remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
+        #    remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}-reproject_i2d.fits')
+        #    remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
         #except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
         #    print("Failed to run remove_saturated_stars with failure {ex}")
 
@@ -331,7 +331,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
 
-        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
+        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
@@ -341,7 +341,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                        'cloudc': 'regions/nircam_cloudc_fov.reg',
                       }
         if filtername.lower() == 'f405n':
-            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
             tweakreg_parameters['abs_refcat'] = abs_refcat = vvvdr2fn
@@ -387,15 +387,15 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
         log.info(f"Realigning to VVV (module={module}")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
                                    imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15)
 
         log.info(f"Realigning to refcat (module={module}")
-        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
         realigned = realign_to_catalog(reftbl['skycoord'],
                                        filtername=filtername.lower(),
@@ -406,8 +406,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
-            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
-            remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
+            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
         except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
             print("Failed to run remove_saturated_stars with failure {ex}")
 
@@ -426,11 +426,15 @@ if __name__ == "__main__":
     parser.add_option("-d", "--field", dest="field",
                     default='001,002',
                     help="list of target fields", metavar="field")
+    parser.add_option("-p", "--proposal-id", dest="proposal_id",
+                    default='2221',
+                    help="proposal id (string)", metavar="proposal_id")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
     fields = options.field.split(",")
+    proposal_id = options.proposal_id
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
@@ -447,7 +451,9 @@ if __name__ == "__main__":
             for module in modules:
                 print(f"Main Loop: {filtername} + {module} + {field}")
                 results = main(filtername=filtername, module=module, Observations=Observations, field=field,
-                               regionname=field_to_reg_mapping[field])
+                               regionname=field_to_reg_mapping[field],
+                               proposal_id=proposal_id
+                              )
 
 
     print("Running notebooks")
