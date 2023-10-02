@@ -17,6 +17,10 @@ obs_table = Observations.query_criteria(
     proposal_id="2221",
     proposal_pi="Ginsburg*",
     )
+obs_table = Observations.query_criteria(
+    calib_level=3, 
+    proposal_id="1182",
+    )
 # for finding filters : obs_table[np.char.find(obs_table['obs_id'], filtername.lower()) >= 0]
 
 #data_products_by_obs = Observations.get_product_list(obs_table[obs_table['calib_level'] == 3])
@@ -25,6 +29,8 @@ product_list = [Observations.get_product_list(obs) for obs in tqdm(obs_table)]
 data_products_by_id = table.vstack(product_list)
 #data_products_by_id = Observations.get_product_list(obs_table['obsid'])
 
+data_products_by_id = data_products_by_id[data_products_by_id['calib_level']==3]
+
 products = Observations.filter_products(data_products_by_id,
                                         productType=["SCIENCE", "PREVIEW"],
                                         extension="fits")
@@ -32,8 +38,9 @@ products = Observations.filter_products(data_products_by_id,
 manifest = Observations.download_products(products, download_dir='/orange/adamginsburg/jwst/brick')
 
 
-products_asn = Observations.filter_products(data_products_by_id,
-                                            extension="json")
+if False:
+    products_asn = Observations.filter_products(data_products_by_id,
+                                                extension="json")
 
 
-manifest = Observations.download_products(products_asn, download_dir='/orange/adamginsburg/jwst/brick')
+    manifest = Observations.download_products(products_asn, download_dir='/orange/adamginsburg/jwst/brick')

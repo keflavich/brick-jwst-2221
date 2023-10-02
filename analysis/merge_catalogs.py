@@ -22,6 +22,7 @@ from astropy.visualization import simple_norm
 from astropy import wcs
 from astropy import table
 from astropy import units as u
+from astroquery.svo_fps import SvoFps
 import pylab as pl
 pl.rcParams['figure.facecolor'] = 'w'
 pl.rcParams['image.origin'] = 'lower'
@@ -41,6 +42,9 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    max_offset=0.15*u.arcsec):
     basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
+
+    jfilts = SvoFps.get_filter_list('JWST')
+    jfilts.add_index('filterID')
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
@@ -206,6 +210,9 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
 
+    jfilts = SvoFps.get_filter_list('JWST')
+    jfilts.add_index('filterID')
+
     catfns = [x
               for filn in filternames
               for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}_crowdsource{suffix}.fits")
@@ -240,7 +247,9 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
         with np.errstate(all='ignore'):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                abmag = flux_jy.to(u.ABmag)
+                zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{tbl.meta["filter"].upper()}']['ZeroPoint'], u.Jy)
+                #abmag = flux_jy.to(u.ABmag)
+                abmag = -2.5 * np.log10(flux_jy / zeropoint)
                 abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
                 tbl.add_column(flux_jy, name='flux_jy')
                 tbl.add_column(eflux_jy, name='eflux_jy')
@@ -263,6 +272,9 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
     epsf = "_epsf" if epsf else ""
+
+    jfilts = SvoFps.get_filter_list('JWST')
+    jfilts.add_index('filterID')
 
     catfns = daocatfns = [
         f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf}_daophot_{daophot_type}.fits"
@@ -308,7 +320,9 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
-            abmag = flux_jy.to(u.ABmag)
+            #abmag = flux_jy.to(u.ABmag)
+            zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{tbl.meta["filter"].upper()}']['ZeroPoint'], u.Jy)
+            abmag = -2.5 * np.log10(flux_jy / zeropoint)
             try:
                 eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
             except KeyError:
