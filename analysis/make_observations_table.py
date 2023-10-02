@@ -23,7 +23,8 @@ oksep = result['oksep']
 print(f"There are {oksep.sum()} out of {len(oksep)} oksep, and {(oksep & all_good).sum()} all_good & oksep")
 
 # because we're computing stats, we don't want to exclude the big offsets
-stats = plot_tools.xmatch_plot(basetable, sel=all_good, axlims=[-0.2,0.2,-0.2,0.2], ref_filter='f405n', maxsep=1*u.arcsec)
+stats = plot_tools.xmatch_plot(basetable, sel=all_good, axlims=[-0.2,0.2,-0.2,0.2],
+                               ref_filter='f405n', maxsep=1*u.arcsec)
 
 
 sfilternames = sorted(filternames)
