@@ -252,7 +252,8 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
         with np.errstate(all='ignore'):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{tbl.meta["filter"].upper()}']['ZeroPoint'], u.Jy)
+                filtername = tbl.meta["filter"]
+                zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
                 abmag = -2.5 * np.log10(flux_jy / zeropoint)
                 abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
                 tbl.add_column(flux_jy, name='flux_jy')
@@ -324,7 +325,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
-            zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{tbl.meta["filter"].upper()}']['ZeroPoint'], u.Jy)
+            zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
             abmag = -2.5 * np.log10(flux_jy / zeropoint)
             try:
                 eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
@@ -385,7 +386,7 @@ def replace_saturated(cat, filtername, radius=None):
     fwhm = u.Quantity(fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]['PSF FWHM (arcsec)'], u.arcsec)
 
     filtername = cat.meta['filter']
-    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername}']['ZeroPoint'], u.Jy)
+    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
 
     flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
     eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
