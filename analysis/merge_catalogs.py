@@ -147,6 +147,10 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
 
         print(f"Stacked all rows into table with len={len(basetable)}")
+        zeropoint410 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F410M']['ZeroPoint'], u.Jy)
+        zeropoint182 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F182M']['ZeroPoint'], u.Jy)
+        zeropoint405 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F405N']['ZeroPoint'], u.Jy)
+        zeropoint187 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F187N']['ZeroPoint'], u.Jy)
 
         # Line-subtract the F410 continuum band
         # 0.16 is from BrA_separation
@@ -156,10 +160,11 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # but we use 0.11, the theoretica one, because we don't necessarily expect a good match!
         f405to410_scale = 0.11
         basetable.add_column(basetable['flux_jy_f410m'] - basetable['flux_jy_f405n'] * f405to410_scale, name='flux_jy_410m405')
-        basetable.add_column(basetable['flux_jy_410m405'].to(u.ABmag), name='mag_ab_410m405')
+
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_ab_410m405')
         # Then subtract that remainder back from the F405 band to get the continuum-subtracted F405
         basetable.add_column(basetable['flux_jy_f405n'] - basetable['flux_jy_410m405'], name='flux_jy_405m410')
-        basetable.add_column(basetable['flux_jy_405m410'].to(u.ABmag), name='mag_ab_405m410')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_ab_405m410')
 
         # Line-subtract the F182 continuum band
         # 0.11 is the theoretical bandwidth fraction
@@ -167,10 +172,10 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # 0.18 is closer to the histogram mode
         f187to182_scale = 0.11
         basetable.add_column(basetable['flux_jy_f182m'] - basetable['flux_jy_f187n'] * f187to182_scale, name='flux_jy_182m187')
-        basetable.add_column(basetable['flux_jy_182m187'].to(u.ABmag), name='mag_ab_182m187')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_ab_182m187')
         # Then subtract that remainder back from the F187 band to get the continuum-subtracted F187
         basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
-        basetable.add_column(basetable['flux_jy_187m182'].to(u.ABmag), name='mag_ab_187m182')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_ab_187m182')
 
         # DEBUG for colname in basetable.colnames:
         # DEBUG     print(f"colname {colname} has mask: {hasattr(basetable[colname], 'mask')}")
@@ -248,7 +253,6 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{tbl.meta["filter"].upper()}']['ZeroPoint'], u.Jy)
-                #abmag = flux_jy.to(u.ABmag)
                 abmag = -2.5 * np.log10(flux_jy / zeropoint)
                 abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
                 tbl.add_column(flux_jy, name='flux_jy')
@@ -320,7 +324,6 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
-            #abmag = flux_jy.to(u.ABmag)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{tbl.meta["filter"].upper()}']['ZeroPoint'], u.Jy)
             abmag = -2.5 * np.log10(flux_jy / zeropoint)
             try:
@@ -366,6 +369,9 @@ def replace_saturated(cat, filtername, radius=None):
 
     cat_coords = cat['skycoord']
 
+    jfilts = SvoFps.get_filter_list('JWST')
+    jfilts.add_index('filterID')
+
     if radius is None:
         radius = {'f466n': 0.1*u.arcsec,
                   'f212n': 0.05*u.arcsec,
@@ -378,9 +384,12 @@ def replace_saturated(cat, filtername, radius=None):
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     fwhm = u.Quantity(fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]['PSF FWHM (arcsec)'], u.arcsec)
 
+    filtername = cat.meta['filter']
+    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername}']['ZeroPoint'], u.Jy)
+
     flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
     eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
-    abmag = flux_jy.to(u.ABmag)
+    abmag = -2.5*np.log10(flux_jy / zeropoint)
     abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
     satstar_cat['mag_ab'] = abmag
     satstar_cat['emag_ab'] = abmag_err

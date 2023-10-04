@@ -161,20 +161,20 @@ def main(basetable, ww):
 
     veryblue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1.75)
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1.45)
                     )
     veryblue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
                     ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -1.75
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -1.45
                     ))
 
     blue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     (((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5) < -0.75)
+                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5) < -0.45)
                     )
     blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
                     (((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
-                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5) < -0.75)
+                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5) < -0.45)
                     )
     assert (blue_410_466 & basetable['mag_ab_410m405'].mask).sum() == 0
     blue_410_405 = oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) & ((basetable['mag_ab_410m405'] - basetable['mag_ab_f405n']) + (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -2)
@@ -354,20 +354,20 @@ def main_dao(basetable, ww):
 
     veryblue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1.75)
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1.45)
                     )
     veryblue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
                     ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -1.75
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -1.45
                     ))
 
     blue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.75)
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.45)
                     )
     blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
                     ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -0.75)
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < -0.45)
                     )
     slightly_blue_410_466 =  (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
@@ -470,8 +470,8 @@ def main_dao(basetable, ww):
     # not sure these are legitimately bad?
     # Feb 11, 2023: these are the same objects as 'weird blue'
     # This is needed by some plots, but isn't obviously useful
-    badblue = blue_410_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2) |
-                              ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1) )
+    badblue = blue_410_466 & ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2)
+    #| ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -0.5) )
 
     assert 'blue_410m405_466' in locals()
     return locals()
