@@ -426,7 +426,7 @@ if __name__ == "__main__":
     parser.add_option("-d", "--field", dest="field",
                     default='001,002',
                     help="list of target fields", metavar="field")
-    parser.add_option("-p", "--proposal-id", dest="proposal_id",
+    parser.add_option("-p", "--proposal_id", dest="proposal_id",
                     default='2221',
                     help="proposal id (string)", metavar="proposal_id")
     (options, args) = parser.parse_args()
@@ -444,7 +444,8 @@ if __name__ == "__main__":
     Observations.login(api_token)
 
 
-    field_to_reg_mapping = {'001': 'brick', '002': 'cloudc'}
+    field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
+                            '1182': {'004': 'brick'}}[proposal_id]
 
     for field in fields:
         for filtername in filternames:
