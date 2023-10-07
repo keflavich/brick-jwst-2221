@@ -74,7 +74,10 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
 
     # sanity check
     if regionname == 'brick':
-        assert field == '001'
+        if proposal_id == '2221':
+            assert field == '001'
+        elif proposal_id == '1182':
+            assert field == '004'
     elif regionname == 'cloudc':
         assert field == '002'
 
@@ -450,7 +453,7 @@ if __name__ == "__main__":
     for field in fields:
         for filtername in filternames:
             for module in modules:
-                print(f"Main Loop: {filtername} + {module} + {field}")
+                print(f"Main Loop: {proposal_id} + {filtername} + {module} + {field}={field_to_reg_mapping[field]}")
                 results = main(filtername=filtername, module=module, Observations=Observations, field=field,
                                regionname=field_to_reg_mapping[field],
                                proposal_id=proposal_id
