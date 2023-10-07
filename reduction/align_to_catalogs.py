@@ -62,7 +62,7 @@ def retrieve_vvv(
     module = 'nrca',
     imfile = None,
     catfile = None,
-    fov_regname='regions/nircam_brick_fov.reg',
+    fov_regname='regions_/nircam_brick_fov.reg',
     fieldnumber='001',
 ):
     fov = regions.Regions.read(os.path.join(basepath, fov_regname))
@@ -107,7 +107,7 @@ def realign_to_vvv(
     module = 'nrca',
     imfile = None,
     catfile = None,
-    fov_regname='regions/nircam_brick_fov.reg',
+    fov_regname='regions_/nircam_brick_fov.reg',
     fieldnumber='001',
     ksmag_limit=15,
     mag_limit=15,
