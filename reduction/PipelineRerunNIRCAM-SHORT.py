@@ -61,7 +61,7 @@ print(jwst.__version__)
 medfilt_size = {'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 
-def main(filtername, module, Observations=None, regionname='brick', field='001'):
+def main(filtername, module, Observations=None, regionname='brick', field='001', proposal_id='2221'):
     log.info(f"Processing filter {filtername} module {module}")
 
     # sanity check
@@ -92,7 +92,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     Observations.cache_location = output_dir
     obs_table = Observations.query_criteria(
-                                            proposal_id="2221",
+                                            proposal_id=proposal_id,
                                             proposal_pi="Ginsburg*",
                                             #calib_level=3,
                                             )
@@ -123,7 +123,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
-    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw02221{field}' in uri for uri in products_fits['dataURI']])
+    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw0{proposal_id}{field}' in uri for uri in products_fits['dataURI']])
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
@@ -144,8 +144,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
     # all cases, except if you're just doing a merger?
     if module in ('nrca', 'nrcb', 'merged'):
-        print(f"Searching for {os.path.join(output_dir, f'jw02221-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
-        asn_file_search = glob(os.path.join(output_dir, f'jw02221-o{field}*_image3_*0[0-9][0-9]_asn.json'))
+        print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
+        asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
             asn_file = asn_file_search[0]
         elif len(asn_file_search) > 1:
@@ -167,7 +167,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
         # re-calibrate all uncal files -> cal files *without* suppressing first group
         for member in asn_data['products'][0]['members']:
             # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
-            assert f'jw02221{field}' in member['expname']
+            assert f'jw0{proposal_id}{field}' in member['expname']
             print(f"DETECTOR PIPELINE on {member['expname']}")
             print("Detector1Pipeline step")
             # from Hosek: expand_large_events -> false; turn off "snowball" detection
@@ -188,7 +188,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
+        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
         asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                             if f'{module}' in row['expname']]
 
@@ -247,14 +247,14 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                        filtername=filtername.lower(),
                                        module=module,
                                        fieldnumber=field)
-        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits', overwrite=True)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits', overwrite=True)
 
-        with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
+        with fits.open(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits')
+        remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits')
 
 
     if module in ('nrcb', ):
@@ -275,7 +275,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
+        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
 
         for member in asn_data['products'][0]['members']:
             hdr = fits.getheader(member['expname'])
@@ -291,7 +291,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
 
         # # TODO: instead, use F410M as the astrometric reference, since that matches _better_ to VVV
 
-        # vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
+        # vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o001_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
         # print(vvvdr2fn)
         # if os.path.exists(vvvdr2fn):
         #     image3.tweakreg.abs_refcat = vvvdr2fn
@@ -342,14 +342,14 @@ def main(filtername, module, Observations=None, regionname='brick', field='001')
                                        filtername=filtername.lower(),
                                        module=module,
                                        fieldnumber=field)
-        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits', overwrite=True)
+        realigned.writeto(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits', overwrite=True)
 
-        with fits.open(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
+        with fits.open(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits', mode='update') as fh:
             fh[0].header['V_REFCAT'] = reftblversion
 
         log.info("Removing saturated stars")
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
-        remove_saturated_stars(f'jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits')
+        remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits')
 
 
     globals().update(locals())
@@ -367,18 +367,23 @@ if __name__ == "__main__":
     parser.add_option("-d", "--field", dest="field",
                     default='001,002',
                     help="list of target fields", metavar="field")
+    parser.add_option("-p", "--proposal_id", dest="proposal_id",
+                    default='2221',
+                    help="proposal id (string)", metavar="proposal_id")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
     fields = options.field.split(",")
+    proposal_id = options.proposal_id
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     Mast.login(api_token.strip())
     Observations.login(api_token)
 
-    field_to_reg_mapping = {'001': 'brick', '002': 'cloudc'}
+    field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
+                            '1182': {'004': 'brick'}}[proposal_id]
 
     for field in fields:
         for filtername in filternames:
@@ -388,12 +393,13 @@ if __name__ == "__main__":
                                regionname=field_to_reg_mapping[field])
 
 
-    from run_notebook import run_notebook
-    basepath = '/orange/adamginsburg/jwst/brick/'
-    #run_notebook(f'{basepath}/notebooks/PaA_Separation_nrca.ipynb')
-    run_notebook(f'{basepath}/notebooks/PaA_Separation_nrcb.ipynb')
-    #run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
-    #run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
-    #run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrca.ipynb')
-    run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrcb.ipynb')
-    #run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
+    if proposal_id == '2221':
+        from run_notebook import run_notebook
+        basepath = '/orange/adamginsburg/jwst/brick/'
+        #run_notebook(f'{basepath}/notebooks/PaA_Separation_nrca.ipynb')
+        run_notebook(f'{basepath}/notebooks/PaA_Separation_nrcb.ipynb')
+        #run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
+        #run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
+        #run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrca.ipynb')
+        run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrcb.ipynb')
+        #run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
