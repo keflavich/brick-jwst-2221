@@ -332,7 +332,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #mask = preg.to_mask()
             #cutout = mask.cutout(im1[1].data)
             #err = mask.cutout(im1[2].data)
-            region_list = [y for x in glob.glob('regions/*zoom*.reg') for y in
+            region_list = [y for x in glob.glob('regions_/*zoom*.reg') for y in
                            regions.Regions.read(x)]
             zoomcut_list = {reg.meta['text']: reg.to_pixel(ww).to_mask().get_overlap_slices(data.shape)[0]
                             for reg in region_list}

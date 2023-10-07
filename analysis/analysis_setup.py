@@ -50,8 +50,8 @@ distance_modulus = dm = 5*np.log10(8.3*u.kpc / (10*u.pc))
 
 filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 
-reg = regions.Regions.read(f'{basepath}/regions/leftside_brick_zoom.reg')[0]
-regzoom = regions.Regions.read(f'{basepath}/regions/leftside_brick_rezoom.reg')[0]
+reg = regions.Regions.read(f'{basepath}/regions_/leftside_brick_zoom.reg')[0]
+regzoom = regions.Regions.read(f'{basepath}/regions_/leftside_brick_rezoom.reg')[0]
 
 
 fh_nrca = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')

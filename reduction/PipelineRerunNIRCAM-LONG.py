@@ -63,7 +63,7 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-def main(filtername, module, Observations=None, regionname='brick', field='001', proposal_id='2221', `n):
+def main(filtername, module, Observations=None, regionname='brick', field='001', proposal_id='2221'):
     log.info(f"Processing filter {filtername} module {module}")
 
     basepath = f'/orange/adamginsburg/jwst/{regionname}/'
@@ -220,8 +220,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             json.dump(asn_data, fh)
 
 
-        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                      'cloudc': 'regions/nircam_cloudc_fov.reg',
+        fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
+                      'cloudc': 'regions_/nircam_cloudc_fov.reg',
                       }
 
         if filtername.lower() == 'f405n':
@@ -337,8 +337,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             json.dump(asn_data, fh)
 
 
-        fov_regname = {'brick': 'regions/nircam_brick_fov.reg',
-                       'cloudc': 'regions/nircam_cloudc_fov.reg',
+        fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
+                       'cloudc': 'regions_/nircam_cloudc_fov.reg',
                       }
         if filtername.lower() == 'f405n':
             vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')

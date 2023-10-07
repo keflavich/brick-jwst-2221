@@ -477,7 +477,7 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
             ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=0.1)
         else:
             for reg in regs:
-                reg = regions.Regions.read(f'{basepath}/regions/{reg}')[0]
+                reg = regions.Regions.read(f'{basepath}/regions_/{reg}')[0]
                 match = reg.contains(crds, refwcs)
                 ax.scatter(radiff[ok & match], decdiff[ok & match], marker=',', s=1, alpha=0.1)
 
