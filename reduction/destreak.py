@@ -7,14 +7,18 @@ from astropy.wcs import WCS
 basepath = '/orange/adamginsburg/jwst/brick/'
 
 # these were created in notebooks/MedianFilterBackground.ipynb
-background_mapping = {
-    'f212n': 'jw02221-o001_t001_nircam_clear-f212n_i2d_medfilt256.fits',
-    'f187n': 'jw02221-o001_t001_nircam_clear-f187n_i2d_medfilt256.fits',
-    'f410m': 'jw02221-o001_t001_nircam_clear-f410m_i2d_medfilt128.fits',
-    'f405n': 'jw02221-o001_t001_nircam_f405n-f444w_i2d_medfilt128.fits',
-    'f182m': 'jw02221-o001_t001_nircam_clear-f182m_i2d_medfilt256.fits',
-    'f466n': 'jw02221-o001_t001_nircam_f444w-f466n_i2d_medfilt128.fits',
-}
+background_mapping = { '2221':
+                      { '001':
+                       {
+                        'f212n': 'jw02221-o001_t001_nircam_clear-f212n_i2d_medfilt256.fits',
+                        'f187n': 'jw02221-o001_t001_nircam_clear-f187n_i2d_medfilt256.fits',
+                        'f410m': 'jw02221-o001_t001_nircam_clear-f410m_i2d_medfilt128.fits',
+                        'f405n': 'jw02221-o001_t001_nircam_f405n-f444w_i2d_medfilt128.fits',
+                        'f182m': 'jw02221-o001_t001_nircam_clear-f182m_i2d_medfilt256.fits',
+                        'f466n': 'jw02221-o001_t001_nircam_f444w-f466n_i2d_medfilt128.fits',
+                       }
+                      }
+                     }
 
 
 def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
@@ -100,10 +104,21 @@ def add_background_map(data, hdu, background_mapping=background_mapping,
                        ext=('SCI', 1),
                        return_background=False):
     filtername = hdu[0].header['PUPIL']
-    if filtername in ('CLEAR', 'F444W'):
+    if filtername in ('CLEAR', 'F444W') and hdu[0].header['FILTER'] in ('F405N', 'F466N', 'F410M'):
         filtername = hdu[0].header['FILTER']
 
-    bgfile = os.path.join(bgmap_path, background_mapping[filtername.lower()])
+    proposal_id = hdu[0].header['PROGRAM'][1:5]
+    obsid = hdu[0].header['OBSERVTN'].strip()
+    visit = hdu[0].header['VISIT'].strip()
+
+    if (proposal_id not in background_mapping or obsid not in background_mapping[proposal_id]
+        or filtername.lower() not in background_mapping[proposal_id][obsid]):
+        print(f"WARNING: filter {filtername} is not in background mapping {background_mapping}.  "
+              "This likely means you haven't made it yet!")
+        return data
+
+    bgm = background_mapping[proposal_id][obsid]
+    bgfile = os.path.join(bgmap_path, bgm[filtername.lower()])
     if verbose:
         print(f'Background filename: {bgfile}')
 

@@ -92,7 +92,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
     # in a subdirectory of the base directory called `Stage3`
     output_dir = f'/orange/adamginsburg/jwst/{regionname}/{filtername}/pipeline/'
     if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
     os.chdir(output_dir)
 
     # the files are one directory up
