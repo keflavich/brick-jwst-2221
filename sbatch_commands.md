@@ -4,13 +4,15 @@
 ## Data reduction pipeline:
 
 ```
+# note that these use ipython; if you add -- flags for the pipeline, you need -- before the --flag stuff
 sbatch --job-name=webb-long-pipeline --output=webb-long-pipeline-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=128gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-LONG.py"
 sbatch --job-name=webb-short-pipeline --output=web-short-pipeline-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-SHORT.py"
 ```
 
 For 1182:
 ```
-sbatch --job-name=webb-long-pipeline-1182 --output=webb-long-pipeline-1182-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=128gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-LONG.py --proposal_id=1182 --field=004 --modules=merged --filternames=F444W,F115W,F200W,F356W"
+sbatch --job-name=webb-long-pipeline-1182 --output=webb-long-pipeline-1182-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=128gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-LONG.py -- --proposal_id=1182 --field=004 --modules=merged --filternames=F444W,F115W,F200W,F356W"
+sbatch --job-name=webb-long-pipeline-1182 --output=webb-long-pipeline-1182-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=128gb --time=96:00:0wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-LONG.py -- --proposal_id=1182 --field=004 --modules=merged --filternames=F444W,F356W"
 ```
 
 Modular pipeline runs:
