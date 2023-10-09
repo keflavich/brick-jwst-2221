@@ -218,6 +218,38 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
 
+            if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
+                align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
+                shutil.copy(member['expname'], align_image)
+                offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
+                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
+                align_fits = fits.open(align_image)
+                pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
+                try: 
+                    print('Running manual align.')
+                    xshift = float(row['xshift (arcsec)'])*u.arcsec
+                    yshift = float(row['yshift (arcsec)'])*u.arcsec
+                except: 
+                    print('Something went wrong with manual align, running default values.')
+                    visit = member['expname'].split('_')[0][-3:]
+                    if visit == '001':
+                        xshift = 8*u.arcsec
+                        yshift = -0.3*u.arcsec
+                    elif visit == '002':
+                        xshift = 3.9*u.arcsec/pixel_scale
+                        yshift = 1*u.arcsec/pixel_scale
+                    else:
+                        xshift = 0*u.arcsec/pixel_scale
+                        yshift = 0*u.arcsec/pixel_scale
+                fa = asdf.open(align_image)
+                wcsobj = fa.tree['meta']['wcs']
+                ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
+                tree = fa.tree
+                tree['meta']['wcs'] = ww
+                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)                    
+                align_fits.writeto(align_image, overwrite=True)
+                member['expname'] = align_image
+
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
@@ -333,6 +365,39 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                    use_background_map=True,
                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
+            
+            if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
+                align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
+                shutil.copy(member['expname'], align_image)
+                offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
+                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
+                align_fits = fits.open(align_image)
+                pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
+                try: 
+                    print('Running manual align.')
+                    xshift = float(row['xshift (arcsec)'])*u.arcsec
+                    yshift = float(row['yshift (arcsec)'])*u.arcsec
+                except: 
+                    print('Something went wrong with manual align, running default values.')
+                    visit = member['expname'].split('_')[0][-3:]
+                    if visit == '001':
+                        xshift = 8*u.arcsec
+                        yshift = -0.3*u.arcsec
+                    elif visit == '002':
+                        xshift = 3.9*u.arcsec/pixel_scale
+                        yshift = 1*u.arcsec/pixel_scale
+                    else:
+                        xshift = 0*u.arcsec/pixel_scale
+                        yshift = 0*u.arcsec/pixel_scale
+                fa = asdf.open(align_image)
+                wcsobj = fa.tree['meta']['wcs']
+                ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
+                tree = fa.tree
+                tree['meta']['wcs'] = ww
+                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)                    
+                align_fits.writeto(align_image, overwrite=True)
+                member['expname'] = align_image
+
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
