@@ -311,12 +311,24 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             save_results=True)
         print(f"DONE running {asn_file_each}")
 
+        if field == '002':
+            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
+            f = fits.open(fn)
+            w = WCS(f['SCI'].header)
+            sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            decoffset = sky.dec - star_coord.dec
+            raoffset = sky.ra - star_coord.ra
+        else: 
+            decoffset = 0.0 * u.arcsec
+            raoffset = 0.0 * u.arcsec
+
         log.info(f"Realigning to VVV (module={module}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
-                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15)
+                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
+                                   raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
@@ -327,7 +339,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
                                        mag_limit=20,
-                                       imfile=realigned_refcat_filename)
+                                       imfile=realigned_refcat_filename,
+                                       raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
@@ -454,12 +467,24 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             save_results=True)
         print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
+        if field == '002':
+            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
+            f = fits.open(fn)
+            w = WCS(f['SCI'].header)
+            sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            decoffset = sky.dec - star_coord.dec
+            raoffset = sky.ra - star_coord.ra
+        else: 
+            decoffset = 0.0 * u.arcsec
+            raoffset = 0.0 * u.arcsec
+
         log.info(f"Realigning to VVV (module={module}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
-                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15)
+                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
+                                   raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
@@ -470,7 +495,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
                                        mag_limit=20,
-                                       imfile=realigned_refcat_filename)
+                                       imfile=realigned_refcat_filename,
+                                       raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
