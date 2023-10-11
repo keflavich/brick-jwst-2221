@@ -8,10 +8,13 @@ import json
 import requests
 import asdf
 from astropy import log
+from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
 from astropy.utils.data import download_file
+from astropy.wcs import WCS
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
 from astropy.table import Table
+import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
@@ -60,6 +63,11 @@ print(jwst.__version__)
 
 # see 'destreak410.ipynb' for tests of this
 medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
+
+# Pixel coordinates of star
+pix_coords = {'nrca': (3904, 869), 'nrcb': (1119, 832), 'merged': (3903, 868)}
+#Sky coordinate of star
+star_coord = SkyCoord(266.594893*u.deg, -28.587417*u.deg)
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
