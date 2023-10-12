@@ -8,10 +8,13 @@ import json
 import requests
 import asdf
 from astropy import log
+from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
 from astropy.utils.data import download_file
+from astropy.wcs import WCS
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
 from astropy.table import Table
+import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
@@ -60,6 +63,18 @@ print(jwst.__version__)
 
 # see 'destreak410.ipynb' for tests of this
 medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
+
+# For fixing bulk offset after stage 3 of the pipeline
+pix_coords = {'2221':
+              {'002': 
+               {
+                   'star_coord': SkyCoord(266.594893*u.deg, -28.587417*u.deg),
+                   'nrca': (3904, 869), 
+                   'nrcb': (1119, 832), 
+                   'merged': (3903, 868)
+               }
+              }
+             }
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
@@ -311,12 +326,25 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             save_results=True)
         print(f"DONE running {asn_file_each}")
 
+        if proposal_id in pix_coords and field in pix_coords[proposal_id]:
+            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
+            f = fits.open(fn)
+            w = WCS(f['SCI'].header)
+            sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            star_coord = pix_coords[proposal_id][field]['star_coord']
+            decoffset = sky.dec - star_coord.dec
+            raoffset = sky.ra - star_coord.ra
+        else: 
+            decoffset = 0.0 * u.arcsec
+            raoffset = 0.0 * u.arcsec
+
         log.info(f"Realigning to VVV (module={module}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
-                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15)
+                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
+                                   raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
@@ -327,7 +355,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
                                        mag_limit=20,
-                                       imfile=realigned_refcat_filename)
+                                       imfile=realigned_refcat_filename,
+                                       raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
@@ -454,12 +483,25 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             save_results=True)
         print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
+        if proposal_id in pix_coords and field in pix_coords[proposal_id]:
+            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
+            f = fits.open(fn)
+            w = WCS(f['SCI'].header)
+            sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            star_coord = pix_coords[proposal_id][field]['star_coord']
+            decoffset = sky.dec - star_coord.dec
+            raoffset = sky.ra - star_coord.ra
+        else: 
+            decoffset = 0.0 * u.arcsec
+            raoffset = 0.0 * u.arcsec
+
         log.info(f"Realigning to VVV (module={module}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
-                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15)
+                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
+                                   raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
@@ -470,7 +512,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
                                        mag_limit=20,
-                                       imfile=realigned_refcat_filename)
+                                       imfile=realigned_refcat_filename,
+                                       raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
