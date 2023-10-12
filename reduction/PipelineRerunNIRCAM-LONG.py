@@ -64,10 +64,17 @@ print(jwst.__version__)
 # see 'destreak410.ipynb' for tests of this
 medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
-# Pixel coordinates of star
-pix_coords = {'nrca': (3904, 869), 'nrcb': (1119, 832), 'merged': (3903, 868)}
-#Sky coordinate of star
-star_coord = SkyCoord(266.594893*u.deg, -28.587417*u.deg)
+# For fixing bulk offset after stage 3 of the pipeline
+pix_coords = {'2221':
+              {'002': 
+               {
+                   'star_coord': SkyCoord(266.594893*u.deg, -28.587417*u.deg),
+                   'nrca': (3904, 869), 
+                   'nrcb': (1119, 832), 
+                   'merged': (3903, 868)
+               }
+              }
+             }
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
@@ -319,11 +326,12 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             save_results=True)
         print(f"DONE running {asn_file_each}")
 
-        if field == '002':
+        if proposal_id in pix_coords and field in pix_coords[proposal_id]:
             fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
             sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            star_coord = pix_coords[proposal_id][field]['star_coord']
             decoffset = sky.dec - star_coord.dec
             raoffset = sky.ra - star_coord.ra
         else: 
@@ -475,11 +483,12 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             save_results=True)
         print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
-        if field == '002':
+        if proposal_id in pix_coords and field in pix_coords[proposal_id]:
             fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
             sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            star_coord = pix_coords[proposal_id][field]['star_coord']
             decoffset = sky.dec - star_coord.dec
             raoffset = sky.ra - star_coord.ra
         else: 
