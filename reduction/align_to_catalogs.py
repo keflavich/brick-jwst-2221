@@ -22,7 +22,9 @@ def print(*args, **kwargs):
     return printfunc(f"{now}:", *args, **kwargs)
 
 def main(field='001',
-         basepath = '/orange/adamginsburg/jwst/brick/',):
+         basepath = '/orange/adamginsburg/jwst/brick/',
+         proposal_id='2221',
+        ):
     for filtername in ( 'f405n', 'f410m', 'f466n', 'f182m', 'f187n', 'f212n',):
         print()
         print(f"Filter = {filtername}")
@@ -32,37 +34,39 @@ def main(field='001',
             print(filtername, module)
             log.info(f"Realigning to vvv (module={module}")
 
-            realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
-            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+            realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                         realigned_vvv_filename)
             realigned = realign_to_vvv(filtername=filtername.lower(),
                                     basepath=basepath, module=module, fieldnumber=field,
                                     imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m'
-                                    else 11, mag_limit=15)
+                                    else 11, mag_limit=15, proposal_id=proposal_id)
 
             log.info(f"Realigning to refcat (module={module}")
 
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
 
-            realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
-            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+            realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                         realigned_refcat_filename)
             realigned = realign_to_catalog(reftbl['skycoord'],
                                         filtername=filtername.lower(),
                                         basepath=basepath, module=module,
                                         fieldnumber=field,
                                         mag_limit=20,
+                                           proposal_id=proposal_id,
                                         imfile=realigned_refcat_filename)
 
 
 def retrieve_vvv(
     basepath = '/orange/adamginsburg/jwst/brick/',
     filtername = 'f212n',
+    proposal_id='2221',
     module = 'nrca',
     imfile = None,
     catfile = None,
-    fov_regname='regions_/nircam_brick_fov.reg',
+    fov_regname='regions/nircam_brick_fov.reg',
     fieldnumber='001',
 ):
     fov = regions.Regions.read(os.path.join(basepath, fov_regname))
@@ -72,7 +76,7 @@ def retrieve_vvv(
     width = fov[0].width
     height, width = width, height # CARTA wrote it wrong
 
-    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
+    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
 
     if os.path.exists(vvvdr2filename):
         vvvdr2 = Table.read(vvvdr2filename)
@@ -107,8 +111,9 @@ def realign_to_vvv(
     module = 'nrca',
     imfile = None,
     catfile = None,
-    fov_regname='regions_/nircam_brick_fov.reg',
+    fov_regname='regions/nircam_brick_fov.reg',
     fieldnumber='001',
+    proposal_id='2221',
     ksmag_limit=15,
     mag_limit=15,
 ):
@@ -128,6 +133,7 @@ def realign_to_vvv(
                               fieldnumber=fieldnumber,
                               catfile=catfile, imfile=imfile,
                               mag_limit=15,
+                              proposal_id=proposal_id,
                               )
 
 
@@ -135,13 +141,14 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
                        module='nrca',
                        basepath='/orange/adamginsburg/jwst/brick/',
                        fieldnumber='001',
+                       proposal_id='2221',
                        max_offset=0.4*u.arcsec,
                        mag_limit=15,
                        catfile=None, imfile=None):
     if catfile is None:
-        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
+        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
     if imfile is None:
-        imfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_i2d.fits'
+        imfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_i2d.fits'
 
     cat = Table.read(catfile)
 
@@ -232,14 +239,15 @@ def merge_a_plus_b(filtername,
     basepath = '/orange/adamginsburg/jwst/brick/',
     parallel=True,
     fieldnumber='001',
+    proposal_id='2221',
     suffix='realigned-to-vvv',
     outsuffix='merged-reproject'
     ):
     """suffix can be realigned-to-vvv, realigned-to-refcat, or i2d"""
     import reproject
     from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
-    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_{suffix}.fits'
-    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_{suffix}.fits'
+    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_{suffix}.fits'
+    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_{suffix}.fits'
     files = [filename_nrca, filename_nrcb]
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
@@ -270,7 +278,7 @@ def merge_a_plus_b(filtername,
                          fits.ImageHDU(data=merged_err, name='ERR', header=header),
                          fits.ImageHDU(data=weightmap, name='WHT', header=header),
                         ])
-    outfn = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-{outsuffix}_i2d.fits'
+    outfn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-{outsuffix}_i2d.fits'
     hdul.writeto(outfn, overwrite=True)
     return outfn
 

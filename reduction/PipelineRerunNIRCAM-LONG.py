@@ -342,7 +342,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
-        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
+        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
                                    raoffset=raoffset, decoffset=decoffset)
 
@@ -354,7 +354,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                        filtername=filtername.lower(),
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
-                                       mag_limit=20,
+                                       mag_limit=20, proposal_id=proposal_id,
                                        imfile=realigned_refcat_filename,
                                        raoffset=raoffset, decoffset=decoffset)
 
@@ -369,7 +369,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
     if module == 'nrcb':
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules")
-        merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix='realigned-to-refcat')
+        merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix='realigned-to-refcat',
+                       proposal_id=proposal_id)
         print("DONE Merging already-combined nrca + nrcb modules")
 
         #try:
@@ -499,7 +500,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
-        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field,
+        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
                                    raoffset=raoffset, decoffset=decoffset)
 
@@ -512,6 +513,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
                                        mag_limit=20,
+                                       proposal_id=proposal_id,
                                        imfile=realigned_refcat_filename,
                                        raoffset=raoffset, decoffset=decoffset)
 
