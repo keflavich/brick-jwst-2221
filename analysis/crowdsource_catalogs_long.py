@@ -260,7 +260,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
             #         grid = grid[0]
 
-            with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+            with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
                 api_token = fh.read().strip()
             from astroquery.mast import Mast
 
