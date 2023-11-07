@@ -274,6 +274,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 decshift = float(row['ddec (arcsec)'])*u.arcsec
 
                 # ASDF header
+                align_fits = fits.open(align_image)
                 fa = asdf.open(align_image)
                 wcsobj = fa.tree['meta']['wcs']
                 ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
@@ -458,6 +459,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 decshift = float(row['ddec (arcsec)'])*u.arcsec
 
                 # ASDF header
+                align_fits = fits.open(align_image)
                 fa = asdf.open(align_image)
                 wcsobj = fa.tree['meta']['wcs']
                 ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
