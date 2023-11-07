@@ -34,6 +34,7 @@ from jwst.source_catalog import SourceCatalogStep
 from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
+from jwst.tweakreg.utils import adjust_wcs
 
 from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
 from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
@@ -66,11 +67,11 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
 
 # For fixing bulk offset after stage 3 of the pipeline
 pix_coords = {'2221':
-              {'002': 
+              {'002':
                {
                    'star_coord': SkyCoord(266.594893*u.deg, -28.587417*u.deg),
-                   'nrca': (3904, 869), 
-                   'nrcb': (1119, 832), 
+                   'nrca': (3904, 869),
+                   'nrcb': (1119, 832),
                    'merged': (3903, 868)
                }
               }
@@ -206,7 +207,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             Detector1Pipeline.call(member['expname'].replace("_cal.fits",
                                                              "_uncal.fits"),
                                    save_results=True, output_dir=output_dir,
-                                   steps={'ramp_fit': {'suppress_one_group':False}, 
+                                   steps={'ramp_fit': {'suppress_one_group':False},
                                           "refpix": {"use_side_ref_pixels": True}})
             print(f"IMAGE2 PIPELINE on {member['expname']}")
             Image2Pipeline.call(member['expname'].replace("_cal.fits",
@@ -240,11 +241,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
                 align_fits = fits.open(align_image)
                 pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
-                try: 
+                try:
                     print('Running manual align.')
                     xshift = float(row['xshift (arcsec)'])*u.arcsec
                     yshift = float(row['yshift (arcsec)'])*u.arcsec
-                except: 
+                except:
                     print('Something went wrong with manual align, running default values.')
                     visit = member['expname'].split('_')[0][-3:]
                     if visit == '001':
@@ -261,9 +262,30 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
                 tree = fa.tree
                 tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)                    
+                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
                 align_fits.writeto(align_image, overwrite=True)
                 member['expname'] = align_image
+            elif field == '004' and proposal_id == '1182':
+                align_image = member['expname']
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
+                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
+                print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+                rashift = float(row['dra (arcsec)'])*u.arcsec
+                decshift = float(row['ddec (arcsec)'])*u.arcsec
+
+                # ASDF header
+                fa = asdf.open(align_image)
+                wcsobj = fa.tree['meta']['wcs']
+                ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+                tree = fa.tree
+                tree['meta']['wcs'] = ww
+                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
+                align_fits.writeto(align_image, overwrite=True)
+
+                # FITS header
+                align_fits = fits.open(align_image)
+                align_fits[1].header.update(ww.to_fits()[0])
+                align_fits.writeto(align_image, overwrite=True)
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -306,7 +328,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                     'snr_threshold': 30, # was 5, but that produced too many stars
                                     'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
-                                    'catalog_format': 'ecsv',
+                                    'catalog_format': 'fits',
                                     'kernel_fwhm': fwhm_pix,
                                     'nclip': 5,
                                     # based on DebugReproduceTweakregStep
@@ -334,7 +356,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             star_coord = pix_coords[proposal_id][field]['star_coord']
             decoffset = sky.dec - star_coord.dec
             raoffset = sky.ra - star_coord.ra
-        else: 
+        else:
             decoffset = 0.0 * u.arcsec
             raoffset = 0.0 * u.arcsec
 
@@ -395,7 +417,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                    use_background_map=True,
                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                 member['expname'] = outname
-            
+
             if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
                 shutil.copy(member['expname'], align_image)
@@ -403,11 +425,11 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
                 align_fits = fits.open(align_image)
                 pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
-                try: 
+                try:
                     print('Running manual align.')
                     xshift = float(row['xshift (arcsec)'])*u.arcsec
                     yshift = float(row['yshift (arcsec)'])*u.arcsec
-                except: 
+                except:
                     print('Something went wrong with manual align, running default values.')
                     visit = member['expname'].split('_')[0][-3:]
                     if visit == '001':
@@ -424,9 +446,30 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
                 tree = fa.tree
                 tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)                    
+                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
                 align_fits.writeto(align_image, overwrite=True)
                 member['expname'] = align_image
+            elif field == '004' and proposal_id == '1182':
+                align_image = member['expname']
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
+                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
+                print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+                rashift = float(row['dra (arcsec)'])*u.arcsec
+                decshift = float(row['ddec (arcsec)'])*u.arcsec
+
+                # ASDF header
+                fa = asdf.open(align_image)
+                wcsobj = fa.tree['meta']['wcs']
+                ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+                tree = fa.tree
+                tree['meta']['wcs'] = ww
+                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
+                align_fits.writeto(align_image, overwrite=True)
+
+                # FITS header
+                align_fits = fits.open(align_image)
+                align_fits[1].header.update(ww.to_fits()[0])
+                align_fits.writeto(align_image, overwrite=True)
 
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
@@ -492,7 +535,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
             star_coord = pix_coords[proposal_id][field]['star_coord']
             decoffset = sky.dec - star_coord.dec
             raoffset = sky.ra - star_coord.ra
-        else: 
+        else:
             decoffset = 0.0 * u.arcsec
             raoffset = 0.0 * u.arcsec
 
