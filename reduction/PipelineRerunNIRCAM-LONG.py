@@ -79,7 +79,13 @@ pix_coords = {'2221':
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-def main(filtername, module, Observations=None, regionname='brick', field='001', proposal_id='2221'):
+def main(filtername, module, Observations=None, regionname='brick',
+         field='001', proposal_id='2221', skip_step1and2=False):
+    """
+    skip_step1and2 will not re-fit the ramps to produce the _cal images.  This
+    can save time if you just want to redo the tweakreg steps but already have
+    the zero-frame stuff done.
+    """
     log.info(f"Processing filter {filtername} module {module}")
 
     basepath = f'/orange/adamginsburg/jwst/{regionname}/'
@@ -172,33 +178,33 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
 
 
     # all cases, except if you're just doing a merger?
-    if not skip_step1and2:
-        if module in ('nrca', 'nrcb', 'merged'):
-            print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
-            asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
-            if len(asn_file_search) == 1:
-                asn_file = asn_file_search[0]
-            elif len(asn_file_search) > 1:
-                asn_file = sorted(asn_file_search)[-1]
-                print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
-            else:
-                raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
+    if module in ('nrca', 'nrcb', 'merged'):
+        print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
+        asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
+        if len(asn_file_search) == 1:
+            asn_file = asn_file_search[0]
+        elif len(asn_file_search) > 1:
+            asn_file = sorted(asn_file_search)[-1]
+            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+        else:
+            raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
 
-            mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
-            print(f"Mapping: {mapping.todict()['selections']}")
-            print(f"Filtername: {filtername}")
-            filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
-            print(f"Filter_match: {filter_match} n={len(filter_match)}")
-            tweakreg_asdf_filename = filter_match[0][4]
-            tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
-            tweakreg_parameters = tweakreg_asdf.tree['parameters']
-            print(f'Filter {filtername}: {tweakreg_parameters}')
+        mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+        print(f"Mapping: {mapping.todict()['selections']}")
+        print(f"Filtername: {filtername}")
+        filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
+        print(f"Filter_match: {filter_match} n={len(filter_match)}")
+        tweakreg_asdf_filename = filter_match[0][4]
+        tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
+        tweakreg_parameters = tweakreg_asdf.tree['parameters']
+        print(f'Filter {filtername}: {tweakreg_parameters}')
 
 
-            with open(asn_file) as f_obj:
-                asn_data = json.load(f_obj)
+        with open(asn_file) as f_obj:
+            asn_data = json.load(f_obj)
 
-            print(f"In cwd={os.getcwd()}")
+        print(f"In cwd={os.getcwd()}")
+        if not skip_step1and2:
             # re-calibrate all uncal files -> cal files *without* suppressing first group
             for member in asn_data['products'][0]['members']:
                 # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
@@ -215,8 +221,8 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                                               "_rate.fits"),
                                     save_results=True, output_dir=output_dir,
                                    )
-        else:
-            raise ValueError(f"Module is {module} - not allowed!")
+    else:
+        raise ValueError(f"Module is {module} - not allowed!")
 
     if module in ('nrca', 'nrcb'):
         print(f"Filter {filtername} module {module}")
