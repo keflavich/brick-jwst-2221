@@ -290,7 +290,6 @@ def main(filtername, module, Observations=None, regionname='brick',
                 print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
                 fa.tree['meta']['wcs'] = ww
                 fa.write_to(align_image, overwrite=True)
-                align_fits.writeto(align_image, overwrite=True)
 
                 # FITS header
                 align_fits = fits.open(align_image)
@@ -483,7 +482,6 @@ def main(filtername, module, Observations=None, regionname='brick',
                 print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
                 fa.tree['meta']['wcs'] = ww
                 fa.write_to(align_image, overwrite=True)
-                align_fits.writeto(align_image, overwrite=True)
 
                 # FITS header
                 align_fits = fits.open(align_image)
