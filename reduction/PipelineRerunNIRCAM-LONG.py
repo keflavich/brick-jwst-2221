@@ -172,50 +172,51 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
 
 
     # all cases, except if you're just doing a merger?
-    if module in ('nrca', 'nrcb', 'merged'):
-        print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
-        asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
-        if len(asn_file_search) == 1:
-            asn_file = asn_file_search[0]
-        elif len(asn_file_search) > 1:
-            asn_file = sorted(asn_file_search)[-1]
-            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+    if not skip_step1and2:
+        if module in ('nrca', 'nrcb', 'merged'):
+            print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
+            asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
+            if len(asn_file_search) == 1:
+                asn_file = asn_file_search[0]
+            elif len(asn_file_search) > 1:
+                asn_file = sorted(asn_file_search)[-1]
+                print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+            else:
+                raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
+
+            mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+            print(f"Mapping: {mapping.todict()['selections']}")
+            print(f"Filtername: {filtername}")
+            filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
+            print(f"Filter_match: {filter_match} n={len(filter_match)}")
+            tweakreg_asdf_filename = filter_match[0][4]
+            tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
+            tweakreg_parameters = tweakreg_asdf.tree['parameters']
+            print(f'Filter {filtername}: {tweakreg_parameters}')
+
+
+            with open(asn_file) as f_obj:
+                asn_data = json.load(f_obj)
+
+            print(f"In cwd={os.getcwd()}")
+            # re-calibrate all uncal files -> cal files *without* suppressing first group
+            for member in asn_data['products'][0]['members']:
+                # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
+                assert f'jw0{proposal_id}{field}' in member['expname']
+                print(f"DETECTOR PIPELINE on {member['expname']}")
+                print("Detector1Pipeline step")
+                Detector1Pipeline.call(member['expname'].replace("_cal.fits",
+                                                                 "_uncal.fits"),
+                                       save_results=True, output_dir=output_dir,
+                                       steps={'ramp_fit': {'suppress_one_group':False},
+                                              "refpix": {"use_side_ref_pixels": True}})
+                print(f"IMAGE2 PIPELINE on {member['expname']}")
+                Image2Pipeline.call(member['expname'].replace("_cal.fits",
+                                                              "_rate.fits"),
+                                    save_results=True, output_dir=output_dir,
+                                   )
         else:
-            raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
-
-        mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
-        print(f"Mapping: {mapping.todict()['selections']}")
-        print(f"Filtername: {filtername}")
-        filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
-        print(f"Filter_match: {filter_match} n={len(filter_match)}")
-        tweakreg_asdf_filename = filter_match[0][4]
-        tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
-        tweakreg_parameters = tweakreg_asdf.tree['parameters']
-        print(f'Filter {filtername}: {tweakreg_parameters}')
-
-
-        with open(asn_file) as f_obj:
-            asn_data = json.load(f_obj)
-
-        print(f"In cwd={os.getcwd()}")
-        # re-calibrate all uncal files -> cal files *without* suppressing first group
-        for member in asn_data['products'][0]['members']:
-            # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
-            assert f'jw0{proposal_id}{field}' in member['expname']
-            print(f"DETECTOR PIPELINE on {member['expname']}")
-            print("Detector1Pipeline step")
-            Detector1Pipeline.call(member['expname'].replace("_cal.fits",
-                                                             "_uncal.fits"),
-                                   save_results=True, output_dir=output_dir,
-                                   steps={'ramp_fit': {'suppress_one_group':False},
-                                          "refpix": {"use_side_ref_pixels": True}})
-            print(f"IMAGE2 PIPELINE on {member['expname']}")
-            Image2Pipeline.call(member['expname'].replace("_cal.fits",
-                                                          "_rate.fits"),
-                                save_results=True, output_dir=output_dir,
-                               )
-    else:
-        raise ValueError(f"Module is {module} - not allowed!")
+            raise ValueError(f"Module is {module} - not allowed!")
 
     if module in ('nrca', 'nrcb'):
         print(f"Filter {filtername} module {module}")
@@ -365,9 +366,14 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
-        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
-                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
-                                   raoffset=raoffset, decoffset=decoffset)
+        realigned = realign_to_vvv(filtername=filtername.lower(),
+                                   fov_regname=fov_regname[regionname],
+                                   basepath=basepath, module=module,
+                                   fieldnumber=field, proposal_id=proposal_id,
+                                   imfile=realigned_vvv_filename,
+                                   ksmag_limit=15 if filtername=='f410m' else
+                                   11, mag_limit=15, raoffset=raoffset,
+                                   decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
@@ -511,7 +517,7 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                                     'snr_threshold': 30,
                                     'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
-                                    'catalog_format': 'ecsv',
+                                    'catalog_format': 'fits',
                                     'kernel_fwhm': fwhm_pix,
                                     'nclip': 5,
                                     'sharplo': 0.3,
@@ -584,6 +590,10 @@ if __name__ == "__main__":
     parser.add_option("-d", "--field", dest="field",
                     default='001,002',
                     help="list of target fields", metavar="field")
+    parser.add_option("-s", "--skip_step1and2", dest="skip_step1and2",
+                      default=False,
+                      action='store_true',
+                      help="Skip the image-remaking step?", metavar="skip_Step1and2")
     parser.add_option("-p", "--proposal_id", dest="proposal_id",
                     default='2221',
                     help="proposal id (string)", metavar="proposal_id")
@@ -593,6 +603,7 @@ if __name__ == "__main__":
     modules = options.modules.split(",")
     fields = options.field.split(",")
     proposal_id = options.proposal_id
+    skip_step1and2 = options.skip_step1and2
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
@@ -611,7 +622,8 @@ if __name__ == "__main__":
                 print(f"Main Loop: {proposal_id} + {filtername} + {module} + {field}={field_to_reg_mapping[field]}")
                 results = main(filtername=filtername, module=module, Observations=Observations, field=field,
                                regionname=field_to_reg_mapping[field],
-                               proposal_id=proposal_id
+                               proposal_id=proposal_id,
+                               skip_step1and2=skip_step1and2,
                               )
 
 
