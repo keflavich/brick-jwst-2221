@@ -271,8 +271,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
                 print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-                rashift = float(row['dra (arcsec)'])*u.arcsec
-                decshift = float(row['ddec (arcsec)'])*u.arcsec
+                rashift = float(row['dra (arcsec)'][0])*u.arcsec
+                decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+                print(f"Shift for {align_image} is {rashift}, {decshift}")
 
                 # ASDF header
                 align_fits = fits.open(align_image)
@@ -461,8 +462,9 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
                 print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-                rashift = float(row['dra (arcsec)'])*u.arcsec
-                decshift = float(row['ddec (arcsec)'])*u.arcsec
+                rashift = float(row['dra (arcsec)'][0])*u.arcsec
+                decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+                print(f"Shift for {align_image} is {rashift}, {decshift}")
 
                 # ASDF header
                 align_fits = fits.open(align_image)
