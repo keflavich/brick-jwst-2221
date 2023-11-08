@@ -234,6 +234,7 @@ def main(filtername, module, Observations=None, regionname='brick',
                                                 if f'{module}' in row['expname']]
 
         for member in asn_data['products'][0]['members']:
+            print(f"Running destreak and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
             if filtername in (hdr['PUPIL'], hdr['FILTER']):
                 outname = destreak(member['expname'],
@@ -282,13 +283,13 @@ def main(filtername, module, Observations=None, regionname='brick',
                 print(f"Shift for {align_image} is {rashift}, {decshift}")
 
                 # ASDF header
-                align_fits = fits.open(align_image)
                 fa = asdf.open(align_image)
                 wcsobj = fa.tree['meta']['wcs']
+                print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
                 ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                tree = fa.tree
-                tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
+                print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                fa.tree['meta']['wcs'] = ww
+                fa.write_to(align_image, overwrite=True)
                 align_fits.writeto(align_image, overwrite=True)
 
                 # FITS header
@@ -346,6 +347,7 @@ def main(filtername, module, Observations=None, regionname='brick',
                                     'roundlo': -0.25,
                                     'roundhi': 0.25,
                                     'separation': 0.5, # minimum separation; default is 1
+                                    'save_results': True,
                                     # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
                                     })
 
@@ -425,6 +427,7 @@ def main(filtername, module, Observations=None, regionname='brick',
             asn_data = json.load(f_obj)
 
         for member in asn_data['products'][0]['members']:
+            print(f"Running destreak and maybe alignment on {member} for module=merged")
             hdr = fits.getheader(member['expname'])
             if filtername in (hdr['PUPIL'], hdr['FILTER']):
                 outname = destreak(member['expname'],
@@ -473,13 +476,13 @@ def main(filtername, module, Observations=None, regionname='brick',
                 print(f"Shift for {align_image} is {rashift}, {decshift}")
 
                 # ASDF header
-                align_fits = fits.open(align_image)
                 fa = asdf.open(align_image)
                 wcsobj = fa.tree['meta']['wcs']
+                print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
                 ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                tree = fa.tree
-                tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
+                print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                fa.tree['meta']['wcs'] = ww
+                fa.write_to(align_image, overwrite=True)
                 align_fits.writeto(align_image, overwrite=True)
 
                 # FITS header
@@ -533,6 +536,7 @@ def main(filtername, module, Observations=None, regionname='brick',
                                     'roundlo': -0.25,
                                     'roundhi': 0.25,
                                     'separation': 0.5, # minimum separation; default is 1
+                                    'save_results': True,
                                     })
 
         log.info("Running tweakreg (merged)")
