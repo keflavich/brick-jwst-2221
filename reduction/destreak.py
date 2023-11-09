@@ -10,12 +10,18 @@ basepath = '/orange/adamginsburg/jwst/brick/'
 background_mapping = { '2221':
                       { '001':
                        {
+                        'regionname': 'brick',
                         'f212n': 'jw02221-o001_t001_nircam_clear-f212n_i2d_medfilt256.fits',
                         'f187n': 'jw02221-o001_t001_nircam_clear-f187n_i2d_medfilt256.fits',
                         'f410m': 'jw02221-o001_t001_nircam_clear-f410m_i2d_medfilt128.fits',
                         'f405n': 'jw02221-o001_t001_nircam_f405n-f444w_i2d_medfilt128.fits',
                         'f182m': 'jw02221-o001_t001_nircam_clear-f182m_i2d_medfilt256.fits',
                         'f466n': 'jw02221-o001_t001_nircam_f444w-f466n_i2d_medfilt128.fits',
+                       },
+                        '002':
+                       {
+                        'regionname': 'cloudc',
+                        'f405n': 'jw02221-o002_t001_nircam_clear-f405n-merged_realigned-to-vvv_i2d_medfilt128.fits',
                        }
                       }
                      }
@@ -174,8 +180,13 @@ def destreak(frame, percentile=10, median_filter_size=256, overwrite=True, write
                          add_smoothed=not use_background_map
                                          )
 
-    if use_background_map:
-        data = add_background_map(data, hdu, background_mapping=background_mapping)
+    proposal_id = hdu[0].header['PROGRAM'][1:5]
+    obsid = hdu[0].header['OBSERVTN'].strip()
+    if use_background_map and not (proposal_id not in background_mapping or obsid not in background_mapping[proposal_id]):
+        regionname = background_mapping[proposal_id][obsid]['regionname']
+        basepath = f'/orange/adamginsburg/jwst/{regionname}/'
+        bgmap_path=f'{basepath}/images/'
+        data = add_background_map(data, hdu, background_mapping=background_mapping, bgmap_path=bgmap_path)
 
     hdu[('SCI', 1)].data = data
 
