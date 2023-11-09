@@ -79,7 +79,7 @@ pix_coords = {'2221':
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
-def main(filtername, module, Observations=None, regionname='brick',
+def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
          field='001', proposal_id='2221', skip_step1and2=False):
     """
     skip_step1and2 will not re-fit the ramps to produce the _cal images.  This
@@ -93,6 +93,8 @@ def main(filtername, module, Observations=None, regionname='brick',
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
     fwhm_pix = float(row['PSF FWHM (pixel)'][0])
+
+    destreak_suffix = '' if do_destreak else '_nodestreak'
 
     # sanity check
     if regionname == 'brick':
@@ -234,13 +236,14 @@ def main(filtername, module, Observations=None, regionname='brick',
                                                 if f'{module}' in row['expname']]
 
         for member in asn_data['products'][0]['members']:
-            print(f"Running destreak and maybe alignment on {member} for module={module}")
+            print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
-            if filtername in (hdr['PUPIL'], hdr['FILTER']):
-                outname = destreak(member['expname'],
-                                   use_background_map=True,
-                                   median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
-                member['expname'] = outname
+            if do_destreak:
+                if filtername in (hdr['PUPIL'], hdr['FILTER']):
+                    outname = destreak(member['expname'],
+                                    use_background_map=True,
+                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+                    member['expname'] = outname
 
             if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
@@ -359,7 +362,7 @@ def main(filtername, module, Observations=None, regionname='brick',
         print(f"DONE running {asn_file_each}")
 
         if proposal_id in pix_coords and field in pix_coords[proposal_id]:
-            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
+            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
             sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
@@ -371,7 +374,7 @@ def main(filtername, module, Observations=None, regionname='brick',
             raoffset = 0.0 * u.arcsec
 
         log.info(f"Realigning to VVV (module={module}")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(),
@@ -384,7 +387,7 @@ def main(filtername, module, Observations=None, regionname='brick',
                                    decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
-        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
         realigned = realign_to_catalog(reftbl['skycoord'],
@@ -428,11 +431,12 @@ def main(filtername, module, Observations=None, regionname='brick',
         for member in asn_data['products'][0]['members']:
             print(f"Running destreak and maybe alignment on {member} for module=merged")
             hdr = fits.getheader(member['expname'])
-            if filtername in (hdr['PUPIL'], hdr['FILTER']):
-                outname = destreak(member['expname'],
-                                   use_background_map=True,
-                                   median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
-                member['expname'] = outname
+            if do_destreak:
+                if filtername in (hdr['PUPIL'], hdr['FILTER']):
+                    outname = destreak(member['expname'],
+                                    use_background_map=True,
+                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+                    member['expname'] = outname
 
             if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
@@ -546,7 +550,7 @@ def main(filtername, module, Observations=None, regionname='brick',
         print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
         if proposal_id in pix_coords and field in pix_coords[proposal_id]:
-            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits'
+            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
             sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
@@ -558,7 +562,7 @@ def main(filtername, module, Observations=None, regionname='brick',
             raoffset = 0.0 * u.arcsec
 
         log.info(f"Realigning to VVV (module={module}")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits'
+        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
@@ -566,7 +570,7 @@ def main(filtername, module, Observations=None, regionname='brick',
                                    raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
-        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
         realigned = realign_to_catalog(reftbl['skycoord'],
@@ -604,9 +608,13 @@ if __name__ == "__main__":
                       default=False,
                       action='store_true',
                       help="Skip the image-remaking step?", metavar="skip_Step1and2")
+    parser.add_option("--no_destreak", dest="no_destreak",
+                      default=False,
+                      action='store_true',
+                      help="Skip the destreaking step?", metavar="skip_destreak")
     parser.add_option("-p", "--proposal_id", dest="proposal_id",
-                    default='2221',
-                    help="proposal id (string)", metavar="proposal_id")
+                      default='2221',
+                      help="proposal id (string)", metavar="proposal_id")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
@@ -614,6 +622,7 @@ if __name__ == "__main__":
     fields = options.field.split(",")
     proposal_id = options.proposal_id
     skip_step1and2 = options.skip_step1and2
+    no_destrak = options.no_destreak
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
@@ -634,6 +643,7 @@ if __name__ == "__main__":
                                regionname=field_to_reg_mapping[field],
                                proposal_id=proposal_id,
                                skip_step1and2=skip_step1and2,
+                               do_destreak=~no_destreak,
                               )
 
 
