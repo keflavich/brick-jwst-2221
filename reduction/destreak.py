@@ -180,9 +180,9 @@ def destreak(frame, percentile=10, median_filter_size=256, overwrite=True, write
                          add_smoothed=not use_background_map
                                          )
 
+    proposal_id = hdu[0].header['PROGRAM'][1:5]
+    obsid = hdu[0].header['OBSERVTN'].strip()
     if use_background_map and not (proposal_id not in background_mapping or obsid not in background_mapping[proposal_id]):
-        proposal_id = hdu[0].header['PROGRAM'][1:5]
-        obsid = hdu[0].header['OBSERVTN'].strip()
         regionname = background_mapping[proposal_id][obsid]['regionname']
         basepath = f'/orange/adamginsburg/jwst/{regionname}/'
         bgmap_path=f'{basepath}/images/'
