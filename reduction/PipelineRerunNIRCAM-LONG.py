@@ -279,7 +279,15 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif field == '004' and proposal_id == '1182':
                 align_image = member['expname']
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
-                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
+                match = ((offsets_tbl['Visit'] == 'jw01182004001') &
+                         #(offsets_tbl['Group'] == '4101') &
+                         (offsets_tbl['Exposure'] == int(member['expname'].split("_")[-3])) &
+                         (offsets_tbl['Module'] == member['expname'].split("_")[-2]) &
+                         (offsets_tbl['Filter'] == filtername)
+                         )
+                if match.sum() != 1:
+                    raise ValueError(f"too many or too few matches for {member}")
+                row = offsets_tbl[match]
                 print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
                 rashift = float(row['dra (arcsec)'][0])*u.arcsec
                 decshift = float(row['ddec (arcsec)'][0])*u.arcsec
@@ -472,7 +480,16 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif field == '004' and proposal_id == '1182':
                 align_image = member['expname']
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
-                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
+                exposure = int(member['expname'].split("_")[-3])
+                thismodule = member['expname'].split("_")[-2]
+                match = ((offsets_tbl['Visit'] == 'jw01182004001') &
+                         (offsets_tbl['Exposure'] == exposure ) &
+                         (offsets_tbl['Module'] == thismodule) &
+                         (offsets_tbl['Filter'] == filtername)
+                         )
+                if match.sum() != 1:
+                    raise ValueError(f"too many or too few matches for {member}")
+                row = offsets_tbl[match]
                 print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
                 rashift = float(row['dra (arcsec)'][0])*u.arcsec
                 decshift = float(row['ddec (arcsec)'][0])*u.arcsec
@@ -622,7 +639,7 @@ if __name__ == "__main__":
     fields = options.field.split(",")
     proposal_id = options.proposal_id
     skip_step1and2 = options.skip_step1and2
-    no_destreak = options.no_destreak
+    no_destreak = bool(options.no_destreak)
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
@@ -643,7 +660,7 @@ if __name__ == "__main__":
                                regionname=field_to_reg_mapping[field],
                                proposal_id=proposal_id,
                                skip_step1and2=skip_step1and2,
-                               do_destreak=~no_destreak,
+                               do_destreak=not no_destreak,
                               )
 
 
