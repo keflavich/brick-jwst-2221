@@ -86,7 +86,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     can save time if you just want to redo the tweakreg steps but already have
     the zero-frame stuff done.
     """
-    log.info(f"Processing filter {filtername} module {module}")
+    log.info(f"Processing filter {filtername} module {module} with do_destreak={do_destreak} and skip_step1and2={skip_step1and2} for field {field} and proposal id {proposal_id} in region {regionname}")
 
     basepath = f'/orange/adamginsburg/jwst/{regionname}/'
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
@@ -429,7 +429,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             asn_data = json.load(f_obj)
 
         for member in asn_data['products'][0]['members']:
-            print(f"Running destreak and maybe alignment on {member} for module=merged")
+            print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
             if do_destreak:
                 if filtername in (hdr['PUPIL'], hdr['FILTER']):
@@ -622,7 +622,7 @@ if __name__ == "__main__":
     fields = options.field.split(",")
     proposal_id = options.proposal_id
     skip_step1and2 = options.skip_step1and2
-    no_destrak = options.no_destreak
+    no_destreak = options.no_destreak
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
