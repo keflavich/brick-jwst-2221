@@ -306,6 +306,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 align_fits = fits.open(align_image)
                 align_fits[1].header.update(ww.to_fits()[0])
                 align_fits.writeto(align_image, overwrite=True)
+            else:
+                print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -508,6 +510,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 align_fits = fits.open(align_image)
                 align_fits[1].header.update(ww.to_fits()[0])
                 align_fits.writeto(align_image, overwrite=True)
+            else:
+                print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
