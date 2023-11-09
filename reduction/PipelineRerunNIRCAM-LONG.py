@@ -365,7 +365,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
-            sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            sky = w.pixel_to_world(pix_coords[proposal_id][field][module][0], pix_coords[proposal_id][field][module][1])
             star_coord = pix_coords[proposal_id][field]['star_coord']
             decoffset = sky.dec - star_coord.dec
             raoffset = sky.ra - star_coord.ra
@@ -553,7 +553,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
-            sky = w.pixel_to_world(pix_coords[module][0], pix_coords[module][1])
+            sky = w.pixel_to_world(pix_coords[proposal_id][field][module][0], pix_coords[proposal_id][field][module][1])
             star_coord = pix_coords[proposal_id][field]['star_coord']
             decoffset = sky.dec - star_coord.dec
             raoffset = sky.ra - star_coord.ra
