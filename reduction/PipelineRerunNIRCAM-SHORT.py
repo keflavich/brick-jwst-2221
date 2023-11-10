@@ -5,13 +5,16 @@ import os
 import shutil
 import numpy as np
 import json
-# import requests
+import requests
 import asdf
 from astropy import log
+from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
 from astropy.table import Table
 from astropy.utils.data import download_file
+from astropy.wcs import WCS
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
+import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import datetime
@@ -32,13 +35,13 @@ from jwst.source_catalog import SourceCatalogStep
 from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
+from jwst.tweakreg.utils import adjust_wcs
 from destreak import destreak
+
+from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
 from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
 
-from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b
-
 import crds
-
 import jwst
 
 import warnings
@@ -192,8 +195,44 @@ def main(filtername, module, Observations=None, regionname='brick', field='001',
         asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                             if f'{module}' in row['expname']]
 
+        
         for member in asn_data['products'][0]['members']:
             hdr = fits.getheader(member['expname'])
+
+            if field == '004' and proposal_id == '1182':
+                align_image = member['expname']
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
+                exposure = int(member['expname'].split("_")[-3])
+                thismodule = member['expname'].split("_")[-2].strip('1234')
+                match = ((offsets_tbl['Visit'] == 'jw01182004001') &
+                         (offsets_tbl['Exposure'] == exposure ) &
+                         (offsets_tbl['Module'] == thismodule) &
+                         (offsets_tbl['Filter'] == filtername)
+                         )
+                if match.sum() != 1:
+                    raise ValueError(f"too many or too few matches for {member}")
+                row = offsets_tbl[match]
+                print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+                rashift = float(row['dra (arcsec)'][0])*u.arcsec
+                decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+                print(f"Shift for {align_image} is {rashift}, {decshift}")
+
+                # ASDF header
+                fa = asdf.open(align_image)
+                wcsobj = fa.tree['meta']['wcs']
+                print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+                print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                fa.tree['meta']['wcs'] = ww
+                fa.write_to(align_image, overwrite=True)
+
+                # FITS header
+                align_fits = fits.open(align_image)
+                align_fits[1].header.update(ww.to_fits()[0])
+                align_fits.writeto(align_image, overwrite=True)
+            else:
+                print(f"Field {field} proposal {proposal_id} did not require re-alignment")
+
             if filtername in (hdr['PUPIL'], hdr['FILTER']):
                 # changed filter size to be maximal now that we're using the background
                 outname = destreak(member['expname'], median_filter_size=2048,
