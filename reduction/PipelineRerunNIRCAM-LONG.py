@@ -60,7 +60,8 @@ def print(*args, **kwargs):
 print(jwst.__version__)
 
 # see 'destreak410.ipynb' for tests of this
-medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55}
+medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
+                'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 # For fixing bulk offset after stage 3 of the pipeline
 pix_coords = {'2221':
@@ -211,9 +212,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 assert f'jw0{proposal_id}{field}' in member['expname']
                 print(f"DETECTOR PIPELINE on {member['expname']}")
                 print("Detector1Pipeline step")
+            # from Hosek: expand_large_events -> false; turn off "snowball" detection
                 Detector1Pipeline.call(member['expname'].replace("_cal.fits",
                                                                  "_uncal.fits"),
                                        save_results=True, output_dir=output_dir,
+                                       save_calibrated_ramp=True,
                                        steps={'ramp_fit': {'suppress_one_group':False},
                                               "refpix": {"use_side_ref_pixels": True}})
                 print(f"IMAGE2 PIPELINE on {member['expname']}")
@@ -277,10 +280,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif field == '004' and proposal_id == '1182':
                 align_image = member['expname']
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
+                exposure = int(member['expname'].split("_")[-3])
+                thismodule = member['expname'].split("_")[-2].strip('1234')
                 match = ((offsets_tbl['Visit'] == 'jw01182004001') &
-                         #(offsets_tbl['Group'] == '4101') &
-                         (offsets_tbl['Exposure'] == int(member['expname'].split("_")[-3])) &
-                         (offsets_tbl['Module'] == member['expname'].split("_")[-2]) &
+                         (offsets_tbl['Exposure'] == exposure ) &
+                         (offsets_tbl['Module'] == thismodule) &
                          (offsets_tbl['Filter'] == filtername)
                          )
                 if match.sum() != 1:
@@ -364,7 +368,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         log.info(f"Running tweakreg ({module})")
         calwebb_image3.Image3Pipeline.call(
             asn_file_each,
-            steps={'tweakreg': tweakreg_parameters,},
+            steps={'tweakreg': tweakreg_parameters,
+                   # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
+                   #'skymatch': {'save_results': True, 'skip': True,
+                   #             'skymethod': 'match', 'match_down': False},
+            },
             output_dir=output_dir,
             save_results=True)
         print(f"DONE running {asn_file_each}")
@@ -617,7 +625,7 @@ if __name__ == "__main__":
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-f", "--filternames", dest="filternames",
-                      default='F466N,F405N,F410M',
+                      default='F466N,F405N,F410M,F212N,F182M,F187N',
                       help="filter name list", metavar="filternames")
     parser.add_option("-m", "--modules", dest="modules",
                     default='merged,nrca,nrcb',
@@ -679,6 +687,8 @@ if __name__ == "__main__":
         run_notebook(f'{basepath}/notebooks/StarDestroyer_nrca.ipynb')
         run_notebook(f'{basepath}/notebooks/StarDestroyer_nrcb.ipynb')
         run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
+        run_notebook(f'{basepath}/notebooks/PaA_Separation_nrcb.ipynb')
+        run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrcb.ipynb')
 
 
 """

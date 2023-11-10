@@ -1,3 +1,4 @@
+raise NotImplementedError("Just use NIRCAM-LONG: it does the same thing but has more bells and whistles now")
 #!/usr/bin/env python
 from glob import glob
 from astroquery.mast import Mast, Observations
