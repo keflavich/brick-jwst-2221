@@ -10,13 +10,14 @@ import asdf
 from astropy import log
 from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
+from astropy.table import Table
 from astropy.utils.data import download_file
 from astropy.wcs import WCS
 from astropy.visualization import ImageNormalize, ManualInterval, LogStretch, LinearStretch
-from astropy.table import Table
 import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import datetime
 
 # do this before importing webb
 os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
@@ -35,15 +36,12 @@ from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from jwst.tweakreg.utils import adjust_wcs
+from destreak import destreak
 
 from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
 from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
 
-from destreak import destreak
-
 import crds
-
-import datetime
 import jwst
 
 import warnings
@@ -52,7 +50,6 @@ from astropy.wcs import FITSFixedWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 warnings.simplefilter('ignore', category=FITSFixedWarning)
-
 
 def print(*args, **kwargs):
     now = datetime.datetime.now().isoformat()
@@ -181,31 +178,32 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
     # all cases, except if you're just doing a merger?
     if module in ('nrca', 'nrcb', 'merged'):
-        print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
+        log.info(f"Working on module {module}: running initial pipeline setup steps (skip_step1and2={skip_step1and2})")
+        log.info(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
         asn_file_search = glob(os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json'))
         if len(asn_file_search) == 1:
             asn_file = asn_file_search[0]
         elif len(asn_file_search) > 1:
             asn_file = sorted(asn_file_search)[-1]
-            print(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
+            log.info(f"Found multiple asn files: {asn_file_search}.  Using the more recent one, {asn_file}.")
         else:
             raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
 
         mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
-        print(f"Mapping: {mapping.todict()['selections']}")
-        print(f"Filtername: {filtername}")
+        log.info(f"Mapping: {mapping.todict()['selections']}")
+        log.info(f"Filtername: {filtername}")
         filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
-        print(f"Filter_match: {filter_match} n={len(filter_match)}")
+        log.info(f"Filter_match: {filter_match} n={len(filter_match)}")
         tweakreg_asdf_filename = filter_match[0][4]
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
-        print(f'Filter {filtername}: {tweakreg_parameters}')
+        log.info(f'Filter {filtername} tweakreg parameters: {tweakreg_parameters}')
 
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
 
-        print(f"In cwd={os.getcwd()}")
+        log.info(f"In cwd={os.getcwd()}")
         if not skip_step1and2:
             # re-calibrate all uncal files -> cal files *without* suppressing first group
             for member in asn_data['products'][0]['members']:
@@ -227,7 +225,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         raise ValueError(f"Module is {module} - not allowed!")
 
     if module in ('nrca', 'nrcb'):
-        print(f"Filter {filtername} module {module}")
+        log.info(f"Filter {filtername} module {module}: doing tweakreg and, possibly, prealignment.  do_destreak={do_destreak}")
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
@@ -372,6 +370,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         print(f"DONE running {asn_file_each}")
 
         if proposal_id in pix_coords and field in pix_coords[proposal_id]:
+            log.info(f"Proposal {proposal_id} found in pix_coords mapping.  Correcting bulk offset")
             fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
             f = fits.open(fn)
             w = WCS(f['SCI'].header)
@@ -432,14 +431,15 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
     if module == 'merged':
         # try merging all frames & modules
-        log.info("Working on merged reduction (both modules)")
+        log.info(f"Working on merged reduction (both modules):  asn_file={asn_file}")
 
         # Load asn_data for both modules
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
 
+        # Why isn't this running for module=merged?
         for member in asn_data['products'][0]['members']:
-            print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
+            log.info(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
             if do_destreak:
                 if filtername in (hdr['PUPIL'], hdr['FILTER']):
@@ -568,7 +568,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             steps={'tweakreg': tweakreg_parameters,},
             output_dir=output_dir,
             save_results=True)
-        print(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
+        log.info(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
         if proposal_id in pix_coords and field in pix_coords[proposal_id]:
             fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
