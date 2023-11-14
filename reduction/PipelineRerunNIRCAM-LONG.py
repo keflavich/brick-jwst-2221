@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 from glob import glob
 from astroquery.mast import Mast, Observations
+import copy
 import os
 import shutil
 import numpy as np
 import json
 import requests
-import asdf
+import asdf # requires asdf < 3.0 (there is no replacement for this functionality w/o a major pattern change https://github.com/asdf-format/asdf/issues/1680)
+from asdf.fits_embed import AsdfInFits
 from astropy import log
 from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
@@ -269,7 +271,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     else:
                         xshift = 0*u.arcsec/pixel_scale
                         yshift = 0*u.arcsec/pixel_scale
-                fa = asdf.open(align_image)
+                fa = AsdfInFits.open(align_image)
                 wcsobj = fa.tree['meta']['wcs']
                 ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
                 tree = fa.tree
@@ -283,31 +285,42 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 exposure = int(member['expname'].split("_")[-3])
                 thismodule = member['expname'].split("_")[-2].strip('1234')
                 match = ((offsets_tbl['Visit'] == 'jw01182004001') &
-                         (offsets_tbl['Exposure'] == exposure ) &
+                         (offsets_tbl['Exposure'] == exposure) &
                          (offsets_tbl['Module'] == thismodule) &
                          (offsets_tbl['Filter'] == filtername)
                          )
                 if match.sum() != 1:
-                    raise ValueError(f"too many or too few matches for {member}")
+                    raise ValueError(f"too many or too few matches for {member} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
                 row = offsets_tbl[match]
                 print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
                 rashift = float(row['dra (arcsec)'][0])*u.arcsec
                 decshift = float(row['ddec (arcsec)'][0])*u.arcsec
                 print(f"Shift for {align_image} is {rashift}, {decshift}")
 
-                # ASDF header
-                fa = asdf.open(align_image)
-                wcsobj = fa.tree['meta']['wcs']
-                print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                fa.tree['meta']['wcs'] = ww
-                fa.write_to(align_image, overwrite=True)
-
-                # FITS header
                 align_fits = fits.open(align_image)
-                align_fits[1].header.update(ww.to_fits()[0])
-                align_fits.writeto(align_image, overwrite=True)
+                if 'RAOFFSET' in align_fits[1].header:
+                    # don't shift twice if we re-run
+                    print(f"{align_image} is already aligned")
+                else:
+                    # ASDF header
+                    fa = AsdfInFits.open(align_image)
+                    wcsobj = fa.tree['meta']['wcs']
+                    print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                    fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
+                    ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+                    print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                    fa.tree['meta']['wcs'] = ww
+                    fa.write_to(align_image, overwrite=True)
+
+                    # FITS header
+                    align_fits = fits.open(align_image)
+                    align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
+                    align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
+                    align_fits[1].header.update(ww.to_fits()[0])
+                    align_fits[1].header['RAOFFSET'] = rashift.value
+                    align_fits[1].header['DEOFFSET'] = decshift.value
+                    align_fits.writeto(align_image, overwrite=True)
+                    assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -418,7 +431,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
             remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
+            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits')
         except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
             print("Failed to run remove_saturated_stars with failure {ex}")
 
@@ -445,7 +458,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
 
-        # Why isn't this running for module=merged?
+        # Why isn't this running for module=merged?  Maybe there are no members?
         for member in asn_data['products'][0]['members']:
             log.info(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
@@ -479,7 +492,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     else:
                         xshift = 0*u.arcsec/pixel_scale
                         yshift = 0*u.arcsec/pixel_scale
-                fa = asdf.open(align_image)
+                fa = AsdfInFits.open(align_image)
                 wcsobj = fa.tree['meta']['wcs']
                 ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
                 tree = fa.tree
@@ -488,36 +501,49 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 align_fits.writeto(align_image, overwrite=True)
                 member['expname'] = align_image
             elif field == '004' and proposal_id == '1182':
+                # I don't think this gets run.
                 align_image = member['expname']
+                print(f"Running manual align for merged data (1182 + 004): {align_image}")
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
                 exposure = int(member['expname'].split("_")[-3])
-                thismodule = member['expname'].split("_")[-2]
+                thismodule = member['expname'].split("_")[-2].strip('1234')
                 match = ((offsets_tbl['Visit'] == 'jw01182004001') &
-                         (offsets_tbl['Exposure'] == exposure ) &
+                         (offsets_tbl['Exposure'] == exposure) &
                          (offsets_tbl['Module'] == thismodule) &
                          (offsets_tbl['Filter'] == filtername)
                          )
                 if match.sum() != 1:
-                    raise ValueError(f"too many or too few matches for {member}")
+                    raise ValueError(f"too many or too few matches for {member} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
                 row = offsets_tbl[match]
-                print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+                print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
                 rashift = float(row['dra (arcsec)'][0])*u.arcsec
                 decshift = float(row['ddec (arcsec)'][0])*u.arcsec
                 print(f"Shift for {align_image} is {rashift}, {decshift}")
 
-                # ASDF header
-                fa = asdf.open(align_image)
-                wcsobj = fa.tree['meta']['wcs']
-                print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                fa.tree['meta']['wcs'] = ww
-                fa.write_to(align_image, overwrite=True)
-
-                # FITS header
                 align_fits = fits.open(align_image)
-                align_fits[1].header.update(ww.to_fits()[0])
-                align_fits.writeto(align_image, overwrite=True)
+                if 'RAOFFSET' in align_fits[1].header:
+                    # don't shift twice if we re-run
+                    print(f"{align_image} is already aligned ({align_fits[1].header['RAOFFSET']}, {align_fits[1].header['DEOFFSET']})")
+                else:
+                    # ASDF header
+                    fa = AsdfInFits.open(align_image)
+                    wcsobj = fa.tree['meta']['wcs']
+                    print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                    fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
+                    ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+                    print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                    fa.tree['meta']['wcs'] = ww
+                    fa.write_to(align_image, overwrite=True)
+
+                    # FITS header
+                    align_fits = fits.open(align_image)
+                    align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
+                    align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
+                    align_fits[1].header.update(ww.to_fits()[0])
+                    align_fits[1].header['RAOFFSET'] = rashift.value
+                    align_fits[1].header['DEOFFSET'] = decshift.value
+                    align_fits.writeto(align_image, overwrite=True)
+                    assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -614,7 +640,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
             remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_realigned-to-vvv.fits')
+            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits')
         except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
             print("Failed to run remove_saturated_stars with failure {ex}")
 
