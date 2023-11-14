@@ -160,7 +160,8 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
-                     'f410m': 11, 'f405n':11, 'f466n':11}
+                     'f410m': 11, 'f405n':11, 'f466n':11},
+        crowdsource_default_kwargs={'maxstars': 500000, }
         ):
     from optparse import OptionParser
     parser = OptionParser()
@@ -432,7 +433,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 print("starting crowdsource unweighted", flush=True)
                 results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
                                                 #psfderiv=np.gradient(-psf_initial[0].data),
-                                                nskyx=1, nskyy=1, refit_psf=False, verbose=True)
+                                                nskyx=1, nskyy=1, refit_psf=False, verbose=True,
+                                                **crowdsource_default_kwargs,
+                                                )
                 print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results_unweighted
                 stars = Table(stars)
@@ -545,7 +548,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
                         print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
                         results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
-                                            nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True)
+                                            nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
+                                            **crowdsource_default_kwargs
+                                            )
                         print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                         stars, modsky, skymsky, psf = results_blur
                         stars = Table(stars)
