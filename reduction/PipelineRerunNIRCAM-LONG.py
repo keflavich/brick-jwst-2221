@@ -282,9 +282,10 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif field == '004' and proposal_id == '1182':
                 align_image = member['expname']
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
-                exposure = int(member['expname'].split("_")[-3])
-                thismodule = member['expname'].split("_")[-2].strip('1234')
-                match = ((offsets_tbl['Visit'] == 'jw01182004001') &
+                exposure = int(align_image.split("_")[-3])
+                thismodule = align_image.split("_")[-2].strip('1234')
+                visit = align_image.split("_")[0]
+                match = ((offsets_tbl['Visit'] == visit) &
                          (offsets_tbl['Exposure'] == exposure) &
                          (offsets_tbl['Module'] == thismodule) &
                          (offsets_tbl['Filter'] == filtername)
@@ -505,9 +506,10 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 align_image = member['expname']
                 print(f"Running manual align for merged data (1182 + 004): {align_image}")
                 offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
-                exposure = int(member['expname'].split("_")[-3])
-                thismodule = member['expname'].split("_")[-2].strip('1234')
-                match = ((offsets_tbl['Visit'] == 'jw01182004001') &
+                exposure = int(align_image.split("_")[-3])
+                thismodule = align_image.split("_")[-2].strip('1234')
+                visit = align_image.split("_")[0]
+                match = ((offsets_tbl['Visit'] == visit) &
                          (offsets_tbl['Exposure'] == exposure) &
                          (offsets_tbl['Module'] == thismodule) &
                          (offsets_tbl['Filter'] == filtername)
