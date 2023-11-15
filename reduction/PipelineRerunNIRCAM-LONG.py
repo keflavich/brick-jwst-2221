@@ -413,8 +413,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                    basepath=basepath, module=module,
                                    fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename,
-                                   ksmag_limit=15 if filtername=='f410m' else
-                                   11, mag_limit=15, raoffset=raoffset,
+                                   ksmag_limit=15 if filtername=='f410m' else 11,
+                                   mag_limit=17 if filtername =='f115w' else 15,
+                                   raoffset=raoffset,
                                    decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
@@ -623,7 +624,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
-                                   imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m' else 11, mag_limit=15,
+                                   imfile=realigned_vvv_filename,
+                                   ksmag_limit=15 if filtername=='f410m' else 11,
+                                   mag_limit=17 if filtername=='f115w' else 15,
                                    raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
