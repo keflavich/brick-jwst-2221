@@ -162,7 +162,6 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
                      'f410m': 11, 'f405n':11, 'f466n':11},
         crowdsource_default_kwargs={'maxstars': 500000, },
-        project_id='2221'
         ):
     from optparse import OptionParser
     parser = OptionParser()
@@ -192,11 +191,15 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     default=False,
                     action='store_true',
                     help="try to make & use an ePSF?", metavar="epsf")
+    parser.add_option("--project_id", dest="project_id",
+                    default='2221',
+                    help="project_id", metavar="project_id")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
     use_desaturated = options.desaturated
+    project_id = options.project_id
 
     nullslice = (slice(None), slice(None))
 
