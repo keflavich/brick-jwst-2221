@@ -17,6 +17,10 @@ background_mapping = { '2221':
                         'f405n': 'jw02221-o001_t001_nircam_f405n-f444w_i2d_medfilt128.fits',
                         'f182m': 'jw02221-o001_t001_nircam_clear-f182m_i2d_medfilt256.fits',
                         'f466n': 'jw02221-o001_t001_nircam_f444w-f466n_i2d_medfilt128.fits',
+                        'f444w': 'jw01182-o004_t001_nircam_clear-f444w-merged_nodestreak_realigned-to-refcat_background.fits',
+                        'f356w': 'jw01182-o004_t001_nircam_clear-f356w-merged_nodestreak_realigned-to-refcat_background.fits',
+                        'f200w': 'jw01182-o004_t001_nircam_clear-f200w-merged_nodestreak_realigned-to-refcat_background.fits',
+                        'f115w': 'jw01182-o004_t001_nircam_clear-f115w-merged_nodestreak_realigned-to-refcat_background.fits',
                        },
                         '002':
                        {
