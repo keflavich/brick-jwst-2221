@@ -8,6 +8,7 @@ import numpy as np
 import json
 import requests
 import asdf # requires asdf < 3.0 (there is no replacement for this functionality w/o a major pattern change https://github.com/asdf-format/asdf/issues/1680)
+import stdatamodels
 from asdf.fits_embed import AsdfInFits
 from astropy import log
 from astropy.coordinates import SkyCoord
@@ -299,6 +300,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 print(f"Shift for {align_image} is {rashift}, {decshift}")
 
                 align_fits = fits.open(align_image)
+                # to replace asdf, use: align_datamodel = stdatamodels.jwst.datamodels.open(align_image)
                 if 'RAOFFSET' in align_fits[1].header:
                     # don't shift twice if we re-run
                     print(f"{align_image} is already aligned")
