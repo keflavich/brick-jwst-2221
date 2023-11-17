@@ -29,7 +29,11 @@ try:
 except:
     # version 1.6.0, which works
     from photutils.psf import BasicPSFPhotometry as PSFPhotometry, IterativelySubtractedPSFPhotometry as IterativePSFPhotometry, DAOGroup as SourceGrouper
-from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
+try:
+    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
+except:
+    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D
+    from photutils.background import MMMBackground as LocalBackground
 
 from photutils.psf import EPSFBuilder
 from photutils.psf import extract_stars
