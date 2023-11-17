@@ -23,7 +23,12 @@ import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, EPSFStars
-from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
+try:
+    # version >=1.7.0, doesn't work: the PSF is broken
+    from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
+except:
+    # version 1.6.0, which works
+    from photutils.psf import BasicPSFPhotometry as PSFPhotometry, IterativelySubtractedPSFPhotometry as IterativePSFPhotometry, DAOGroup as SourceGrouper
 from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
 
 from photutils.psf import EPSFBuilder
@@ -84,9 +89,18 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         cols = cols[:, :, None] + col[None, None, :]
 
         # photutils seems to use column, row notation
+        # only works with photutils <= 1.6.0
         stamps = self.psfgridmodel.evaluate(cols, rows, 1, col, row)
         # it returns something in (nstamps, row, col) shape
         # pretty sure that ought to be (col, row, nstamps) for crowdsource
+
+        # andrew saydjari's version here:
+        # it returns something in (nstamps, row, col) shape
+        # stamps = []
+        # for i in range(len(col)):
+        #     stamps.append(self.psfgridmodel.evaluate(cols[:,:,i], rows[:,:,i], 1, col[i], row[i]))
+        # stampsS = np.stack(stamps,axis=0)
+        # stamps = np.transpose(stampsS,axes=(0,2,1))
 
         if deriv:
             dpsfdrow, dpsfdcol = np.gradient(stamps, axis=(0, 1))
@@ -203,6 +217,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     modules = options.modules.split(",")
     use_desaturated = options.desaturated
     proposal_id = options.proposal_id
+    target = options.target
 
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
                             '1182': {'004': 'brick'}}[proposal_id]
