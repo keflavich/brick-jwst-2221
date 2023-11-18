@@ -1,21 +1,45 @@
+import numpy as np
+import os
 import stdatamodels.jwst.datamodels
+from photutils.psf import GriddedPSFModel
 from astropy.io import fits
 from astropy.wcs import WCS
 import glob
 import webbpsf
 from astropy.nddata import NDData
+from tqdm.auto import tqdm
+
+def footprint_contains(x, y, shape):
+    return (x > 0) and (y > 0) and (y < shape[0]) and (x < shape[1])
 
 def make_merged_psf(filtername, basepath, stampsize=25,
                     grid_step=200,
-                    project_id='2221', obs_id='001', suffix='merged_i2d')
+                    project_id='2221', obs_id='001', suffix='merged_i2d'):
     
-
     nrc = webbpsf.NIRCam()
     nrc.filter = filtername
-    grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True)
+    grids = {}
+    for detector in ('NRCA5', 'NRCB5'):
+        savefilename = f'nircam_{detector.lower()}_{filtername.lower()}_fovp101_samp4_npsf16.fits'
+        if os.path.exists(savefilename):
+            gridfh = fits.open(savefilename)
+            ndd = NDData(gridfh[0].data, meta=dict(gridfh[0].header))
+            ndd.meta['grid_xypos'] = [((float(ndd.meta[key].split(',')[1].split(')')[0])),
+                                       (float(ndd.meta[key].split(',')[0].split('(')[1])))
+                                      for key in ndd.meta.keys() if "DET_YX" in key]
 
-    grids = {g.meta['detector'][0]: g for g in grid}
+            ndd.meta['oversampling'] = ndd.meta["OVERSAMP"]  # just pull the value
+            ndd.meta = {key.lower(): ndd.meta[key] for key in ndd.meta}
 
+            grid = GriddedPSFModel(ndd)
+
+        else:
+            nrc.detector = detector
+            grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
+
+        grids[detector] = grid
+
+    # it would make sense to replace this with a more careful approach for determining what files went into the mosaic
     files = {'nrca': f'{basepath}/{filtername}/pipeline/*nrca*_cal.fits',
              'nrcb': f'{basepath}/{filtername}/pipeline/*nrcb*_cal.fits',
             }
@@ -24,7 +48,7 @@ def make_merged_psf(filtername, basepath, stampsize=25,
 
     pshape = parent_file[1].data.shape
     psf_grid_y, psf_grid_x = np.mgrid[0:pshape[0]:grid_step, 0:pshape[1]:grid_step]
-    psf_grid_coords = list(zip(psf_grid_x, psf_grid_y))
+    psf_grid_coords = list(zip(psf_grid_x.flat, psf_grid_y.flat))
 
     psfmeta = {'grid_xypos': psf_grid_coords,
                'oversampling': 1
