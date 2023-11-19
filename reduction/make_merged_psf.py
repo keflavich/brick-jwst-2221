@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 import os
 import stdatamodels.jwst.datamodels
 from photutils.psf import GriddedPSFModel
@@ -12,7 +13,7 @@ from tqdm.auto import tqdm
 def footprint_contains(x, y, shape):
     return (x > 0) and (y > 0) and (y < shape[0]) and (x < shape[1])
 
-def make_merged_psf(filtername, basepath, stampsize=25,
+def make_merged_psf(filtername, basepath, halfstampsize=25,
                     grid_step=200,
                     project_id='2221', obs_id='001', suffix='merged_i2d'):
     
@@ -55,20 +56,59 @@ def make_merged_psf(filtername, basepath, stampsize=25,
               }
     allpsfs = []
 
-    for pgxc, pgyc in psf_grid_coords:
+    for pgxc, pgyc in tqdm(psf_grid_coords):
         skyc1 = parent_wcs.pixel_to_world(pgxc, pgyc)
 
         psfs = []
         for module in ("nrca", "nrcb"):
-            for fn in tqdm(glob.glob(f'{basepath}/{filtername}/pipeline/*{module}*_cal.fits')):
+            for fn in glob.glob(f'{basepath}/{filtername}/pipeline/*{module}*_cal.fits'):
                 dmod = stdatamodels.jwst.datamodels.open(fn)
                 xc, yc = dmod.meta.wcs.world_to_pixel(skyc1)
                 if footprint_contains(xc, yc, dmod.data.shape):
-                    yy, xx = np.mgrid[int(yc)-stampsize:int(yc)+stampsize, int(xc)-stampsize:int(xc)+stampsize]
-                    psf = grids[f'{module.upper()}5'].evaluate(x=xx, y=yy, flux=1, x_0=xc, y_0=yc)
+                    # force xc, yc to integers so they stay centered
+                    # (mgrid is forced to be integers, and allowing xc/yc not to be would result in arbitrary subpixel shifts)
+                    yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize, int(xc)-halfstampsize:int(xc)+halfstampsize]
+                    psf = grids[f'{module.upper()}5'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
                     psfs.append(psf)
 
-        meanpsf = np.mean(psfs, axis=0)
+        if len(psfs) > 0:
+            meanpsf = np.mean(psfs, axis=0)
+        else:
+            meanpsf = np.zeros((halfstampsize*2, halfstampsize*2))
         allpsfs.append(meanpsf)
 
-    return NDData(np.array(allpsfs), meta=psfmeta)
+    allpsfs = np.array(allpsfs)
+
+    cdata = allpsfs / allpsfs.sum(axis=(1,2))[:,None,None]
+    avg = np.nanmean(cdata, axis=0)
+    cdata[np.any(np.isnan(cdata), axis=(1,2)), :, :] = avg
+
+    return NDData(cdata, meta=psfmeta)
+
+def save_psfgrid(psfg,  outfilename, overwrite=True):
+    xypos = fits.ImageHDU(np.array(psfg.meta['grid_xypos']))
+    meta = copy.copy(psfg.meta)
+    del meta['grid_xypos']
+    header = fits.Header(meta)
+    psfhdu = fits.PrimaryHDU(data=psfg.data, header=header)
+    fits.HDUList([psfhdu, xypos]).writeto(outfilename, overwrite=overwrite)
+
+def load_psfgrid(filename):
+    fh = fits.open(filename)
+    data = fh[0].data
+    grid_xypos = fh[1].data
+    meta = dict(fh[0].header)
+    meta['grid_xypos'] = grid_xypos
+    ndd = NDData(data, meta=meta)
+    return GriddedPSFModel(ndd)
+
+if __name__ == "__main__":
+
+    project_id = '2221'
+    obs_id = '001'
+    for filtername in ('F405N', 'F466N', 'F410M', 'F444W', 'F356W', 'F187N', 'F182M', 'F212N', 'F200W', 'F115W'):
+        psfg = make_merged_psf(filtername,
+                            basepath='/orange/adamginsburg/jwst/brick/',
+                            halfstampsize=25, grid_step=200,
+                            project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
+        save_psfgrid(psfg, outfilename=f'{basepath}/psfs/{filtername}_{project_id}_{obs_id}_merged_PSFgrid.fits', overwrite=True)
