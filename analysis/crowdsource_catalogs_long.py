@@ -92,29 +92,27 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         # explicitly broadcast
         col = np.atleast_1d(col)
         row = np.atleast_1d(row)
-        rows = rows[:, :, None] + row[None, None, :]
-        cols = cols[:, :, None] + col[None, None, :]
+        #rows = rows[:, :, None] + row[None, None, :]
+        #cols = cols[:, :, None] + col[None, None, :]
 
         # photutils seems to use column, row notation
-        # only works with photutils <= 1.6.0
-        stamps = self.psfgridmodel.evaluate(cols, rows, 1, col, row)
+        # only works with photutils <= 1.6.0 - but is wrong there
+        #stamps = self.psfgridmodel.evaluate(cols, rows, 1, col, row)
         # it returns something in (nstamps, row, col) shape
         # pretty sure that ought to be (col, row, nstamps) for crowdsource
 
         # andrew saydjari's version here:
         # it returns something in (nstamps, row, col) shape
-        # stamps = []
-        # for i in range(len(col)):
-        #     stamps.append(self.psfgridmodel.evaluate(cols[:,:,i], rows[:,:,i], 1, col[i], row[i]))
-        # stampsS = np.stack(stamps,axis=0)
-        # stamps = np.transpose(stampsS,axes=(0,2,1))
+        for i in range(len(col)):
+            stamps.append(self.psfgridmodel.evaluate(cols+col[i], rows+row[i], 1, col[i], row[i]))
+        stamps = np.transpose(stamps, axes=(0,2,1))
 
         if deriv:
             dpsfdrow, dpsfdcol = np.gradient(stamps, axis=(0, 1))
             dpsfdrow = dpsfdrow.T
             dpsfdcol = dpsfdcol.T
 
-        ret = stamps.T
+        ret = stamps
         if parshape != tparshape:
             ret = ret.reshape(stampsz, stampsz)
             if deriv:

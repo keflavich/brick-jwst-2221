@@ -9,12 +9,14 @@ import glob
 import webbpsf
 from astropy.nddata import NDData
 from tqdm.auto import tqdm
+from webbpsf.utils import to_griddedpsfmodel
 
 def footprint_contains(x, y, shape):
     return (x > 0) and (y > 0) and (y < shape[0]) and (x < shape[1])
 
 def make_merged_psf(filtername, basepath, halfstampsize=25,
                     grid_step=200,
+                    oversampling=1,
                     project_id='2221', obs_id='001', suffix='merged_i2d'):
     
     wavelength = int(filtername[1:-1])
@@ -29,20 +31,23 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
     for detector in detectors:
         savefilename = f'nircam_{detector.lower()}_{filtername.lower()}_fovp101_samp4_npsf16.fits'
         if os.path.exists(savefilename):
-            gridfh = fits.open(savefilename)
-            ndd = NDData(gridfh[0].data, meta=dict(gridfh[0].header))
-            ndd.meta['grid_xypos'] = [((float(ndd.meta[key].split(',')[1].split(')')[0])),
-                                       (float(ndd.meta[key].split(',')[0].split('(')[1])))
-                                      for key in ndd.meta.keys() if "DET_YX" in key]
+            # gridfh = fits.open(savefilename)
+            # ndd = NDData(gridfh[0].data, meta=dict(gridfh[0].header))
+            # ndd.meta['grid_xypos'] = [((float(ndd.meta[key].split(',')[1].split(')')[0])),
+            #                            (float(ndd.meta[key].split(',')[0].split('(')[1])))
+            #                           for key in ndd.meta.keys() if "DET_YX" in key]
 
-            ndd.meta['oversampling'] = ndd.meta["OVERSAMP"]  # just pull the value
-            ndd.meta = {key.lower(): ndd.meta[key] for key in ndd.meta}
+            # ndd.meta['oversampling'] = ndd.meta["OVERSAMP"]  # just pull the value
+            # if int(ndd.metadata['oversampling']) != oversampling:
+            #     raise ValueError("Saved file mismatch oversampling")
+            # ndd.meta = {key.lower(): ndd.meta[key] for key in ndd.meta}
 
-            grid = GriddedPSFModel(ndd)
+            # grid = GriddedPSFModel(ndd)
+            grid = to_griddedpsfmodel(savefilename)  # file created 2 cells above
 
         else:
             nrc.detector = detector
-            grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
+            grid = nrc.psf_grid(num_psfs=16, oversample=oversampling, all_detectors=False, verbose=True, save=True)
 
         grids[detector.upper()] = grid
 
@@ -58,7 +63,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
     psf_grid_coords = list(zip(psf_grid_x.flat, psf_grid_y.flat))
 
     psfmeta = {'grid_xypos': psf_grid_coords,
-               'oversampling': 1
+               'oversampling': oversampling
               }
     allpsfs = []
 
