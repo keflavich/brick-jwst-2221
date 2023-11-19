@@ -31,6 +31,10 @@ pl.rcParams['figure.dpi'] = 100
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
+all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
+obs_filters = {'2221': filternames,
+               '1182': ['f444w', 'f356w', 'f200w', 'f115w']
+              }
 
 
 def getmtime(x):
@@ -206,9 +210,10 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
         raise NotImplementedError
     print()
     imgfns = [x
-          for filn in filternames
+          for obsid in obs_filters
+          for filn in obs_filters[obsid]
           for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/"
-                             f"jw02221-o001_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+                             f"jw0{obsid}-o001_t001_nircam*{filn.lower()}*{module}_i2d.fits")
           if f'{module}_' in x or f'{module}1_' in x
          ]
 
@@ -218,11 +223,12 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
 
+    filternames = [filn for obsid in obs_filters for filn in obs_filters[obsid]]
     catfns = [x
               for filn in filternames
               for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}_crowdsource{suffix}.fits")
              ]
-    if len(catfns) != 6:
+    if len(catfns) != 10:
         raise ValueError(f"len(catfns) = {len(catfns)}.  catfns: {catfns}")
     for catfn in catfns:
         print(catfn, getmtime(catfn))
