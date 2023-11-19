@@ -17,10 +17,16 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
                     grid_step=200,
                     project_id='2221', obs_id='001', suffix='merged_i2d'):
     
+    wavelength = int(filtername[1:-1])
+    if wavelength < 230:
+        detectors = [f'NRC{ab}{num}' for ab in 'AB' for num in (1,2,3,4)]
+    else:
+        detectors = [f'NRC{ab}5' for ab in 'AB']
+    
     nrc = webbpsf.NIRCam()
     nrc.filter = filtername
     grids = {}
-    for detector in ('NRCA5', 'NRCB5'):
+    for detector in detectors:
         savefilename = f'nircam_{detector.lower()}_{filtername.lower()}_fovp101_samp4_npsf16.fits'
         if os.path.exists(savefilename):
             gridfh = fits.open(savefilename)
@@ -38,7 +44,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
             nrc.detector = detector
             grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
 
-        grids[detector] = grid
+        grids[detector.upper()] = grid
 
     # it would make sense to replace this with a more careful approach for determining what files went into the mosaic
     files = {'nrca': f'{basepath}/{filtername}/pipeline/*nrca*_cal.fits',
@@ -60,15 +66,20 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
         skyc1 = parent_wcs.pixel_to_world(pgxc, pgyc)
 
         psfs = []
-        for module in ("nrca", "nrcb"):
-            for fn in glob.glob(f'{basepath}/{filtername}/pipeline/*{module}*_cal.fits'):
+        for detector in detectors:
+            if detector.endswith('5'):
+                # name scheme: short is nrca1 nrca2 ..., long is nrcalong
+                detectorstr = detector.replace('5', 'long')
+            else:
+                detectorstr = detector
+            for fn in glob.glob(f'{basepath}/{filtername}/pipeline/*{detectorstr}*_cal.fits'):
                 dmod = stdatamodels.jwst.datamodels.open(fn)
                 xc, yc = dmod.meta.wcs.world_to_pixel(skyc1)
                 if footprint_contains(xc, yc, dmod.data.shape):
                     # force xc, yc to integers so they stay centered
                     # (mgrid is forced to be integers, and allowing xc/yc not to be would result in arbitrary subpixel shifts)
                     yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize, int(xc)-halfstampsize:int(xc)+halfstampsize]
-                    psf = grids[f'{module.upper()}5'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
+                    psf = grids[f'{detector.upper()}'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
                     psfs.append(psf)
 
         if len(psfs) > 0:
@@ -104,11 +115,23 @@ def load_psfgrid(filename):
 
 if __name__ == "__main__":
 
-    project_id = '2221'
-    obs_id = '001'
-    for filtername in ('F405N', 'F466N', 'F410M', 'F444W', 'F356W', 'F187N', 'F182M', 'F212N', 'F200W', 'F115W'):
-        psfg = make_merged_psf(filtername,
-                            basepath='/orange/adamginsburg/jwst/brick/',
-                            halfstampsize=25, grid_step=200,
-                            project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
-        save_psfgrid(psfg, outfilename=f'{basepath}/psfs/{filtername}_{project_id}_{obs_id}_merged_PSFgrid.fits', overwrite=True)
+    filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
+    all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
+    obs_filters = {'2221': filternames,
+                   '1182': ['f444w', 'f356w', 'f200w', 'f115w']
+                  }
+    obs_ids = {'2221': '001', '1182': '004'}
+
+    basepath='/orange/adamginsburg/jwst/brick/'
+
+    for project_id in obs_filters:
+        for filtername in obs_filters[project_id]:
+            obs_id = obs_ids[project_id]
+            outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid.fits'
+            if not os.path.exists(outfilename):
+                print(f"Making PSF grid {outfilename}")
+                psfg = make_merged_psf(filtername.upper(),
+                                       basepath=basepath,
+                                       halfstampsize=25, grid_step=200,
+                                       project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
+                save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
