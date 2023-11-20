@@ -58,9 +58,6 @@ import webbpsf
 from webbpsf.utils import to_griddedpsfmodel
 import datetime
 
-# local imports
-from make_merged_psf import load_psfgrid
-
 def print(*args, **kwargs):
     now = datetime.datetime.now().isoformat()
     from builtins import print as printfunc
@@ -103,14 +100,13 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
 
         # andrew saydjari's version here:
         # it returns something in (nstamps, row, col) shape
+        stamps = []
         for i in range(len(col)):
             stamps.append(self.psfgridmodel.evaluate(cols+col[i], rows+row[i], 1, col[i], row[i]))
         stamps = np.transpose(stamps, axes=(0,2,1))
 
         if deriv:
-            dpsfdrow, dpsfdcol = np.gradient(stamps, axis=(0, 1))
-            dpsfdrow = dpsfdrow.T
-            dpsfdcol = dpsfdcol.T
+            dpsfdrow, dpsfdcol = np.gradient(stamps, axis=(1, 2))
 
         ret = stamps
         if parshape != tparshape:
@@ -351,7 +347,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             # grid.x_0 = grid.y_0 = 30
             # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
             
-            psfgrid = load_psfgrid(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid.fits')
+            grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample2.fits')
 
             # if isinstance(grid, list):
             #     print(f"Grid is a list: {grid}")
