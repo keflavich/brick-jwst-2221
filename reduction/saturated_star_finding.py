@@ -167,15 +167,15 @@ def get_psf(header, path_prefix='.'):
     oversample = 2
     fov_pixels = 512
     psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
-    if module == 'MULTIPLE':
-        # this is a disaster and we're just giving up becauase it would be days of development to account for this
-        # WHY!?!?!? I'm so angry.  The modules are independent, FINE, but that's NOT HOW THE DATA ARE USED.
-        # https://github.com/spacetelescope/webbpsf/blob/stable/notebooks/Gridded_PSF_Library.ipynb
-        psf_fn = glob.glob(psf_fn.replace(".fits", "*"))
-        if len(psf_fn) >= 1:
-            psf_fn = psf_fn[0]
+    if module == 'merged':
+        project_id = header['PROGRAM'][1:5]
+        obs_id = header['OBSERVTN'].strip()
+        merged_psf_fn = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid.fits'
+        if os.path.exists(psf_fn):
+            psf_fn = merged_psf_fn
         else:
-            psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
+            print("webbPSF is being used for merged data because merged PSF does not exist")
+
     if os.path.exists(str(psf_fn)):
         # As a file
         log.info(f"Loading grid from psf_fn={psf_fn}")

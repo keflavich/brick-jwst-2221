@@ -43,7 +43,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
             # ndd.meta = {key.lower(): ndd.meta[key] for key in ndd.meta}
 
             # grid = GriddedPSFModel(ndd)
-            grid = to_griddedpsfmodel(savefilename)  # file created 2 cells above
+            grid = to_griddedpsfmodel(savefilename)
 
         else:
             nrc.detector = detector
@@ -51,10 +51,6 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
 
         grids[detector.upper()] = grid
 
-    # it would make sense to replace this with a more careful approach for determining what files went into the mosaic
-    files = {'nrca': f'{basepath}/{filtername}/pipeline/*nrca*_cal.fits',
-             'nrcb': f'{basepath}/{filtername}/pipeline/*nrcb*_cal.fits',
-            }
     parent_file = fits.open(f'{basepath}/{filtername}/pipeline/jw0{project_id}-o{obs_id}_t001_nircam_clear-{filtername.lower()}-{suffix}.fits')
     parent_wcs = WCS(parent_file[1].header)
 
@@ -67,17 +63,17 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
               }
     allpsfs = []
 
-    for pgxc, pgyc in tqdm(psf_grid_coords):
+    for ii,(pgxc, pgyc) in tqdm(enumerate(psf_grid_coords)):
         skyc1 = parent_wcs.pixel_to_world(pgxc, pgyc)
 
         psfs = []
         for detector in detectors:
             if detector.endswith('5'):
                 # name scheme: short is nrca1 nrca2 ..., long is nrcalong
-                detectorstr = detector.replace('5', 'long')
+                detectorstr = detector.replace('5', 'long').lower()
             else:
-                detectorstr = detector
-            for fn in glob.glob(f'{basepath}/{filtername}/pipeline/*{detectorstr}*_cal.fits'):
+                detectorstr = detector.lower()
+            for fn in glob.glob(f'{basepath}/{filtername}/pipeline/*{detectorstr.lower()}*_cal.fits'):
                 dmod = stdatamodels.jwst.datamodels.open(fn)
                 xc, yc = dmod.meta.wcs.world_to_pixel(skyc1)
                 if footprint_contains(xc, yc, dmod.data.shape):
@@ -92,6 +88,11 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
         else:
             meanpsf = np.zeros((halfstampsize*2, halfstampsize*2))
         allpsfs.append(meanpsf)
+        psfmeta[f'DET_YX{ii}'] =  (str((float(pgyc), float(pgxc))),
+                                   "The #{} PSF's (y,x) detector pixel position".format(ii))
+    psfmeta['OVERSAMP'] = oversampling
+    psfmeta['DET_SAMP'] = oversampling
+    psfmeta['FILTER'] = filtername
 
     allpsfs = np.array(allpsfs)
 
@@ -118,6 +119,31 @@ def load_psfgrid(filename):
     ndd = NDData(data, meta=meta)
     return GriddedPSFModel(ndd)
 
+def fix_psfs_with_bad_meta(filename):
+    from webbpsf.utils import to_griddedpsfmodel
+
+    fh = fits.open(filename, mode='update')
+    if 'DET_YX0' in fh[0].header and 'OVERSAMP' in fh[0].header:
+        # done!
+        fh.close()
+    else:
+        for ii, row in enumerate(fh[1].data):
+            fh[0].header[f'DET_YX{ii}'] = (str((float(row[0]), float(row[1]))), "The #{} PSF's (y,x) detector pixel position".format(ii))
+
+        if 'oversampling' in fh[0].header:
+            oversampling = fh[0].header['oversampling']
+            del fh[0].header['oversampling']
+        else:
+            print("Assuming oversampling=1")
+            oversampling = 1
+
+        fh[0].header['OVERSAMP'] = (oversampling, "Oversampling factor for FFTs in computation")
+        fh[0].header['DET_SAMP'] = (oversampling, "Oversampling factor for MFT to detector plane")
+
+        print(to_griddedpsfmodel(fh))
+
+        fh.close()
+
 if __name__ == "__main__":
 
     filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
@@ -128,15 +154,17 @@ if __name__ == "__main__":
     obs_ids = {'2221': '001', '1182': '004'}
 
     basepath='/orange/adamginsburg/jwst/brick/'
-
-    for project_id in obs_filters:
-        for filtername in obs_filters[project_id]:
-            obs_id = obs_ids[project_id]
-            outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid.fits'
-            if not os.path.exists(outfilename):
-                print(f"Making PSF grid {outfilename}")
-                psfg = make_merged_psf(filtername.upper(),
-                                       basepath=basepath,
-                                       halfstampsize=25, grid_step=200,
-                                       project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
-                save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
+    
+    for oversampling, halfstampsize in [(1, 50), (2, 100), (4, 200)]:
+        for project_id in obs_filters:
+            for filtername in obs_filters[project_id]:
+                obs_id = obs_ids[project_id]
+                outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid_oversample{oversampling}.fits'
+                if not os.path.exists(outfilename):
+                    print(f"Making PSF grid {outfilename}")
+                    psfg = make_merged_psf(filtername.upper(),
+                                        basepath=basepath,
+                                        halfstampsize=halfstampsize, grid_step=200,
+                                        oversampling=oversampling,
+                                        project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
+                    save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
