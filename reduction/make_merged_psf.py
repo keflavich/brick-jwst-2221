@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     project_ids = options.proposal_id.split(",")
 
-    basepath='/orange/adamginsburg/jwst/{target}/'
+    basepath = f'/orange/adamginsburg/jwst/{target}/'
     
     for oversampling, halfstampsize in [(2, 100), (4, 200), (1, 50), ]:
         for project_id in project_ids:
@@ -204,3 +204,6 @@ if __name__ == "__main__":
                                         oversampling=oversampling,
                                         project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
                     save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
+                else:
+                    print(f"PSF grid {outfilename} exists!  Fixing metadata if needed")
+                    fix_psfs_with_bad_meta(outfilename)
