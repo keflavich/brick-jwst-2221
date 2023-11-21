@@ -162,25 +162,39 @@ def fix_psfs_with_bad_meta(filename):
 
 if __name__ == "__main__":
 
-    filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
-    all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
-    obs_filters = {'2221': filternames,
-                   '1182': ['f444w', 'f356w', 'f200w', 'f115w']
-                  }
-    obs_ids = {'2221': '001', '1182': '004'}
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option("-f", "--filternames", dest="filternames",
+                    default='F466N,F405N,F410M,F200W,F115W,F187N,F212N,F182M,F444W,F356W',
+                    help="filter name list", metavar="filternames")
+    parser.add_option("--proposal_id", dest="proposal_id",
+                    default='2221',
+                    help="proposal_id", metavar="proposal_id")
+    parser.add_option("--target", dest="target",
+                    default='brick',
+                    help="target", metavar="target")
+    (options, args) = parser.parse_args()
 
-    basepath='/orange/adamginsburg/jwst/brick/'
+    selected_filters = options.filternames.upper().split(",")
+
+    obs_filters = {'2221': ['F410M', 'F212N', 'F466N', 'F405N', 'F187N', 'F182M'],
+                   '1182': ['F444W', 'F356W', 'F200W', 'F115W']
+                  }
+    obs_ids = {'2221': {'brick': '001', 'cloudc': '002'},
+               '1182': {'brick': '004'}}
+
+    target = options.target
+
+    project_ids = options.proposal_id.split(",")
+
+    basepath='/orange/adamginsburg/jwst/{target}/'
     
     for oversampling, halfstampsize in [(2, 100), (4, 200), (1, 50), ]:
-        for project_id in obs_filters:
-            for filtername in obs_filters[project_id]:
-                
-                # REMOVE THIS: just wanted to get some done faster
-                wavelength = int(filtername[1:4])
-                if wavelength < 250:
-                    continue
+        for project_id in project_ids:
+            for filtername in set(obs_filters[project_id]) & set(selected_filters):
 
-                obs_id = obs_ids[project_id]
+                obs_id = obs_ids[project_id][target]
+
                 outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid_oversample{oversampling}.fits'
                 if not os.path.exists(outfilename):
                     print(f"Making PSF grid {outfilename}")
