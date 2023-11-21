@@ -106,7 +106,12 @@ def save_psfgrid(psfg,  outfilename, overwrite=True):
     xypos = fits.ImageHDU(np.array(psfg.meta['grid_xypos']))
     meta = copy.copy(psfg.meta)
     del meta['grid_xypos']
-    header = fits.Header(meta)
+    try:
+        header = fits.Header(meta)
+    except Exception as ex:
+        header = fits.Header()
+        for key in meta:
+            header[key] = meta[key]
     psfhdu = fits.PrimaryHDU(data=psfg.data, header=header)
     fits.HDUList([psfhdu, xypos]).writeto(outfilename, overwrite=overwrite)
 
@@ -120,10 +125,21 @@ def load_psfgrid(filename):
     return GriddedPSFModel(ndd)
 
 def fix_psfs_with_bad_meta(filename):
+    """
+    cd /orange/adamginsburg/jwst/brick/reduction
+    from make_merged_psf import fix_psfs_with_bad_meta
+    cd /orange/adamginsburg/jwst/brick/psfs
+    import glob
+    for fn in glob.glob("*.fits"):
+        fix_psfs_with_bad_meta(fn)
+    """
     from webbpsf.utils import to_griddedpsfmodel
 
     fh = fits.open(filename, mode='update')
     if 'DET_YX0' in fh[0].header and 'OVERSAMP' in fh[0].header:
+        if 'oversampling' in fh[0].header:
+            oversampling = fh[0].header['oversampling']
+            del fh[0].header['oversampling']
         # done!
         fh.close()
     else:
@@ -155,9 +171,15 @@ if __name__ == "__main__":
 
     basepath='/orange/adamginsburg/jwst/brick/'
     
-    for oversampling, halfstampsize in [(1, 50), (2, 100), (4, 200)]:
+    for oversampling, halfstampsize in [(2, 100), (4, 200), (1, 50), ]:
         for project_id in obs_filters:
             for filtername in obs_filters[project_id]:
+                
+                # REMOVE THIS: just wanted to get some done faster
+                wavelength = int(filtername[1:4])
+                if wavelength < 250:
+                    continue
+
                 obs_id = obs_ids[project_id]
                 outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid_oversample{oversampling}.fits'
                 if not os.path.exists(outfilename):

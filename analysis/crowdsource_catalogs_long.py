@@ -65,8 +65,6 @@ def print(*args, **kwargs):
 
 print("Done with imports", flush=True)
 
-basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
-
 class WrappedPSFModel(crowdsource.psf.SimplePSF):
     """
     wrapper for photutils GriddedPSFModel
