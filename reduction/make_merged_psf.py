@@ -112,6 +112,8 @@ def save_psfgrid(psfg,  outfilename, overwrite=True):
         header = fits.Header()
         for key in meta:
             header[key] = meta[key]
+    if 'oversampling' in header:
+        del header['oversampling']
     psfhdu = fits.PrimaryHDU(data=psfg.data, header=header)
     fits.HDUList([psfhdu, xypos]).writeto(outfilename, overwrite=overwrite)
 
