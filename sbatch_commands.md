@@ -264,3 +264,11 @@ for cur_path, directories, files in os.walk('/orange/adamginsburg/jwst/brick'):
                     print(os.path.join(cur_path, fn))
                     os.remove(os.path.join(cur_path, fn))
 ```
+
+## PSF making
+
+
+```
+ sbatch --job-name=make_psfs_cloudc --output=make_psfs_cloudc-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psfs.py -- --proposal_id=2221 --target=cloudc"
+ sbatch --job-name=make_psfs_cloudc --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psfs.py -- --proposal_id=1182 --target=brick"
+```
