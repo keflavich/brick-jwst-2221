@@ -270,5 +270,15 @@ for cur_path, directories, files in os.walk('/orange/adamginsburg/jwst/brick'):
 
 ```
  sbatch --job-name=make_psfs_cloudc --output=make_psfs_cloudc-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=2221 --target=cloudc"
- sbatch --job-name=make_psfs_cloudc --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=1182 --target=brick"
+ sbatch --job-name=make_psfs_brick --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=2221 --target=brick"
+ sbatch --job-name=make_psfs_brick1182 --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=1182 --target=brick"
+
+
+ sbatch --job-name=make_psfs_brick1182f115w --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=1182 --target=brick --filternames=F115W"
+ sbatch --job-name=make_psfs_brick1182f200w --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=1182 --target=brick --filternames=F200W"
+
+
+ sbatch --job-name=make_psfs_brickf182m --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=2221 --target=brick --filternames=F182M"
+ sbatch --job-name=make_psfs_brickf187n --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=2221 --target=brick --filternames=F187N"
+ sbatch --job-name=make_psfs_brickf212n --output=make_psfs_brick-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/make_merged_psf.py -- --proposal_id=2221 --target=brick --filternames=F212N"
 ```
