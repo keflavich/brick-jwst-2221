@@ -511,6 +511,9 @@ def main():
                     try:
                         print(f'crowdsource unweighted {module}', flush=True)
                         merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf)
+                    except Exception as ex:
+                        print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                    try:
                         for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
                             print(f'crowdsource {suffix} {module}')
                             merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf)
