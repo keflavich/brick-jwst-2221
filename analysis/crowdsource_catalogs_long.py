@@ -392,6 +392,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             # crowdsource explicitly handles weight=0, so this _should_ work.
             weight[bad] = 0
 
+            # HACK: F200W was finding way too many stars, >1.3 million, which broke crowdsource
+            if filtername == 'F200W':
+                weight = weight / 2.
+
 
             filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
             filter_table.add_index('filterID')
