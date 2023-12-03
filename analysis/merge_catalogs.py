@@ -365,6 +365,10 @@ def flag_near_saturated(cat, filtername, radius=None):
                   'f405n': 0.55*u.arcsec,
                   'f182m': 0.55*u.arcsec,
                   'f410m': 0.55*u.arcsec,
+                  'f444w': 0.55*u.arcsec,
+                  'f356w': 0.55*u.arcsec,
+                  'f200w': 0.55*u.arcsec,
+                  'f115w': 0.55*u.arcsec,
                   }[filtername]
 
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
