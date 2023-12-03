@@ -35,6 +35,11 @@ all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w'
 obs_filters = {'2221': filternames,
                '1182': ['f444w', 'f356w', 'f200w', 'f115w']
               }
+filter_to_project = {vv: key for key, val in obs_filters.items() for vv in val}
+# need to refactor this somehow for cloudc
+project_obsnum = {'2221': '001',
+                  '1182': '004',
+                 }
 
 
 def getmtime(x):
@@ -213,7 +218,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
           for obsid in obs_filters
           for filn in obs_filters[obsid]
           for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/"
-                             f"jw0{obsid}-o001_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+                             f"jw0{obsid}-o{project_obsnum[obsid]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
           if f'{module}_' in x or f'{module}1_' in x
          ]
 
@@ -293,7 +298,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
     ]
     imgfns = [x
           for filn in filternames
-          for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw02221-o001_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+          for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw0{filter_to_project[filn.lower()]}-o{project_obsnum[filter_to_project[filn.lower()]]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
           if f'{module}_' in x or f'{module}1_' in x
          ]
 
@@ -347,7 +352,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
 
 def flag_near_saturated(cat, filtername, radius=None):
-    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
+    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
@@ -370,7 +375,7 @@ def flag_near_saturated(cat, filtername, radius=None):
     cat.add_column(near_sat, name=f'near_saturated_{filtername}')
 
 def replace_saturated(cat, filtername, radius=None):
-    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o001_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
+    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[filter_to_project[filtername.lower()]]}_1t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
@@ -497,7 +502,7 @@ def main():
     print("Starting main")
     import time
     t0 = time.time()
-    for module in ( 'merged-reproject', 'merged', 'nrca', 'nrcb', ):
+    for module in ( 'merged', 'merged-reproject', 'nrca', 'nrcb', ):
         for desat in (False, True):
             for bgsub in (False, True):
                 for epsf in (False, True):
@@ -513,6 +518,7 @@ def main():
                         merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf)
                     except Exception as ex:
                         print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                        raise ex
                     try:
                         for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
                             print(f'crowdsource {suffix} {module}')
