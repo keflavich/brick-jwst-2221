@@ -379,7 +379,7 @@ def flag_near_saturated(cat, filtername, radius=None):
     cat.add_column(near_sat, name=f'near_saturated_{filtername}')
 
 def replace_saturated(cat, filtername, radius=None):
-    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[filter_to_project[filtername.lower()]]}_1t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
+    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
