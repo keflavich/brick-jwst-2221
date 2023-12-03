@@ -395,6 +395,10 @@ def replace_saturated(cat, filtername, radius=None):
                   'f405n': 0.1*u.arcsec,
                   'f182m': 0.05*u.arcsec,
                   'f410m': 0.1*u.arcsec,
+                  'f444w': 0.1*u.arcsec,
+                  'f356w': 0.1*u.arcsec,
+                  'f200w': 0.05*u.arcsec,
+                  'f115w': 0.05*u.arcsec,
                   }[filtername]
 
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')

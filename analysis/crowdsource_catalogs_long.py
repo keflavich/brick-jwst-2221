@@ -170,6 +170,35 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     pl.colorbar(mappable=im)
     pl.tight_layout()
 
+def save_crowdsource_results(results, ww, filename, suffix,
+                             im1, detector,
+                             basepath, filtername, module, desat, bgsub):
+    stars, modsky, skymsky, psf = results
+    stars = Table(stars)
+    # crowdsource explicitly inverts x & y from the numpy convention:
+    # https://github.com/schlafly/crowdsource/issues/11
+    coords = ww.pixel_to_world(stars['y'], stars['x'])
+    stars['skycoord'] = coords
+    stars['x'], stars['y'] = stars['y'], stars['x']
+
+    stars.meta['filename'] = filename
+    stars.meta['filter'] = filtername
+    stars.meta['module'] = module
+    stars.meta['detector'] = detector
+
+    tblfilename = (f"{basepath}/{filtername}/"
+                    f"{filtername.lower()}_{module}{desat}{bgsub}"
+                    f"_crowdsource_{suffix}.fits")
+    stars.write(tblfilename, overwrite=True)
+    # add WCS-containing header
+    with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
+        fh[0].header.update(im1[1].header)
+    skymskyhdu = fits.PrimaryHDU(data=skymsky, header=im1[1].header)
+    modskyhdu = fits.ImageHDU(data=modsky, header=im1[1].header)
+    psfhdu = fits.ImageHDU(data=psf)
+    hdul = fits.HDUList([skymskyhdu, modskyhdu, psfhdu])
+    hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
+
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
@@ -474,26 +503,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                                 )
                 print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results_unweighted
-                stars = Table(stars)
-                # crowdsource explicitly inverts x & y from the numpy convention:
-                # https://github.com/schlafly/crowdsource/issues/11
-                coords = ww.pixel_to_world(stars['y'], stars['x'])
-                stars['skycoord'] = coords
-                stars['x'], stars['y'] = stars['y'], stars['x']
-
-                stars.meta['filename'] = filename
-                stars.meta['filter'] = filtername
-                stars.meta['module'] = module
-                stars.meta['detector'] = detector
-
-                tblfilename = (f"{basepath}/{filtername}/"
-                               f"{filtername.lower()}_{module}{desat}{bgsub}"
-                               "_crowdsource_unweighted.fits")
-                stars.write(tblfilename, overwrite=True)
-                # add WCS-containing header
-                with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
-                    fh[0].header.update(im1[1].header)
-                fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel_unweighted.fits", overwrite=True)
+                save_crowdsource_results(results_unweighted, ww, filename,
+                    im1=im1, detector=detector, basepath=basepath,
+                    filtername=filtername, module=module, desat=desat, bgsub=bgsub,
+                    suffix="unweighted")
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
@@ -583,29 +596,16 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         t0 = time.time()
                         print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
                         print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
-                        results_blur  = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
-                                            nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
-                                            **crowdsource_default_kwargs
-                                            )
+                        results_blur = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
+                                           nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
+                                           **crowdsource_default_kwargs
+                                           )
                         print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                         stars, modsky, skymsky, psf = results_blur
-                        stars = Table(stars)
-
-                        # crowdsource explicitly inverts x & y from the numpy convention:
-                        # https://github.com/schlafly/crowdsource/issues/11
-                        coords = ww.pixel_to_world(stars['y'], stars['x'])
-                        stars['skycoord'] = coords
-                        stars['x'], stars['y'] = stars['y'], stars['x']
-
-                        tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_nsky{nsky}.fits"
-                        stars.write(tblfilename, overwrite=True)
-                        # add WCS-containing header
-                        with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
-                            fh[0].header.update(im1[1].header)
-
-                        fits.PrimaryHDU(data=skymsky, header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_nsky{nsky}_skymodel.fits", overwrite=True)
-                        fits.PrimaryHDU(data=data-modsky,
-                                        header=im1[1].header).writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_nsky{nsky}_data-modsky.fits", overwrite=True)
+                        save_crowdsource_results(results_blur, ww, filename,
+                            im1=im1, detector=detector, basepath=basepath,
+                            filtername=filtername, module=module, desat=desat, bgsub=bgsub,
+                            suffix=f"nsky{nsky}")
 
                         zoomcut = slice(128, 256), slice(128, 256)
 
