@@ -195,8 +195,9 @@ def save_crowdsource_results(results, ww, filename, suffix,
         fh[0].header.update(im1[1].header)
     skymskyhdu = fits.PrimaryHDU(data=skymsky, header=im1[1].header)
     modskyhdu = fits.ImageHDU(data=modsky, header=im1[1].header)
-    psfhdu = fits.ImageHDU(data=psf)
-    hdul = fits.HDUList([skymskyhdu, modskyhdu, psfhdu])
+    # PSF doesn't need saving / can't be saved, it's a function
+    #psfhdu = fits.ImageHDU(data=psf)
+    hdul = fits.HDUList([skymskyhdu, modskyhdu])
     hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
 
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
@@ -375,7 +376,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             # grid.x_0 = grid.y_0 = 30
             # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
             
-            grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample2.fits')
+            grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample1.fits')
 
             # if isinstance(grid, list):
             #     print(f"Grid is a list: {grid}")
@@ -422,8 +423,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             weight[bad] = 0
 
             # HACK: F200W was finding way too many stars, >1.3 million, which broke crowdsource
-            if filtername == 'F200W':
-                weight = weight / 2.
+            # This might have been caused by a bad PSF when I was undersampling instead of oversampling!  I will retry w/o the hack
+            #if filtername == 'F200W':
+            #    weight = weight / 2.
 
 
             filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
@@ -597,9 +599,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
                         print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
                         results_blur = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
-                                           nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
-                                           **crowdsource_default_kwargs
-                                           )
+                                            nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
+                                            **crowdsource_default_kwargs
+                                            )
                         print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                         stars, modsky, skymsky, psf = results_blur
                         save_crowdsource_results(results_blur, ww, filename,
