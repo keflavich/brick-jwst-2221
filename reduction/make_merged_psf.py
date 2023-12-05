@@ -193,7 +193,7 @@ if __name__ == "__main__":
 
     basepath = f'/orange/adamginsburg/jwst/{target}/'
     
-    for oversampling, halfstampsize in [(2, 100), (4, 200), (1, 50), ]:
+    for oversampling, halfstampsize in [(1, 50), (2, 100), (4, 200), ]:
         for project_id in project_ids:
             for filtername in set(obs_filters[project_id]) & set(selected_filters):
 
