@@ -100,7 +100,8 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         # it returns something in (nstamps, row, col) shape
         stamps = []
         for i in range(len(col)):
-            stamps.append(self.psfgridmodel.evaluate(cols+col[i], rows+row[i], 1, col[i], row[i]))
+            # the +0.5 is required to actually center the PSF (empirically)
+            stamps.append(self.psfgridmodel.evaluate(cols+col[i]+0.5, rows+row[i]+0.5, 1, col[i], row[i]))
         stamps = np.transpose(stamps, axes=(0,2,1))
 
         if deriv:
@@ -172,7 +173,8 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 
 def save_crowdsource_results(results, ww, filename, suffix,
                              im1, detector,
-                             basepath, filtername, module, desat, bgsub):
+                             basepath, filtername, module, desat, bgsub,
+                             fpsf=""):
     stars, modsky, skymsky, psf = results
     stars = Table(stars)
     # crowdsource explicitly inverts x & y from the numpy convention:
@@ -187,7 +189,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     stars.meta['detector'] = detector
 
     tblfilename = (f"{basepath}/{filtername}/"
-                    f"{filtername.lower()}_{module}{desat}{bgsub}"
+                    f"{filtername.lower()}_{module}{desat}{bgsub}{fpsf}"
                     f"_crowdsource_{suffix}.fits")
     stars.write(tblfilename, overwrite=True)
     # add WCS-containing header
@@ -198,7 +200,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     # PSF doesn't need saving / can't be saved, it's a function
     #psfhdu = fits.ImageHDU(data=psf)
     hdul = fits.HDUList([skymskyhdu, modskyhdu])
-    hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
+    hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
 
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
@@ -607,6 +609,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         save_crowdsource_results(results_blur, ww, filename,
                             im1=im1, detector=detector, basepath=basepath,
                             filtername=filtername, module=module, desat=desat, bgsub=bgsub,
+                            fpsf=fpsf,
                             suffix=f"nsky{nsky}")
 
                         zoomcut = slice(128, 256), slice(128, 256)
