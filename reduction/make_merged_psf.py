@@ -193,9 +193,11 @@ if __name__ == "__main__":
 
     basepath = f'/orange/adamginsburg/jwst/{target}/'
     
-    for oversampling, halfstampsize in [(1, 50), (2, 100), (4, 200), ]:
+    for oversampling, halfstampsize in [(1, 50), (2, 50), (4, 50), ]:
         for project_id in project_ids:
             for filtername in set(obs_filters[project_id]) & set(selected_filters):
+
+                wavelength = int(filtername[1:-1])
 
                 obs_id = obs_ids[project_id][target]
 
@@ -204,7 +206,8 @@ if __name__ == "__main__":
                     print(f"Making PSF grid {outfilename}")
                     psfg = make_merged_psf(filtername.upper(),
                                         basepath=basepath,
-                                        halfstampsize=halfstampsize, grid_step=200,
+                                        halfstampsize=halfstampsize,
+                                        grid_step=200 if wavelength > 230 else 400,
                                         oversampling=oversampling,
                                         project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
                     save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
