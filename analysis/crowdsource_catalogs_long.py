@@ -274,14 +274,19 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             bgsub = '_bgsub' if options.bgsub else ''
             epsf_ = "_epsf" if options.epsf else ""
 
-            try:
-                pupil = 'clear'
-                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
-                fh = fits.open(filename)
-            except Exception:
+            pupil = 'clear'
+            #filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
+            filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_nodestreak_realigned-to-refcat.fits'
+            if not os.path.exists(filename):
+                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+            if not os.path.exists(filename):
                 pupil = 'F444W'
-                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
-                fh = fits.open(filename)
+                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_nodestreak_realigned_to_refcat.fits'
+            if not os.path.exists(filename):
+                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned_to_refcat.fits'
+            if not os.path.exists(filename):
+                raise ValueError(f"File {filename} does not exist")
+            fh = fits.open(filename)
             print(f"Starting on {filename}", flush=True)
 
             im1 = fh
