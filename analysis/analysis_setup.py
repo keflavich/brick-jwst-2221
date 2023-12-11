@@ -16,7 +16,12 @@ from astropy import wcs
 from astropy import table
 from astropy import units as u
 
-from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
+try:
+    from photutils.apeture import CircularAnnulus, CircularAperture
+    from photutils.psf import EPSFBuilder
+    from photutils.detection import find_peaks
+except ImportError:
+    from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
 from photutils.background import MMMBackground, MADStdBackgroundRMS
@@ -54,21 +59,23 @@ reg = regions.Regions.read(f'{basepath}/regions_/leftside_brick_zoom.reg')[0]
 regzoom = regions.Regions.read(f'{basepath}/regions_/leftside_brick_rezoom.reg')[0]
 
 
-fh_nrca = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')
-ww410_nrca = wcs.WCS(fh_nrca[1].header)
-ww_nrca = ww410_nrca
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore')
+    fh_nrca = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')
+    ww410_nrca = wcs.WCS(fh_nrca[1].header)
+    ww_nrca = ww410_nrca
 
-fh_nrcb = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrcb_i2d.fits')
-ww410_nrcb = wcs.WCS(fh_nrcb[1].header)
-ww_nrcb = ww410_nrcb
+    fh_nrcb = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrcb_i2d.fits')
+    ww410_nrcb = wcs.WCS(fh_nrcb[1].header)
+    ww_nrcb = ww410_nrcb
 
-fh_merged = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits')
-ww410_merged = wcs.WCS(fh_merged[1].header)
-ww_merged = ww410_merged
+    fh_merged = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits')
+    ww410_merged = wcs.WCS(fh_merged[1].header)
+    ww_merged = ww410_merged
 
-fh_merged_reproject = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged-reproject_i2d.fits')
-ww410_merged_reproject = wcs.WCS(fh_merged_reproject[1].header)
-ww_merged_reproject = ww410_merged_reproject
+    fh_merged_reproject = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged-reproject_i2d.fits')
+    ww410_merged_reproject = wcs.WCS(fh_merged_reproject[1].header)
+    ww_merged_reproject = ww410_merged_reproject
 
 avm_nostars_nrca = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png')
 img_nostars_nrca = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png'))[::-1,:,:]
