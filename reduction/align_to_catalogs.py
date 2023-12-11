@@ -40,7 +40,7 @@ def main(field='001',
             realigned = realign_to_vvv(filtername=filtername.lower(),
                                     basepath=basepath, module=module, fieldnumber=field,
                                     imfile=realigned_vvv_filename, ksmag_limit=15 if filtername=='f410m'
-                                    else 11, mag_limit=15, proposal_id=proposal_id)
+                                    else 11, mag_limit=17 if filtername == 'F115W' else 15, proposal_id=proposal_id)
 
             log.info(f"Realigning to refcat (module={module}")
 

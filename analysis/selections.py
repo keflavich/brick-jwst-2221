@@ -15,7 +15,12 @@ from astropy import table
 from astropy import units as u
 from astroquery.svo_fps import SvoFps
 
-from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
+try:
+    from photutils.apeture import CircularAnnulus, CircularAperture
+    from photutils.psf import EPSFBuilder
+    from photutils.detection import find_peaks
+except ImportError:
+    from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
 from photutils.background import MMMBackground, MADStdBackgroundRMS
