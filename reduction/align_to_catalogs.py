@@ -51,12 +51,12 @@ def main(field='001',
             shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                         realigned_refcat_filename)
             realigned = realign_to_catalog(reftbl['skycoord'],
-                                        filtername=filtername.lower(),
-                                        basepath=basepath, module=module,
-                                        fieldnumber=field,
-                                        mag_limit=20,
+                                           filtername=filtername.lower(),
+                                           basepath=basepath, module=module,
+                                           fieldnumber=field,
+                                           mag_limit=20,
                                            proposal_id=proposal_id,
-                                        imfile=realigned_refcat_filename)
+                                           imfile=realigned_refcat_filename)
 
 
 def retrieve_vvv(
@@ -133,7 +133,7 @@ def realign_to_vvv(
                               module=module, basepath=basepath,
                               fieldnumber=fieldnumber,
                               catfile=catfile, imfile=imfile,
-                              mag_limit=15,
+                              mag_limit=mag_limit,
                               raoffset=raoffset, decoffset=decoffset,
                               proposal_id=proposal_id,
                               )
@@ -250,8 +250,8 @@ def merge_a_plus_b(filtername,
     """suffix can be realigned-to-vvv, realigned-to-refcat, or i2d"""
     import reproject
     from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
-    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca_{suffix}.fits'
-    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb_{suffix}.fits'
+    filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca{suffix}.fits'
+    filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb{suffix}.fits'
     files = [filename_nrca, filename_nrcb]
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]

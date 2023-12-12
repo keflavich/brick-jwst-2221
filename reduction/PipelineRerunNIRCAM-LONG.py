@@ -406,24 +406,27 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             decoffset = 0.0 * u.arcsec
             raoffset = 0.0 * u.arcsec
 
-        log.info(f"Realigning to VVV (module={module}")
+        log.info(f"Realigning to VVV (module={module}, filter={filtername})")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
+        log.info(f"Realigned to VVV filename: {realigned_vvv_filename}")
         realigned = realign_to_vvv(filtername=filtername.lower(),
                                    fov_regname=fov_regname[regionname],
                                    basepath=basepath, module=module,
                                    fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename,
-                                   ksmag_limit=15 if filtername=='f410m' else 11,
-                                   mag_limit=17 if filtername =='f115w' else 15,
+                                   ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
+                                   mag_limit=18 if filtername.lower() == 'f115w' else 15,
                                    raoffset=raoffset,
                                    decoffset=decoffset)
+        log.info(f"Done realigning to VVV (module={module}, filtername={filtername})")
 
-        log.info(f"Realigning to refcat (module={module}")
+        log.info(f"Realigning to refcat (module={module}, filtername={filtername})")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
+        log.info(f"Realigned refcat filename: {realigned_refcat_filename}")
         realigned = realign_to_catalog(reftbl['skycoord'],
                                        filtername=filtername.lower(),
                                        basepath=basepath, module=module,
@@ -431,6 +434,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        mag_limit=20, proposal_id=proposal_id,
                                        imfile=realigned_refcat_filename,
                                        raoffset=raoffset, decoffset=decoffset)
+        log.info(f"Done realigning to refcat (module={module}, filtername={filtername})")
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
@@ -443,7 +447,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     if module == 'nrcb':
         # assume nrca is run before nrcb
         print("Merging already-combined nrca + nrcb modules")
-        merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix='realigned-to-refcat',
+        merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix=f'{destreak_suffix}_realigned-to-refcat',
                        proposal_id=proposal_id)
         print("DONE Merging already-combined nrca + nrcb modules")
 
@@ -628,7 +632,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename,
                                    ksmag_limit=15 if filtername=='f410m' else 11,
-                                   mag_limit=17 if filtername=='f115w' else 15,
+                                   mag_limit=18 if filtername=='f115w' else 15,
                                    raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
