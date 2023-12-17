@@ -631,8 +631,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename,
-                                   ksmag_limit=15 if filtername=='f410m' else 11,
-                                   mag_limit=18 if filtername=='f115w' else 15,
+                                   ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
+                                   mag_limit=18 if filtername.lower() == 'f115w' else 15,
                                    raoffset=raoffset, decoffset=decoffset)
 
         log.info(f"Realigning to refcat (module={module}")
