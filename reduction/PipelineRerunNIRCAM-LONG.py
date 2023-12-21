@@ -89,6 +89,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     """
     log.info(f"Processing filter {filtername} module {module} with do_destreak={do_destreak} and skip_step1and2={skip_step1and2} for field {field} and proposal id {proposal_id} in region {regionname}")
 
+    wavelength = int(filtername[1:4])
+
     basepath = f'/orange/adamginsburg/jwst/{regionname}/'
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -418,6 +420,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                    imfile=realigned_vvv_filename,
                                    ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
                                    mag_limit=18 if filtername.lower() == 'f115w' else 15,
+                                   max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                    raoffset=raoffset,
                                    decoffset=decoffset)
         log.info(f"Done realigning to VVV (module={module}, filtername={filtername})")
@@ -432,6 +435,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
                                        mag_limit=20, proposal_id=proposal_id,
+                                       max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                        imfile=realigned_refcat_filename,
                                        raoffset=raoffset, decoffset=decoffset)
         log.info(f"Done realigning to refcat (module={module}, filtername={filtername})")
@@ -629,8 +633,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
-        realigned = realign_to_vvv(filtername=filtername.lower(), fov_regname=fov_regname[regionname], basepath=basepath, module=module, fieldnumber=field, proposal_id=proposal_id,
+        realigned = realign_to_vvv(filtername=filtername.lower(),
+                                   fov_regname=fov_regname[regionname], basepath=basepath, module=module,
+                                   fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename,
+                                   max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                    ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
                                    mag_limit=18 if filtername.lower() == 'f115w' else 15,
                                    raoffset=raoffset, decoffset=decoffset)
@@ -643,6 +650,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        filtername=filtername.lower(),
                                        basepath=basepath, module=module,
                                        fieldnumber=field,
+                                       max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                        mag_limit=20,
                                        proposal_id=proposal_id,
                                        imfile=realigned_refcat_filename,
