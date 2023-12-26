@@ -1,4 +1,7 @@
-from align_to_catalogs import merge_a_plus_b
+import warnings
+from align_to_catalogs import merge_a_plus_b, realign_to_catalog
+from astropy.table import Table
+from astropy import units as u
 
 if __name__ == "__main__":
     from optparse import OptionParser
@@ -23,29 +26,54 @@ if __name__ == "__main__":
     raoffset = 0*u.deg
     decoffset = 0*u.deg
 
-    for field in fields:
-        for filtername in filternames:
-            wavelength = int(filtername[1:4])
-            for destreak_suffix in ('', '_destreaked'):
-                for proposal_id in ('1182', '2221'):
-                    if field in field_to_reg_mapping[proposal_id]:
-                        print(f"Main Loop: {proposal_id} + {filtername} + {field}={field_to_reg_mapping[proposal_id][field]} + destreak={destreak_suffix}")
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        for field in fields:
+            for filtername in filternames:
+                wavelength = int(filtername[1:4])
+                for destreak_suffix in ('_destreak', '', '_nodestreak', ):
+                    # _nodestreak probably doesn't exist
+                    for proposal_id in ('1182', '2221'):
+                        if field in field_to_reg_mapping[proposal_id]:
+                            print(f"Main Loop: {proposal_id} + {filtername} + {field}={field_to_reg_mapping[proposal_id][field]} + destreak={destreak_suffix}")
 
-                        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
-                        realigned = realign_to_catalog(reftbl['skycoord'],
-                                                       filtername=filtername.lower(),
-                                                       basepath=basepath, module=module,
-                                                       fieldnumber=field,
-                                                       mag_limit=20,
-                                                       proposal_id=proposal_id,
-                                                       max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
-                                                       imfile=realigned_refcat_filename,
-                                                       raoffset=raoffset,
-                                                       decoffset=decoffset)
+                            try:
+                                for module in ('nrca', 'nrcb'):
+                                    realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
+                                    realigned = realign_to_catalog(reftbl['skycoord'],
+                                                                   filtername=filtername.lower(),
+                                                                   basepath=basepath, module=module,
+                                                                   fieldnumber=field,
+                                                                   mag_limit=20,
+                                                                   proposal_id=proposal_id,
+                                                                   max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
+                                                                   imfile=realigned_refcat_filename,
+                                                                   raoffset=raoffset,
+                                                                   decoffset=decoffset)
+                            except Exception as ex:
+                                print(ex)
 
-                        try:
-                            merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix=f'{destreak_suffix}_realigned-to-refcat',
-                                            proposal_id=proposal_id)
-                            print("DONE Merging already-combined nrca + nrcb modules")
-                        except Exception as ex:
-                            print(ex)
+                            try:
+                                merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix=f'{destreak_suffix}_realigned-to-refcat',
+                                                proposal_id=proposal_id)
+                                print("DONE Merging already-combined nrca + nrcb modules"
+                                      f": {proposal_id} + {filtername} + {field}={field_to_reg_mapping[proposal_id][field]} + destreak={destreak_suffix}")
+                            except Exception as ex:
+                                print(ex)
+
+                            try:
+                                module = 'merged-reproject'
+                                realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
+                                realigned = realign_to_catalog(reftbl['skycoord'],
+                                                               filtername=filtername.lower(),
+                                                               basepath=basepath, module='merged-reproject',
+                                                               fieldnumber=field,
+                                                               mag_limit=20,
+                                                               proposal_id=proposal_id,
+                                                               max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
+                                                               imfile=realigned_refcat_filename,
+                                                               raoffset=raoffset,
+                                                               decoffset=decoffset)
+                                print("Realigned merged-reproject; it should have had zero offset")
+                            except Exception as ex:
+                                print(ex)
