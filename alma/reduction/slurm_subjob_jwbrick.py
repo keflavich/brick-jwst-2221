@@ -3,6 +3,10 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 
+import sys
+# TODO: make ALMA-IMF pipeline installable
+sys.path.append('/orange/adamginsburg/ALMA_IMF/reduction/reduction/')
+import metadata_tools
 
 # this script has to be run interactively, so casalog should be in the namespace
 def logprint(string, origin='jwbrickjob', priority='INFO'):
@@ -62,14 +66,11 @@ else:
 
             split(**split_kwargs)
 
-        # determine phasecenter
-        fields = vishead(splitnames[0], mode='get', hdkey='field')
-        ptcs = vishead(splitnames[0], mode='get', hdkey='ptcs')
-        match = fields[0] == field
-        ptcs_ = np.array(ptcs[0].values())[match].squeeze()
-        ctr = ptcs_.mean(axis=0)
-        crds = SkyCoord(*ctr, frame='icrs', unit=(u.rad, u.rad))
-        phasecenter = f'J2000 {crds.ra.to_string(u.hour, sep=":", pad=True, precision=2)} {crds.dec.to_string(sep=".", pad=True, alwayssign=True, precision=1)}'
+        phasecenter = metadatatools.determine_phasecenter(splitnames[0], field, formatted=False)
+        dra, ddec, pixscale = determine_imsiz(splitnames[0], field, phasecenter, pixfraction_of_fwhm=1/3.)
+        imsize = [dra, ddec]
+        cellsize = ['{0:0.2f}arcsec'.format(pixscale)] * 2
+        phasecenter = metadatatools.determine_phasecenter(splitnames[0], field, formatted=True)
 
         tclean_kwargs = dict(vis=splitnames,
                              imagename=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual',
@@ -78,8 +79,8 @@ else:
                nchan=nchan,
                specmode='cube',
                threshold='6mJy',
-               imsize=[6000,7000],
-               cell=['0.03arcsec'],
+               imsize=imsize,
+               cell=cellsize,
                niter=10000,
                deconvolver='hogbom',
                phasecenter=phasecenter,
