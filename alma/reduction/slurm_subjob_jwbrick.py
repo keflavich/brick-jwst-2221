@@ -1,4 +1,7 @@
 import glob, os, shutil
+import numpy as np
+from astropy.coordinates import SkyCoord
+from astropy import units as u
 
 
 # this script has to be run interactively, so casalog should be in the namespace
@@ -59,6 +62,15 @@ else:
 
             split(**split_kwargs)
 
+        # determine phasecenter
+        fields = vishead(splitnames[0], mode='get', hdkey='field')
+        ptcs = vishead(splitnames[0], mode='get', hdkey='ptcs')
+        match = fields[0] == field
+        ptcs_ = np.array(ptcs[0].values())[match].squeeze()
+        ctr = ptcs_.mean(axis=0)
+        crds = SkyCoord(*ctr, frame='icrs', unit=(u.rad, u.rad))
+        phasecenter = f'J2000 {crds.ra.to_string(u.hour, sep=":", pad=True, precision=2)} {crds.dec.to_string(sep=".", pad=True, alwayssign=True, precision=1)}'
+
         tclean_kwargs = dict(vis=splitnames,
                              imagename=f'{mous}.{field}_sci.spw{spw}.{start:04d}+{nchan:03d}.cube.I.manual',
                field=field,
@@ -70,7 +82,8 @@ else:
                cell=['0.03arcsec'],
                niter=10000,
                deconvolver='hogbom',
-               phasecenter='J2000 17:46:19.157 -028.35.15.041',
+               phasecenter=phasecenter,
+               # phasecenter='J2000 17:46:19.157 -028.35.15.041',
                gridder='mosaic',
                weighting='briggs',
                robust=0.5,

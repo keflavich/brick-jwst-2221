@@ -2,7 +2,7 @@
 
 ### backup SBATCH --mail-type=NONE         # Mail events (NONE, BEGIN, END, FAIL, ALL)
 ### backup SBATCH --nodes=1                   # Use one node
-### backup SBATCH --ntasks=4                  # Run a single task
+### backup SBATCH --ntasks=16                  # Run a single task
 ### backup SBATCH --mem-per-cpu=4gb           # Memory per processor
 ### backup SBATCH --time=96:00:00             # Time limit hrs:min:sec
 ### backup SBATCH --qos=astronomy-dept-b
