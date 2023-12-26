@@ -147,6 +147,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
                        max_offset=0.4*u.arcsec,
                        mag_limit=15,
                        catfile=None, imfile=None,
+                       threshold=0.001*u.arcsec,
                        raoffset=0*u.arcsec, decoffset=0*u.arcsec):
     if catfile is None:
         catfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
@@ -174,23 +175,32 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         warnings.simplefilter('ignore')
         ww =  WCS(fits.getheader(imfile, ext=('SCI', 1)))
         ww.wcs.crval = ww.wcs.crval - [raoffset.to(u.deg).value, decoffset.to(u.deg).value] # visualize this adjustment separately from next, find out which step is wrong
-    skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-    dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
-    ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
+    med_dra = 100*u.arcsec
+    med_ddec = 100*u.arcsec
+    iteration = 0
+    while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
+        skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    print(f'Before realignment, offset is {np.median(dra)}, {np.median(ddec)}.  Found {len(idx)} matches.')
+        idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
+        dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
+        ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    if np.isnan(np.median(dra)):
-        print(f'len(refcoords) = {len(reference_coordinates)}')
-        print(f'len(cat) = {len(cat)}')
-        print(f'len(idx) = {len(idx)}')
-        print(f'len(sidx) = {len(sidx)}')
-        print(cat, sel, idx, sidx, sep)
-        raise ValueError(f"median(dra) = {np.median(dra)}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
+        med_dra = np.median(dra)
+        med_ddec = np.median(ddec)
 
-    ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
+        print(f'At realignment iteration {iteration}, offset is {med_dra}, {med_ddec}.  Found {len(idx)} matches.')
+        iteration += 1
+
+        if np.isnan(med_dra):
+            print(f'len(refcoords) = {len(reference_coordinates)}')
+            print(f'len(cat) = {len(cat)}')
+            print(f'len(idx) = {len(idx)}')
+            print(f'len(sidx) = {len(sidx)}')
+            print(cat, sel, idx, sidx, sep)
+            raise ValueError(f"median(dra) = {med_dra}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
+
+        ww.wcs.crval = ww.wcs.crval - [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
 
     with fits.open(imfile, mode='update') as hdulist:
         print("CRVAL before", hdulist['SCI'].header['CRVAL1'], hdulist['SCI'].header['CRVAL2'])

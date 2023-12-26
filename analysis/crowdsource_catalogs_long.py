@@ -275,15 +275,22 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             epsf_ = "_epsf" if options.epsf else ""
 
             pupil = 'clear'
-            #filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
             filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_nodestreak_realigned-to-refcat.fits'
             if not os.path.exists(filename):
                 filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+            if not os.path.exists(filename):
+                # merged-reproject_i2d.fits lives here
+                # 12/22/2023: that is generally the best-behaved; it's the only one with no clear misalignments.  tweakreg-based merge just doesn't lock in coords
+                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
             if not os.path.exists(filename):
                 pupil = 'F444W'
                 filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_nodestreak_realigned-to-refcat.fits'
             if not os.path.exists(filename):
                 filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits'
+            if not os.path.exists(filename):
+                # merged-reproject_i2d.fits lives here
+                # 12/22/2023: that is generally the best-behaved; it's the only one with no clear misalignments.  tweakreg-based merge just doesn't lock in coords
+                filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
             if not os.path.exists(filename):
                 glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_*-{module}_realigned-to-refcat.fits'
                 fglob = glob.glob(glstr)
@@ -292,7 +299,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 else:
                     raise ValueError(f"File {filename} does not exist, and nothing matching {glstr} exists either.  pupil={pupil}")
             fh = fits.open(filename)
-            print(f"Starting on {filename}", flush=True)
+            print(f"Starting cataloging on {filename}", flush=True)
 
             im1 = fh
             data = im1[1].data
@@ -490,7 +497,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom{name.replace(" ","_")}_daofind.png',
                             bbox_inches='tight')
             except Exception as ex:
-                print(f'FAILURE: {ex}')
+                print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for basic daofinder: {ex}')
             #grid.x_0 = 0
             #grid.y_0 = 0
             # not needed? def evaluate(x, y, flux, x_0, y_0):
@@ -509,6 +516,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
                 t0 = time.time()
 
+                print()
                 print("starting crowdsource unweighted", flush=True)
                 results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
                                                 #psfderiv=np.gradient(-psf_initial[0].data),
@@ -540,7 +548,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}_catalog_diagnostics_zoom{name.replace(" ","_")}_unweighted.png',
                                 bbox_inches='tight')
                 except Exception as ex:
-                    print(f'FAILURE: {ex}')
+                    print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for unweighted crowdsource: {ex}')
 
                 # pl.figure(figsize=(10,5))
                 # pl.subplot(1,2,1).imshow(psf_model(30,30), norm=simple_norm(psf_model(30,30), stretch='log'), cmap='cividis')
@@ -608,6 +616,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 for refit_psf, fpsf in zip((True, False), ('_fitpsf', '')):
                     for nsky in (0, 1, ):
                         t0 = time.time()
+                        print()
                         print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
                         print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
                         results_blur = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
@@ -625,21 +634,25 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         zoomcut = slice(128, 256), slice(128, 256)
 
 
-                        catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-                        pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}{bgsub}{fpsf} nsky={nsky} weighted")
-                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics.png',
-                                bbox_inches='tight')
-
-                        catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                        pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}{fpsf} nsky={nsky} weighted")
-                        pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
-                                bbox_inches='tight')
-
-                        for name, zoomcut in zoomcut_list.items():
-                            catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                            pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}{fpsf} zoom {name}")
-                            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
+                        try:
+                            catalog_zoom_diagnostic(data, modsky, nullslice, stars)
+                            pl.suptitle(f"Catalog Diagnostics {filtername} {module}{desat}{bgsub}{fpsf} nsky={nsky} weighted")
+                            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics.png',
                                     bbox_inches='tight')
+
+                            catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                            pl.suptitle(f"Catalog Diagnostics zoomed {filtername} {module}{desat}{bgsub}{fpsf} nsky={nsky} weighted")
+                            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics_zoom.png',
+                                    bbox_inches='tight')
+
+                            for name, zoomcut in zoomcut_list.items():
+                                catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                                pl.suptitle(f"Crowdsource nsky={nsky} weighted Catalog Diagnostics {filtername} {module}{desat}{bgsub}{fpsf} zoom {name}")
+                                pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{fpsf}_nsky{nsky}_weighted_catalog_diagnostics_zoom{name.replace(" ","_")}.png',
+                                        bbox_inches='tight')
+                        except Exception as ex:
+                            print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for crowdsource nsky={nsky} refitpsf={refit_psf}: {ex}')
+
 
 
             if options.daophot:
@@ -733,7 +746,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{epsf_}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
                                 bbox_inches='tight')
                 except Exception as ex:
-                    print(f'FAILURE: {ex}')
+                    print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} BASIC photometry: {ex}')
                 print(f"Done with diagnostics for BASIC photometry.  dt={time.time() - t0}")
                 pl.close('all')
 
@@ -830,7 +843,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{epsf_}__catalog_diagnostics_zoom_daophot_iterative{name.replace(" ","_")}.png',
                                 bbox_inches='tight')
                 except Exception as ex:
-                    print(f'FAILURE: {ex}')
+                    print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for ITERATIVE daophot: {ex}')
 
 if __name__ == "__main__":
     main()
