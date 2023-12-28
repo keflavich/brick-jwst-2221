@@ -16,32 +16,41 @@ export NARRAY=$(($TOTALNCHAN / $NCHAN))
 
 echo "FIELDNAME=${FIELDNAME} FIELD=${FIELD} MOUS=${MOUS} SOUS=${SOUS} GOUS=${GOUS} WORK_DIR=${WORK_DIR} MSES=${MSES} SPW=${SPW} NCHAN=${NCHAN} TOTALNCHAN=${TOTALNCHAN} START=${START} NARRAY=${NARRAY}"
 
-export DOMERGE=0
+if [ $ONLYMERGE ]; then
+    DEPENDENCY=""
+    echo "Only merging"
+else
+    export DOMERGE=0
 
-jobid=$(sbatch --qos=astronomy-dept-b \
-    --account=astronomy-dept \
-    --array=0-$NARRAY \
-    --output=/blue/adamginsburg/adamginsburg/brick_logs/${FIELDNAME}_spw${SPW}_%A_%a.out \
-    --mail-type=NONE \
-    --nodes=1 \
-    --ntasks=16 \
-    --mem-per-cpu=4gb \
-    --time=96:00:00 \
-    --job-name=${FIELDNAME}_spw${SPW} \
-    /orange/adamginsburg/jwst/brick/alma/reduction/slurm_arrayjob.sh)
+    jobid=$(sbatch --qos=astronomy-dept-b \
+        --account=astronomy-dept \
+        --array=0-$NARRAY \
+        --output=/blue/adamginsburg/adamginsburg/brick_logs/${FIELDNAME}_spw${SPW}_%A_%a.out \
+        --mail-type=NONE \
+        --nodes=1 \
+        --ntasks=16 \
+        --mem-per-cpu=4gb \
+        --time=96:00:00 \
+        --job-name=${FIELDNAME}_spw${SPW} \
+        /orange/adamginsburg/jwst/brick/alma/reduction/slurm_arrayjob.sh)
 
-echo ${jobid##* }
+    echo $jobid
+    echo ${jobid##* }
+    DEPENDENCY="--dependency=afterok:${jobid##* }"
+fi
 
 export DOMERGE=1
 
-sbatch --qos=astronomy-dept-b \
+merge_id=$(sbatch --qos=astronomy-dept-b \
     --account=astronomy-dept \
-    --output=/blue/adamginsburg/adamginsburg/brick_logs/${FIELDNAME}_spw${SPW}_merge.out \
+    --output=/blue/adamginsburg/adamginsburg/brick_logs/${FIELDNAME}_spw${SPW}_merge_%j.out \
     --mail-type=NONE \
     --nodes=1 \
     --ntasks=16 \
     --mem-per-cpu=4gb \
     --time=96:00:00 \
-    --dependency=afterok:${jobid##* } \
+    $DEPENDENCY \
     --job-name=${FIELDNAME}_spw${SPW}_merge \
-    /orange/adamginsburg/jwst/brick/alma/reduction/slurm_arrayjob.sh
+    /orange/adamginsburg/jwst/brick/alma/reduction/slurm_mergejob.sh)
+
+echo "Merge job: $merge_id"
