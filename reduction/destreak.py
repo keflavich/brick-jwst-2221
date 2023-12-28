@@ -32,6 +32,7 @@ background_mapping = { '2221':
 
 
 def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
+                                       smooth=True,
                                        percentile=10, regs=None, progressbar=lambda x: x):
     """
     Use a local, large-scale percentile to estimate the "zero spacing"
@@ -39,6 +40,9 @@ def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
 
     We'll then use this to replace the missing zero-spacing lost from
     the destreaking process.
+
+
+    smooth: use percentile_Filter
     """
     img = fits.getdata(filename, ext=ext)
     header = fits.getheader(filename, ext=ext)
@@ -53,29 +57,40 @@ def compute_zero_spacing_approximation(filename, ext=('SCI', 1), dx=128,
             slcs,smslcs = mask.get_overlap_slices(img.shape)
             img[slcs][mask.data.astype('bool')[smslcs]] = np.nan
 
-    # the bottom-left pixel will be centered at (dx/2 + 1) in FITS coordinates if we start at 0
-    # so we start at -dx/4 so that the bottom-left pixel is centered at 1,1
-    # (BLC of image is at -0.5, -0.5 in FITS, pixel size is dx/2, so offset is dx/4)
-    # we don't want to wrap, so we use max(pixel, 0)
-    # the percentile will be over a smaller region, but that should be OK
-    chunks = [[img[(slice(max(sty, 0), sty+dx), slice(max(stx, 0), stx+dx))]
-            for stx in range(-dx//4, img.shape[1]+dx//2, dx//2)]
-            for sty in range(-dx//4, img.shape[0]+dx//2, dx//2)
-            ]
 
-    # only include positive values (actually no that didn't work)
-    arr = np.array(
-        [[np.nanpercentile(ch, percentile)  # if np.any(ch > 0) else 0
-          for ch in row]
-         for row in progressbar(chunks)]
-    )
+    if smooth:
+        y, x = np.mgrid[:dx, :dx]
+        circle = (x**2 + y**2) < dx**2
+        arr = scipy.ndimage.percentile_filter(img, percentile,
+                                              #size=(dx, dx),
+                                              footprint=circle,
+                                              mode='reflect',
+                                             )
+        return fits.PrimaryHDU(data=arr, header=header)
+    else:
+        # the bottom-left pixel will be centered at (dx/2 + 1) in FITS coordinates if we start at 0
+        # so we start at -dx/4 so that the bottom-left pixel is centered at 1,1
+        # (BLC of image is at -0.5, -0.5 in FITS, pixel size is dx/2, so offset is dx/4)
+        # we don't want to wrap, so we use max(pixel, 0)
+        # the percentile will be over a smaller region, but that should be OK
+        chunks = [[img[(slice(max(sty, 0), sty+dx), slice(max(stx, 0), stx+dx))]
+                for stx in range(-dx//4, img.shape[1]+dx//2, dx//2)]
+                for sty in range(-dx//4, img.shape[0]+dx//2, dx//2)
+                ]
 
-    # I can never remember how to do this, but I'm *certain* this is wrong (independent of what this next line says:)
-    # but empirically I'm _pretty_ sure dx/4 + 0.5 looks like it matches maybe
-    # with revised version, we drop the shift
-    wwsl = ww[::dx//2, ::dx//2]
+        # only include positive values (actually no that didn't work)
+        arr = np.array(
+            [[np.nanpercentile(ch, percentile)  # if np.any(ch > 0) else 0
+            for ch in row]
+            for row in progressbar(chunks)]
+        )
 
-    return fits.PrimaryHDU(data=arr, header=wwsl.to_header())
+        # I can never remember how to do this, but I'm *certain* this is wrong (independent of what this next line says:)
+        # but empirically I'm _pretty_ sure dx/4 + 0.5 looks like it matches maybe
+        # with revised version, we drop the shift
+        wwsl = ww[::dx//2, ::dx//2]
+
+        return fits.PrimaryHDU(data=arr, header=wwsl.to_header())
 
 
 def nozero_percentile(arr, pct, **kwargs):
