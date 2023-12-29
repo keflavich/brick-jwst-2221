@@ -25,14 +25,15 @@ export NCHAN=${NCHAN:-4}
 export TOTALNCHAN=${TOTALNCHAN:-1960}
 export START=${START:-0}
 
-if [ -n ${SLURM_ARRAY_TASK_ID}]; then
+if [ ${SLURM_ARRAY_TASK_ID} ]; then
     export STARTCHAN=$(( ${SLURM_ARRAY_TASK_ID} * ${NCHAN}))
     export STARTCHAN
+else
+    echo "SLURM_ARRAY_TASK_ID not set: this is not an array job"
 fi
 
 fnbase="${MOUS}.${FIELD}_sci.spw${SPW}.$(printf %04d $STARTCHAN)+$(printf %03d $NCHAN).cube.I.manual"
 fullfn="${WORK_DIR}/${fnbase}.image"
-
 
 if [ ! $(bash -c 'echo $SPW') ]; then echo "SPW not exported"; exit 1; fi
 if [ ! $(bash -c 'echo $STARTCHAN') ]; then echo "STARTCHAN not exported"; exit 1; fi
