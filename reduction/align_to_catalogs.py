@@ -116,6 +116,7 @@ def realign_to_vvv(
     proposal_id='2221',
     ksmag_limit=15,
     mag_limit=15,
+    max_offset=0.4*u.arcsec,
     raoffset=0*u.arcsec, decoffset=0*u.arcsec,
 ):
     """
@@ -134,6 +135,7 @@ def realign_to_vvv(
                               fieldnumber=fieldnumber,
                               catfile=catfile, imfile=imfile,
                               mag_limit=mag_limit,
+                              max_offset=max_offset,
                               raoffset=raoffset, decoffset=decoffset,
                               proposal_id=proposal_id,
                               )
