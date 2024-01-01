@@ -47,13 +47,13 @@ if os.getenv('DOMERGE') and int(os.getenv('DOMERGE')) == 1:
     print(f"Merging in {os.getcwd()}")
     totalnchan = int(os.getenv('TOTALNCHAN'))
     for suffix in (".image", ".image.pbcor", ".model", ".mask", ".pb", ".psf", ".residual", ".weight", ".sumwt"):
-        infiles = [f'{mous}.{field}_sci.spw{spw}.{ii:04d}+004.cube.I.manual{suffix}' for ii in range(0, totalnchan+1, nchan)]
+        infiles = [f'{mous}.{field}_sci.spw{spw}.{ii:04d}+{nchan:03d}.cube.I.manual{suffix}' for ii in range(0, totalnchan+1, nchan)]
         print(f"Merging input files.  Infiles are:\n{infiles}")
         for fn in infiles:
             if not os.path.exists(fn):
                 raise ValueError(f"File {fn} does not exist")
         print("Running the 'p' job")
-        ia.imageconcat(outfile=f'{mous}.{field}.spw{spw}.merge.m{suffix}',
+        ia.imageconcat(outfile=f'{mous}.{field}.spw{spw}.merge.p{suffix}',
                        infiles=infiles, mode='p', relax=True)
 else:
     if os.path.exists(os.path.join(workdir,
