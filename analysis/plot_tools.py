@@ -111,7 +111,10 @@ def ccd(basetable,
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)
     if ext is not None:
-        plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale)
+        try:
+            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale)
+        except Exception as ex:
+            print(ex)
 
 def ccds(basetable, sel=True,
          colors=[('f410m', 'f466n'), ('f410m', 'f405n'), ('f405n', 'f466n'), ('410m405', 'f405n')],
