@@ -95,9 +95,14 @@ avm_nostars_merged = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_merged_l
 img_nostars_merged = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_merged_longwave_narrowband_rotated.png'))[::-1,:,:]
 wwi_nostars_merged = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
 
+avm_short_merged = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_shortwave_RGB_187_212_182.png')
+img_short_merged = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_shortwave_RGB_187_212_182.png'))[::-1,:,:]
+wwi_short_merged = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
+
+
 # the merged version is the one I *want* to work with, but nrca is the one I've tested most
 # and can really vouch for
-basetable_merged = basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
+basetable_merged = basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
 
 # use locked-in 2023/07/02 version to make sure analysis stays stable
 # (this version is confirmed to have good long-wave astrometry, at least)
