@@ -131,7 +131,7 @@ def add_background_map(data, hdu, background_mapping=background_mapping,
                        ext=('SCI', 1),
                        return_background=False):
     filtername = hdu[0].header['PUPIL']
-    if filtername in ('CLEAR', 'F444W') and hdu[0].header['FILTER'] in ('F405N', 'F466N', 'F410M'):
+    if filtername in ('CLEAR', 'F444W') and hdu[0].header['FILTER'] in ('F405N', 'F466N', 'F410M', 'F212N', 'F187N', 'F182M'):
         filtername = hdu[0].header['FILTER']
 
     proposal_id = hdu[0].header['PROGRAM'][1:5]
