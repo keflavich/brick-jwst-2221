@@ -174,6 +174,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 def save_crowdsource_results(results, ww, filename, suffix,
                              im1, detector,
                              basepath, filtername, module, desat, bgsub,
+                             psf=None,
                              fpsf=""):
     stars, modsky, skymsky, psf = results
     stars = Table(stars)
@@ -188,6 +189,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     stars.meta['module'] = module
     stars.meta['detector'] = detector
 
+
     tblfilename = (f"{basepath}/{filtername}/"
                     f"{filtername.lower()}_{module}{desat}{bgsub}{fpsf}"
                     f"_crowdsource_{suffix}.fits")
@@ -201,6 +203,16 @@ def save_crowdsource_results(results, ww, filename, suffix,
     #psfhdu = fits.ImageHDU(data=psf)
     hdul = fits.HDUList([skymskyhdu, modskyhdu])
     hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
+
+    if psf is not None:
+        psfhdu = fits.PrimaryHDU(data=psf)
+        psf_fn = (f"{basepath}/{filtername}/"
+                  f"{filtername.lower()}_{module}{desat}{bgsub}{fpsf}"
+                  f"_crowdsource_{suffix}_psf.fits")
+        psfhdu.writeto(psf_fn, overwrite=True)
+
+
+    return stars
 
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
@@ -258,6 +270,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
 
     nullslice = (slice(None), slice(None))
+
+    pl.close('all')
 
     print(f"options: {options}")
 
@@ -394,7 +408,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             # yy, xx = np.indices([61,61], dtype=float)
             # grid.x_0 = grid.y_0 = 30
             # psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
-            
+
             grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample1.fits')
 
             # if isinstance(grid, list):
@@ -423,6 +437,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                             slc[0].start > 0 and slc[1].start > 0
                             and slc[0].stop < data.shape[0] and slc[1].stop < data.shape[1]}
 
+            dq = np.zeros(data.shape, dtype='int')
+
             # crowdsource uses inverse-sigma, not inverse-variance
             weight = err**-1
             maxweight = np.percentile(weight[np.isfinite(weight)], 95)
@@ -432,6 +448,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
             weight[np.isnan(weight)] = 0
             bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (err == 0) | (wht == 0) | (data < 1e-5)
+            dq[bad] = 2
 
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
@@ -440,6 +457,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             weight[bad] = minweight
             # crowdsource explicitly handles weight=0, so this _should_ work.
             weight[bad] = 0
+
+            print(f"Total bad pixels = {bad.sum()}")
 
             # HACK: F200W was finding way too many stars, >1.3 million, which broke crowdsource
             # This might have been caused by a bad PSF when I was undersampling instead of oversampling!  I will retry w/o the hack
@@ -520,15 +539,17 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 print("starting crowdsource unweighted", flush=True)
                 results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
                                                 #psfderiv=np.gradient(-psf_initial[0].data),
+                                                dq=dq,
                                                 nskyx=1, nskyy=1, refit_psf=False, verbose=True,
                                                 **crowdsource_default_kwargs,
                                                 )
                 print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results_unweighted
-                save_crowdsource_results(results_unweighted, ww, filename,
+                stars = save_crowdsource_results(results_unweighted, ww, filename,
                     im1=im1, detector=detector, basepath=basepath,
                     filtername=filtername, module=module, desat=desat, bgsub=bgsub,
-                    suffix="unweighted")
+                    suffix="unweighted"
+                    )
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
@@ -621,14 +642,16 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                         print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
                         results_blur = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                             nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
+                                            dq=dq,
                                             **crowdsource_default_kwargs
                                             )
                         print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                         stars, modsky, skymsky, psf = results_blur
-                        save_crowdsource_results(results_blur, ww, filename,
+                        stars = save_crowdsource_results(results_blur, ww, filename,
                             im1=im1, detector=detector, basepath=basepath,
                             filtername=filtername, module=module, desat=desat, bgsub=bgsub,
                             fpsf=fpsf,
+                            psf=psf if refit_psf else None,
                             suffix=f"nsky{nsky}")
 
                         zoomcut = slice(128, 256), slice(128, 256)
