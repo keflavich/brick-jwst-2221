@@ -17,6 +17,7 @@ from astropy import stats
 from astropy import units as u
 from astropy.nddata import NDData
 from astropy.io import fits
+from scipy import ndimage
 import requests
 import requests.exceptions
 import urllib3
@@ -452,8 +453,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
             weight[np.isnan(weight)] = 0
             bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (err == 0) | (wht == 0) | (data < 1e-5)
-            dq[bad] = 2
-
+            
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
             # it seems that crowdsource doesn't like zero weights
@@ -462,7 +462,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             # crowdsource explicitly handles weight=0, so this _should_ work.
             weight[bad] = 0
 
-            print(f"Total bad pixels = {bad.sum()}")
+            # Expand bad pixel zones for dq
+            bad_for_dq = ndimage.binary_dilation(bad, iterations=2)
+            dq[bad_for_dq] = 2 | 2**30 | 2**31
+            print(f"Total bad pixels = {bad.sum()}, total bad for dq={bad_for_dq.sum()}")
 
             # HACK: F200W was finding way too many stars, >1.3 million, which broke crowdsource
             # This might have been caused by a bad PSF when I was undersampling instead of oversampling!  I will retry w/o the hack
