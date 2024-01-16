@@ -176,7 +176,8 @@ def save_crowdsource_results(results, ww, filename, suffix,
                              basepath, filtername, module, desat, bgsub,
                              psf=None,
                              fpsf=""):
-    stars, modsky, skymsky, psf = results
+    print(f"Saving crowdsource results.  filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf}")
+    stars, modsky, skymsky, psf_ = results
     stars = Table(stars)
     # crowdsource explicitly inverts x & y from the numpy convention:
     # https://github.com/schlafly/crowdsource/issues/11
@@ -205,11 +206,14 @@ def save_crowdsource_results(results, ww, filename, suffix,
     hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{desat}{bgsub}{fpsf}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
 
     if psf is not None:
-        psfhdu = fits.PrimaryHDU(data=psf)
-        psf_fn = (f"{basepath}/{filtername}/"
-                  f"{filtername.lower()}_{module}{desat}{bgsub}{fpsf}"
-                  f"_crowdsource_{suffix}_psf.fits")
-        psfhdu.writeto(psf_fn, overwrite=True)
+        if hasattr(psf, 'stamp'):
+            psfhdu = fits.PrimaryHDU(data=psf.stamp)
+            psf_fn = (f"{basepath}/{filtername}/"
+                    f"{filtername.lower()}_{module}{desat}{bgsub}{fpsf}"
+                    f"_crowdsource_{suffix}_psf.fits")
+            psfhdu.writeto(psf_fn, overwrite=True)
+        else:
+            raise ValueError(f"PSF did not have a stamp attribute.  It was: {psf}, type={type(psf)}")
 
 
     return stars
@@ -548,7 +552,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 stars = save_crowdsource_results(results_unweighted, ww, filename,
                     im1=im1, detector=detector, basepath=basepath,
                     filtername=filtername, module=module, desat=desat, bgsub=bgsub,
-                    suffix="unweighted"
+                    suffix="unweighted",
+                    psf=None
                     )
 
                 zoomcut = slice(128, 256), slice(128, 256)
@@ -843,7 +848,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
                 print("Creating iterative residual")
                 residual = phot_.make_residual_image(data, (11, 11))
-                print("finished iterataive residual")
+                print("finished iterative residual")
                 fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
                     filename.replace(".fits", "_daophot_iterative_residual.fits"),
                     overwrite=True)
