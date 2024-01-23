@@ -725,15 +725,16 @@ if __name__ == "__main__":
         print("Running notebooks")
         from run_notebook import run_notebook
         basepath = '/orange/adamginsburg/jwst/brick/'
-        run_notebook(f'{basepath}/notebooks/BrA_Separation_nrca.ipynb')
-        run_notebook(f'{basepath}/notebooks/BrA_Separation_nrcb.ipynb')
-        run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
-        run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
-        run_notebook(f'{basepath}/notebooks/StarDestroyer_nrca.ipynb')
-        run_notebook(f'{basepath}/notebooks/StarDestroyer_nrcb.ipynb')
-        run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
-        run_notebook(f'{basepath}/notebooks/PaA_Separation_nrcb.ipynb')
-        run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrcb.ipynb')
+        if 'merge' in modules:
+            run_notebook(f'{basepath}/notebooks/BrA_Separation_nrca.ipynb')
+            run_notebook(f'{basepath}/notebooks/BrA_Separation_nrcb.ipynb')
+            run_notebook(f'{basepath}/notebooks/F466_separation_nrca.ipynb')
+            run_notebook(f'{basepath}/notebooks/F466_separation_nrcb.ipynb')
+            run_notebook(f'{basepath}/notebooks/StarDestroyer_nrca.ipynb')
+            run_notebook(f'{basepath}/notebooks/StarDestroyer_nrcb.ipynb')
+            run_notebook(f'{basepath}/notebooks/Stitch_A_to_B.ipynb')
+            run_notebook(f'{basepath}/notebooks/PaA_Separation_nrcb.ipynb')
+            run_notebook(f'{basepath}/notebooks/StarDestroyer_PaA_nrcb.ipynb')
 
 
 """
