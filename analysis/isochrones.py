@@ -58,7 +58,7 @@ with requests.get(url, stream=True) as stream:
 
 import zipfile
 
-ls -lh $basepath/isochrones/MIST_isochrone_package.zip
+#ls -lh $basepath/isochrones/MIST_isochrone_package.zip
 
 with zipfile.ZipFile(f'{basepath}/isochrones/MIST_isochrone_package.zip') as zf:
     print(zf.infolist())
