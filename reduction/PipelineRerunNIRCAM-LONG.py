@@ -483,6 +483,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
             if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
+                print(f"Copying {member['expname']} to {align_image}")
                 shutil.copy(member['expname'], align_image)
                 offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
