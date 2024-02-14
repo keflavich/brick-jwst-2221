@@ -630,8 +630,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             decoffset = 0.0 * u.arcsec
             raoffset = 0.0 * u.arcsec
 
-        log.info(f"Realigning to VVV (module={module}")
+        log.info(f"Realigning to VVV (module={module}) with raoffset={raoffset}, decoffset={decoffset}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
+        log.info(f"Realigned to VVV filename: {realigned_vvv_filename}")
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         realigned = realign_to_vvv(filtername=filtername.lower(),
@@ -643,8 +644,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                    mag_limit=18 if filtername.lower() == 'f115w' else 15,
                                    raoffset=raoffset, decoffset=decoffset)
 
-        log.info(f"Realigning to refcat (module={module}")
+        log.info(f"Realigning to refcat (module={module}) with raoffset={raoffset}, decoffset={decoffset}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
+        log.info(f"Realigned refcat filename: {realigned_refcat_filename}")
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_refcat_filename)
         realigned = realign_to_catalog(reftbl['skycoord'],

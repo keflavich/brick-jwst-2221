@@ -19,6 +19,7 @@ import datetime
 def print(*args, **kwargs):
     now = datetime.datetime.now().isoformat()
     from builtins import print as printfunc
+    log.info(f"{now}: {' '.join(map(str, args))}")
     return printfunc(f"{now}:", *args, **kwargs)
 
 def main(field='001',
@@ -153,8 +154,10 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
                        raoffset=0*u.arcsec, decoffset=0*u.arcsec):
     if catfile is None:
         catfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
+        print(f"Catalog file was None, so defaulting to {catfile}")
     if imfile is None:
         imfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_i2d.fits'
+        print(f"imfile file was None, so defaulting to {imfile}")
 
     cat = Table.read(catfile)
 
@@ -172,10 +175,12 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         print(f"min mag: {np.nanmin(mag)}, max mag: {np.nanmax(mag)}")
         raise ValueError("No sources passed basic selection criteria")
 
-    skycrds_cat_orig = cat['sky_centroid']
+    # don't trust the sky coords, recompute them from the current WCS (otherwise we can double-update)
+    # skycrds_cat_orig = cat['sky_centroid']
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        ww =  WCS(fits.getheader(imfile, ext=('SCI', 1)))
+        ww = WCS(fits.getheader(imfile, ext=('SCI', 1)))
+        skycrds_cat_orig = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
         ww.wcs.crval = ww.wcs.crval - [raoffset.to(u.deg).value, decoffset.to(u.deg).value] # visualize this adjustment separately from next, find out which step is wrong
 
     med_dra = 100*u.arcsec
@@ -221,7 +226,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)} with {len(idx)} mathces')
+    print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)} with {len(idx)} matches')
 
     # redundant
     # ww.wcs.crval = ww.wcs.crval - [np.median(dra).to(u.deg).value, np.median(ddec).to(u.deg).value]
@@ -235,19 +240,18 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
 
     # re-reload the file by reading from disk, with non-update mode
     # this is a double-double-check that the solution was written to disk
-    hdulist = fits.open(imfile)
+    with fits.open(imfile) as hdulist:
+        # re-load the WCS to make sure it worked
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            ww =  WCS(hdulist['SCI'].header)
+        skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    # re-load the WCS to make sure it worked
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        ww =  WCS(hdulist['SCI'].header)
-    skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+        idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
+        dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
+        ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
-    dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
-    ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
-
-    print(f'After re-realignment, offset is {np.median(dra)}, {np.median(ddec)} using {len(idx)} matches')
+        print(f'After re-realignment, offset is {np.median(dra)}, {np.median(ddec)} using {len(idx)} matches')
 
     return hdulist
 
