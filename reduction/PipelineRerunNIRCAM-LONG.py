@@ -282,9 +282,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
                 align_fits.writeto(align_image, overwrite=True)
                 member['expname'] = align_image
-            elif field == '004' and proposal_id == '1182':
+            elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
                 align_image = member['expname']
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
                 exposure = int(align_image.split("_")[-3])
                 thismodule = align_image.split("_")[-2].strip('1234')
                 visit = align_image.split("_")[0]
