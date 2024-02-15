@@ -335,7 +335,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
 
         fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
-                      'cloudc': 'regions_/nircam_cloudc_fov.reg',
+                       'cloudc': 'regions_/nircam_cloudc_fov.reg',
                       }
 
         if filtername.lower() == 'f405n':
@@ -513,11 +513,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
                 align_fits.writeto(align_image, overwrite=True)
                 member['expname'] = align_image
-            elif field == '004' and proposal_id == '1182':
+            elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
                 # I don't think this gets run.
                 align_image = member['expname']
-                print(f"Running manual align for merged data (1182 + 004): {align_image}")
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182.csv')
+                print(f"Running manual align for merged data ({proposal_id} + {field}): {align_image}")
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
                 exposure = int(align_image.split("_")[-3])
                 thismodule = align_image.split("_")[-2].strip('1234')
                 visit = align_image.split("_")[0]
