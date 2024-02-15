@@ -36,7 +36,17 @@ with warnings.catch_warnings():
             except FileNotFoundError:
                 fitsfn = fn.replace("destreak_cat.fits", "cal.fits")
                 ffh = fits.open(fitsfn)
-            ww =  WCS(ffh['SCI'].header)
+
+            header = ffh['SCI'].header
+
+            if 'RAOFFSET' in header:
+                raoffset = header['RAOFFSET']
+                decoffset = header['DEOFFSET']
+                header['CRVAL1'] = header['OLCRVAL1']
+                header['CRVAL2'] = header['OLCRVAL2']
+
+            ww = WCS(header)
+
             skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
 
             sel = slice(None)
@@ -83,7 +93,7 @@ with warnings.catch_warnings():
                 ww.wcs.crval = ww.wcs.crval - [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
 
 
-            print(filtername, ab, expno, total_dra, total_ddec, med_dra, med_ddec, f'niter={iteration}')
+            print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()} niter={iteration}")
             if keep.sum() < 5:
                 print(fitsfn)
                 print(fn)
