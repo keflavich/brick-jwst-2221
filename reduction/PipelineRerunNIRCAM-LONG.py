@@ -67,16 +67,8 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
                 'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 # For fixing bulk offset after stage 3 of the pipeline
-pix_coords = {'2221':
-              {'002':
-               {
-                   'star_coord': SkyCoord(266.594893*u.deg, -28.587417*u.deg),
-                   'nrca': (3904, 869),
-                   'nrcb': (1119, 832),
-                   'merged': (3903, 868)
-               }
-              }
-             }
+# (not used any more - switched to per-frame correction)
+pix_coords = {}
 
 basepath = '/orange/adamginsburg/jwst/brick/'
 
@@ -229,30 +221,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                                               "_rate.fits"),
                                     save_results=True, output_dir=output_dir,
                                    )
-    else:
-        raise ValueError(f"Module is {module} - not allowed!")
-
-    if module in ('nrca', 'nrcb'):
-        log.info(f"Filter {filtername} module {module}: doing tweakreg and, possibly, prealignment.  do_destreak={do_destreak}")
-
-        with open(asn_file) as f_obj:
-            asn_data = json.load(f_obj)
-        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
-        asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
-                                                if f'{module}' in row['expname']]
 
         for member in asn_data['products'][0]['members']:
-            print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
-            hdr = fits.getheader(member['expname'])
-            if do_destreak:
-                if filtername in (hdr['PUPIL'], hdr['FILTER']):
-                    outname = destreak(member['expname'],
-                                    use_background_map=True,
-                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
-                    member['expname'] = outname
-
-            if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
+            if proposal_id == '2221' and field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
+                print(f"Copying {member['expname']} to {align_image}")
                 shutil.copy(member['expname'], align_image)
                 offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
@@ -283,51 +256,75 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 align_fits.writeto(align_image, overwrite=True)
                 member['expname'] = align_image
             elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
-                align_image = member['expname']
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
-                exposure = int(align_image.split("_")[-3])
-                thismodule = align_image.split("_")[-2].strip('1234')
-                visit = align_image.split("_")[0]
-                match = ((offsets_tbl['Visit'] == visit) &
-                         (offsets_tbl['Exposure'] == exposure) &
-                         (offsets_tbl['Module'] == thismodule) &
-                         (offsets_tbl['Filter'] == filtername)
-                         )
-                if match.sum() != 1:
-                    raise ValueError(f"too many or too few matches for {member} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-                row = offsets_tbl[match]
-                print(f'Running manual align for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-                rashift = float(row['dra (arcsec)'][0])*u.arcsec
-                decshift = float(row['ddec (arcsec)'][0])*u.arcsec
-                print(f"Shift for {align_image} is {rashift}, {decshift}")
+                for suffix in ("_cal.fits", "_destreak.fits"):
+                    align_image = member['expname'].replace("_cal.fits", suffix)
+                    print(f"Running manual align for merged data ({proposal_id} + {field}): {align_image}")
+                    offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
+                    exposure = int(align_image.split("_")[-3])
+                    thismodule = align_image.split("_")[-2]
+                    visit = align_image.split("_")[0]
+                    match = ((offsets_tbl['Visit'] == visit) &
+                            (offsets_tbl['Exposure'] == exposure) &
+                            ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                            (offsets_tbl['Filter'] == filtername)
+                            )
+                    if match.sum() != 1:
+                        raise ValueError(f"too many or too few matches for {member} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
+                    row = offsets_tbl[match]
+                    print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+                    rashift = float(row['dra (arcsec)'][0])*u.arcsec
+                    decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+                    print(f"Shift for {align_image} is {rashift}, {decshift}")
 
-                align_fits = fits.open(align_image)
-                # to replace asdf, use: align_datamodel = stdatamodels.jwst.datamodels.open(align_image)
-                if 'RAOFFSET' in align_fits[1].header:
-                    # don't shift twice if we re-run
-                    print(f"{align_image} is already aligned")
-                else:
-                    # ASDF header
-                    fa = AsdfInFits.open(align_image)
-                    wcsobj = fa.tree['meta']['wcs']
-                    print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                    fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
-                    ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                    print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                    fa.tree['meta']['wcs'] = ww
-                    fa.write_to(align_image, overwrite=True)
-
-                    # FITS header
                     align_fits = fits.open(align_image)
-                    align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
-                    align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
-                    align_fits[1].header.update(ww.to_fits()[0])
-                    align_fits[1].header['RAOFFSET'] = rashift.value
-                    align_fits[1].header['DEOFFSET'] = decshift.value
-                    align_fits.writeto(align_image, overwrite=True)
-                    assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
+                    if 'RAOFFSET' in align_fits[1].header:
+                        # don't shift twice if we re-run
+                        print(f"{align_image} is already aligned ({align_fits[1].header['RAOFFSET']}, {align_fits[1].header['DEOFFSET']})")
+                    else:
+                        # ASDF header
+                        fa = AsdfInFits.open(align_image)
+                        wcsobj = fa.tree['meta']['wcs']
+                        print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                        fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
+                        ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+                        print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+                        fa.tree['meta']['wcs'] = ww
+                        fa.write_to(align_image, overwrite=True)
+
+                        # FITS header
+                        align_fits = fits.open(align_image)
+                        align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
+                        align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
+                        align_fits[1].header.update(ww.to_fits()[0])
+                        align_fits[1].header['RAOFFSET'] = rashift.value
+                        align_fits[1].header['DEOFFSET'] = decshift.value
+                        align_fits.writeto(align_image, overwrite=True)
+                        assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
+
+
+    else:
+        raise ValueError(f"Module is {module} - not allowed!")
+
+    if module in ('nrca', 'nrcb'):
+        log.info(f"Filter {filtername} module {module}: doing tweakreg and, possibly, prealignment.  do_destreak={do_destreak}")
+
+        with open(asn_file) as f_obj:
+            asn_data = json.load(f_obj)
+        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}'
+        asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
+                                                if f'{module}' in row['expname']]
+
+        for member in asn_data['products'][0]['members']:
+            print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
+            hdr = fits.getheader(member['expname'])
+            if do_destreak:
+                if filtername in (hdr['PUPIL'], hdr['FILTER']):
+                    outname = destreak(member['expname'],
+                                    use_background_map=True,
+                                    median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
+                    member['expname'] = outname
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -470,7 +467,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
 
-        # Why isn't this running for module=merged?  Maybe there are no members?
         for member in asn_data['products'][0]['members']:
             log.info(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
@@ -480,86 +476,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     use_background_map=True,
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
-
-            if field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
-                align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
-                print(f"Copying {member['expname']} to {align_image}")
-                shutil.copy(member['expname'], align_image)
-                offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
-                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
-                align_fits = fits.open(align_image)
-                pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
-                try:
-                    print('Running manual align.')
-                    xshift = float(row['xshift (arcsec)'])*u.arcsec
-                    yshift = float(row['yshift (arcsec)'])*u.arcsec
-                except:
-                    print('Something went wrong with manual align, running default values.')
-                    visit = member['expname'].split('_')[0][-3:]
-                    if visit == '001':
-                        xshift = 8*u.arcsec
-                        yshift = -0.3*u.arcsec
-                    elif visit == '002':
-                        xshift = 3.9*u.arcsec/pixel_scale
-                        yshift = 1*u.arcsec/pixel_scale
-                    else:
-                        xshift = 0*u.arcsec/pixel_scale
-                        yshift = 0*u.arcsec/pixel_scale
-                fa = AsdfInFits.open(align_image)
-                wcsobj = fa.tree['meta']['wcs']
-                ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
-                tree = fa.tree
-                tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
-                align_fits.writeto(align_image, overwrite=True)
-                member['expname'] = align_image
-            elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
-                # I don't think this gets run.
-                align_image = member['expname']
-                print(f"Running manual align for merged data ({proposal_id} + {field}): {align_image}")
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
-                exposure = int(align_image.split("_")[-3])
-                thismodule = align_image.split("_")[-2].strip('1234')
-                visit = align_image.split("_")[0]
-                match = ((offsets_tbl['Visit'] == visit) &
-                         (offsets_tbl['Exposure'] == exposure) &
-                         (offsets_tbl['Module'] == thismodule) &
-                         (offsets_tbl['Filter'] == filtername)
-                         )
-                if match.sum() != 1:
-                    raise ValueError(f"too many or too few matches for {member} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-                row = offsets_tbl[match]
-                print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-                rashift = float(row['dra (arcsec)'][0])*u.arcsec
-                decshift = float(row['ddec (arcsec)'][0])*u.arcsec
-                print(f"Shift for {align_image} is {rashift}, {decshift}")
-
-                align_fits = fits.open(align_image)
-                if 'RAOFFSET' in align_fits[1].header:
-                    # don't shift twice if we re-run
-                    print(f"{align_image} is already aligned ({align_fits[1].header['RAOFFSET']}, {align_fits[1].header['DEOFFSET']})")
-                else:
-                    # ASDF header
-                    fa = AsdfInFits.open(align_image)
-                    wcsobj = fa.tree['meta']['wcs']
-                    print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                    fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
-                    ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                    print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                    fa.tree['meta']['wcs'] = ww
-                    fa.write_to(align_image, overwrite=True)
-
-                    # FITS header
-                    align_fits = fits.open(align_image)
-                    align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
-                    align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
-                    align_fits[1].header.update(ww.to_fits()[0])
-                    align_fits[1].header['RAOFFSET'] = rashift.value
-                    align_fits[1].header['DEOFFSET'] = decshift.value
-                    align_fits.writeto(align_image, overwrite=True)
-                    assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
-            else:
-                print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
