@@ -70,8 +70,6 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
 # (not used any more - switched to per-frame correction)
 pix_coords = {}
 
-basepath = '/orange/adamginsburg/jwst/brick/'
-
 def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
          field='001', proposal_id='2221', skip_step1and2=False):
     """
@@ -221,13 +219,16 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                                               "_rate.fits"),
                                     save_results=True, output_dir=output_dir,
                                    )
+        else:
+            print("Skipped step 1 and step2")
 
+        print("Doing pre-alignment from offsets tables")
         for member in asn_data['products'][0]['members']:
             if proposal_id == '2221' and field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
                 print(f"Copying {member['expname']} to {align_image}")
                 shutil.copy(member['expname'], align_image)
-                offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Cloud_C.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
                 align_fits = fits.open(align_image)
                 pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
@@ -308,7 +309,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         raise ValueError(f"Module is {module} - not allowed!")
 
     if module in ('nrca', 'nrcb'):
-        log.info(f"Filter {filtername} module {module}: doing tweakreg and, possibly, prealignment.  do_destreak={do_destreak}")
+        log.info(f"Filter {filtername} module {module}: doing tweakreg.  do_destreak={do_destreak}")
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
