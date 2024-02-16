@@ -262,7 +262,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
                 for suffix in ("_cal.fits", "_destreak.fits"):
                     align_image = member['expname'].replace("_cal.fits", suffix)
-                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
+                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -290,7 +290,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     member['expname'] = outname
 
                     # re-do alignment if destreak file doesn't exist at the earlier step above
-                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -431,7 +431,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     member['expname'] = outname
 
                     # re-do alignment if destreak file doesn't exist at the earlier step above
-                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
@@ -530,7 +530,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     return locals()
 
 
-def fix_alignment(fn, proposal_id, module, field, basepath, ):
+def fix_alignment(fn, proposal_id, module, field, basepath, filtername):
     if os.path.exists(fn):
         print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}")
     else:
