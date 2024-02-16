@@ -224,38 +224,41 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
         print("Doing pre-alignment from offsets tables")
         for member in asn_data['products'][0]['members']:
-            if proposal_id == '2221' and field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
+            if field == '002' and proposal_id == '2221':
                 # TODO: @Savannah, we should refactor this to merge in with the next elif statement
-                align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
-                print(f"Copying {member['expname']} to {align_image}")
+                if do_destreak:
+                    align_image = member['expname'].replace("_destreak.fits", "_align.fits")
+                else: 
+                    align_image = member['expname'].replace("_cal.fits", "_align.fits")
                 shutil.copy(member['expname'], align_image)
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Cloud_C.csv')
+                offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
-                align_fits = fits.open(align_image)
-                pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
+                log.info(f'Running manual align on {align_image}')
                 try:
-                    print('Running manual align.')
                     xshift = float(row['xshift (arcsec)'])*u.arcsec
-                    yshift = float(row['yshift (arcsec)'])*u.arcsec
+                    yshift = float(row['yshift (arcsec)'])*u.arcsec + 0.8*u.arcsec
                 except:
-                    print('Something went wrong with manual align, running default values.')
+                    log.info('Something went wrong with manual align, running default values.')
                     visit = member['expname'].split('_')[0][-3:]
                     if visit == '001':
-                        xshift = 8*u.arcsec
-                        yshift = -0.3*u.arcsec
+                        xshift = 7.95*u.arcsec
+                        yshift = 0.6*u.arcsec
                     elif visit == '002':
-                        xshift = 3.9*u.arcsec/pixel_scale
-                        yshift = 1*u.arcsec/pixel_scale
+                        xshift = 3.85*u.arcsec
+                        yshift = 1.57*u.arcsec
                     else:
-                        xshift = 0*u.arcsec/pixel_scale
-                        yshift = 0*u.arcsec/pixel_scale
-                fa = AsdfInFits.open(align_image)
-                wcsobj = fa.tree['meta']['wcs']
-                ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
-                tree = fa.tree
-                tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
-                align_fits.writeto(align_image, overwrite=True)
+                        xshift = 0*u.arcsec
+                        yshift = 0*u.arcsec
+                if filtername.upper() in ('F212N', 'F187N', 'F182M'):
+                    print('Short wavelength correction.')
+                    if 'nrca' in align_image.lower():
+                        xshift += 0.1*u.arcsec
+                        yshift += -0.23*u.arcsec
+                align_fits = ImageModel(align_image)
+                ww = adjust_wcs(align_fits.meta.wcs, delta_ra = yshift, delta_dec = xshift)
+                align_fits.meta.wcs = ww
+                align_fits.set_fits_wcs(WCS(ww.to_fits()[0]))
+                align_fits.save(align_image)
                 member['expname'] = align_image
             elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
                 for suffix in ("_cal.fits", "_destreak.fits"):
