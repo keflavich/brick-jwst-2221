@@ -66,9 +66,9 @@ print(jwst.__version__)
 medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
                 'F182M': 55, 'F187N': 512, 'F212N': 512}
 
-# For fixing bulk offset after stage 3 of the pipeline
-# (not used any more - switched to per-frame correction)
-pix_coords = {}
+fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
+                'cloudc': 'regions_/nircam_cloudc_fov.reg',
+                }
 
 def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
          field='001', proposal_id='2221', skip_step1and2=False):
@@ -225,6 +225,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         print("Doing pre-alignment from offsets tables")
         for member in asn_data['products'][0]['members']:
             if proposal_id == '2221' and field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
+                # TODO: @Savannah, we should refactor this to merge in with the next elif statement
                 align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
                 print(f"Copying {member['expname']} to {align_image}")
                 shutil.copy(member['expname'], align_image)
@@ -331,11 +332,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-
-        fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
-                       'cloudc': 'regions_/nircam_cloudc_fov.reg',
-                      }
-
         if filtername.lower() == 'f405n':
         # for the VVV cat, use the merged version: no need for independent versions
             abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
@@ -392,19 +388,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             output_dir=output_dir,
             save_results=True)
         print(f"DONE running {asn_file_each}")
-
-        if proposal_id in pix_coords and field in pix_coords[proposal_id]:
-            log.info(f"Proposal {proposal_id} found in pix_coords mapping.  Correcting bulk offset")
-            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
-            f = fits.open(fn)
-            w = WCS(f['SCI'].header)
-            sky = w.pixel_to_world(pix_coords[proposal_id][field][module][0], pix_coords[proposal_id][field][module][1])
-            star_coord = pix_coords[proposal_id][field]['star_coord']
-            decoffset = sky.dec - star_coord.dec
-            raoffset = sky.ra - star_coord.ra
-        else:
-            decoffset = 0.0 * u.arcsec
-            raoffset = 0.0 * u.arcsec
 
         log.info(f"Realigning to VVV (module={module}, filter={filtername})")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
@@ -485,9 +468,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             json.dump(asn_data, fh)
 
 
-        fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
-                       'cloudc': 'regions_/nircam_cloudc_fov.reg',
-                      }
         if filtername.lower() == 'f405n':
             vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
@@ -534,18 +514,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             output_dir=output_dir,
             save_results=True)
         log.info(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
-
-        if proposal_id in pix_coords and field in pix_coords[proposal_id]:
-            fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_i2d.fits'
-            f = fits.open(fn)
-            w = WCS(f['SCI'].header)
-            sky = w.pixel_to_world(pix_coords[proposal_id][field][module][0], pix_coords[proposal_id][field][module][1])
-            star_coord = pix_coords[proposal_id][field]['star_coord']
-            decoffset = sky.dec - star_coord.dec
-            raoffset = sky.ra - star_coord.ra
-        else:
-            decoffset = 0.0 * u.arcsec
-            raoffset = 0.0 * u.arcsec
 
         log.info(f"Realigning to VVV (module={module}) with raoffset={raoffset}, decoffset={decoffset}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
