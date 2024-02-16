@@ -265,7 +265,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
                 for suffix in ("_cal.fits", "_destreak.fits"):
                     align_image = member['expname'].replace("_cal.fits", suffix)
-                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
+                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -293,7 +293,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     member['expname'] = outname
 
                     # re-do alignment if destreak file doesn't exist at the earlier step above
-                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -434,7 +434,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     member['expname'] = outname
 
                     # re-do alignment if destreak file doesn't exist at the earlier step above
-                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
@@ -533,29 +533,45 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     return locals()
 
 
-def fix_alignment(fn, proposal_id, module, field, basepath, ):
+def fix_alignment(fn, proposal_id, module, field, basepath, filtername, ):
     if os.path.exists(fn):
         print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}")
     else:
         print(f"Skipping manual align for nonexistent file {module} ({proposal_id} + {field}): {fn}")
         return
-    offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
-    exposure = int(fn.split("_")[-3])
-    thismodule = fn.split("_")[-2]
-    visit = fn.split("_")[0]
-    match = ((offsets_tbl['Visit'] == visit) &
-            (offsets_tbl['Exposure'] == exposure) &
-            ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-            (offsets_tbl['Filter'] == filtername)
-            )
-    if match.sum() != 1:
-        raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-    row = offsets_tbl[match]
-    print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-    rashift = float(row['dra (arcsec)'][0])*u.arcsec
-    decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+    if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
+        offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
+        exposure = int(fn.split("_")[-3])
+        thismodule = fn.split("_")[-2]
+        visit = fn.split("_")[0]
+        match = ((offsets_tbl['Visit'] == visit) &
+                (offsets_tbl['Exposure'] == exposure) &
+                ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                (offsets_tbl['Filter'] == filtername)
+                )
+        if match.sum() != 1:
+            raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
+        row = offsets_tbl[match]
+        print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+        rashift = float(row['dra (arcsec)'][0])*u.arcsec
+        decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+    elif (field == '002' and proposal_id == '2221'):
+        visit = fn.split('_')[0][-3:]
+        if visit == '001':
+            decshift = 7.95*u.arcsec
+            rashift = 0.6*u.arcsec
+        elif visit == '002':
+            decshift = 3.85*u.arcsec
+            rashift = 1.57*u.arcsec
+        else:
+            decshift = 0*u.arcsec
+            rashift = 0*u.arcsec
+        if filtername.upper() in ('F212N', 'F187N', 'F182M'):
+            print('Short wavelength offset correction.')
+            if 'nrca' in align_image.lower():
+                decshift += 0.1*u.arcsec
+                rashift += -0.23*u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
-
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:
         # don't shift twice if we re-run
