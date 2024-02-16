@@ -533,6 +533,7 @@ def fix_alignment(fn, proposal_id, module, field, basepath, ):
         print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}")
     else:
         print(f"Skipping manual align for nonexistent file {module} ({proposal_id} + {field}): {fn}")
+        return
     offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
     exposure = int(fn.split("_")[-3])
     thismodule = fn.split("_")[-2]
