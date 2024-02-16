@@ -231,7 +231,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                 else: 
                     align_image = member['expname'].replace("_cal.fits", "_align.fits")
                 shutil.copy(member['expname'], align_image)
-                offsets_tbl = Table.read('/orange/adamginsburg/jwst/cloudc/offsets/Offsets_JWST_Cloud_C.csv')
+                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Cloud_C.csv')
                 row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
                 log.info(f'Running manual align on {align_image}')
                 try:
