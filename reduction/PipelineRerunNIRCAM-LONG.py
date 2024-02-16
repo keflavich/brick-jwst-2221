@@ -226,46 +226,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
         print("Doing pre-alignment from offsets tables")
         for member in asn_data['products'][0]['members']:
-            if field == '002' and proposal_id == '2221':
-                # TODO: @Savannah, we should refactor this to merge in with the next elif statement
-                if do_destreak:
-                    align_image = member['expname'].replace("_destreak.fits", "_align.fits")
-                else: 
-                    align_image = member['expname'].replace("_cal.fits", "_align.fits")
-                shutil.copy(member['expname'], align_image)
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Cloud_C.csv')
-                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
-                log.info(f'Running manual align on {align_image}')
-                try:
-                    xshift = float(row['xshift (arcsec)'])*u.arcsec
-                    yshift = float(row['yshift (arcsec)'])*u.arcsec + 0.8*u.arcsec
-                except:
-                    log.info('Something went wrong with manual align, running default values.')
-                    visit = member['expname'].split('_')[0][-3:]
-                    if visit == '001':
-                        xshift = 7.95*u.arcsec
-                        yshift = 0.6*u.arcsec
-                    elif visit == '002':
-                        xshift = 3.85*u.arcsec
-                        yshift = 1.57*u.arcsec
-                    else:
-                        xshift = 0*u.arcsec
-                        yshift = 0*u.arcsec
-                if filtername.upper() in ('F212N', 'F187N', 'F182M'):
-                    print('Short wavelength correction.')
-                    if 'nrca' in align_image.lower():
-                        xshift += 0.1*u.arcsec
-                        yshift += -0.23*u.arcsec
-                align_fits = ImageModel(align_image)
-                ww = adjust_wcs(align_fits.meta.wcs, delta_ra = yshift, delta_dec = xshift)
-                align_fits.meta.wcs = ww
-                align_fits.set_fits_wcs(WCS(ww.to_fits()[0]))
-                align_fits.save(align_image)
-                member['expname'] = align_image
-            elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
-                for suffix in ("_cal.fits", "_destreak.fits"):
-                    align_image = member['expname'].replace("_cal.fits", suffix)
-                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+            for suffix in ("_cal.fits", "_destreak.fits"):
+                align_image = member['expname'].replace("_cal.fits", suffix)
+                fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -557,6 +520,7 @@ def fix_alignment(fn, proposal_id, module, field, basepath, filtername, ):
         decshift = float(row['ddec (arcsec)'][0])*u.arcsec
     elif (field == '002' and proposal_id == '2221'):
         visit = fn.split('_')[0][-3:]
+        thismodule = fn.split("_")[-2].strip('1234')))
         if visit == '001':
             decshift = 7.95*u.arcsec
             rashift = 0.6*u.arcsec
@@ -568,7 +532,7 @@ def fix_alignment(fn, proposal_id, module, field, basepath, filtername, ):
             rashift = 0*u.arcsec
         if filtername.upper() in ('F212N', 'F187N', 'F182M'):
             print('Short wavelength offset correction.')
-            if 'nrca' in align_image.lower():
+            if 'nrca' in thismodule.lower():
                 decshift += 0.1*u.arcsec
                 rashift += -0.23*u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
