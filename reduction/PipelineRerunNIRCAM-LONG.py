@@ -260,49 +260,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
                 for suffix in ("_cal.fits", "_destreak.fits"):
                     align_image = member['expname'].replace("_cal.fits", suffix)
-                    print(f"Running manual align for merged data ({proposal_id} + {field}): {align_image}")
-                    offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
-                    exposure = int(align_image.split("_")[-3])
-                    thismodule = align_image.split("_")[-2]
-                    visit = align_image.split("_")[0]
-                    match = ((offsets_tbl['Visit'] == visit) &
-                            (offsets_tbl['Exposure'] == exposure) &
-                            ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-                            (offsets_tbl['Filter'] == filtername)
-                            )
-                    if match.sum() != 1:
-                        raise ValueError(f"too many or too few matches for {member} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-                    row = offsets_tbl[match]
-                    print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-                    rashift = float(row['dra (arcsec)'][0])*u.arcsec
-                    decshift = float(row['ddec (arcsec)'][0])*u.arcsec
-                    print(f"Shift for {align_image} is {rashift}, {decshift}")
-
-                    align_fits = fits.open(align_image)
-                    if 'RAOFFSET' in align_fits[1].header:
-                        # don't shift twice if we re-run
-                        print(f"{align_image} is already aligned ({align_fits[1].header['RAOFFSET']}, {align_fits[1].header['DEOFFSET']})")
-                    else:
-                        # ASDF header
-                        fa = AsdfInFits.open(align_image)
-                        wcsobj = fa.tree['meta']['wcs']
-                        print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                        fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
-                        ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
-                        print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-                        fa.tree['meta']['wcs'] = ww
-                        fa.write_to(align_image, overwrite=True)
-
-                        # FITS header
-                        align_fits = fits.open(align_image)
-                        align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
-                        align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
-                        align_fits[1].header.update(ww.to_fits()[0])
-                        align_fits[1].header['RAOFFSET'] = rashift.value
-                        align_fits[1].header['DEOFFSET'] = decshift.value
-                        align_fits.writeto(align_image, overwrite=True)
-                        assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
-                    check_wcs(align_image)
+                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -328,6 +286,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     use_background_map=True,
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
+
+                    # re-do alignment if destreak file doesn't exist at the earlier step above
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -467,12 +428,13 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
 
+                    # re-do alignment if destreak file doesn't exist at the earlier step above
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath)
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
-
 
         if filtername.lower() == 'f405n':
             vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
@@ -564,6 +526,56 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
     globals().update(locals())
     return locals()
+
+
+def fix_alignment(fn, proposal_id, module, field, basepath, ):
+    if os.path.exists(fn):
+        print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}")
+    else:
+        print(f"Skipping manual align for nonexistent file {module} ({proposal_id} + {field}): {fn}")
+    offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
+    exposure = int(fn.split("_")[-3])
+    thismodule = fn.split("_")[-2]
+    visit = fn.split("_")[0]
+    match = ((offsets_tbl['Visit'] == visit) &
+            (offsets_tbl['Exposure'] == exposure) &
+            ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+            (offsets_tbl['Filter'] == filtername)
+            )
+    if match.sum() != 1:
+        raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
+    row = offsets_tbl[match]
+    print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+    rashift = float(row['dra (arcsec)'][0])*u.arcsec
+    decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+    print(f"Shift for {fn} is {rashift}, {decshift}")
+
+    align_fits = fits.open(fn)
+    if 'RAOFFSET' in align_fits[1].header:
+        # don't shift twice if we re-run
+        print(f"{fn} is already aligned ({align_fits[1].header['RAOFFSET']}, {align_fits[1].header['DEOFFSET']})")
+    else:
+        # ASDF header
+        fa = AsdfInFits.open(fn)
+        wcsobj = fa.tree['meta']['wcs']
+        print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+        fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
+        ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
+        print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+        fa.tree['meta']['wcs'] = ww
+        fa.write_to(fn, overwrite=True)
+
+        # FITS header
+        align_fits = fits.open(fn)
+        align_fits[1].header['OLCRVAL1'] = align_fits[1].header['CRVAL1']
+        align_fits[1].header['OLCRVAL2'] = align_fits[1].header['CRVAL2']
+        align_fits[1].header.update(ww.to_fits()[0])
+        align_fits[1].header['RAOFFSET'] = rashift.value
+        align_fits[1].header['DEOFFSET'] = decshift.value
+        align_fits.writeto(fn, overwrite=True)
+        assert 'RAOFFSET' in fits.getheader(fn, ext=1)
+    check_wcs(fn)
+
 
 def check_wcs(fn):
     print(f"Checking WCS of {fn}")
