@@ -39,6 +39,8 @@ from jwst import datamodels
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from jwst.tweakreg.utils import adjust_wcs
+from jwst.datamodels import ImageModel
+
 from destreak import destreak
 
 from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
@@ -249,8 +251,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     else:
                         xshift = 0*u.arcsec/pixel_scale
                         yshift = 0*u.arcsec/pixel_scale
-                fa = AsdfInFits.open(align_image)
-                wcsobj = fa.tree['meta']['wcs']
+                fa = ImageModel(align_image)
+                wcsobj = fa.meta.wcs
                 ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
                 tree = fa.tree
                 tree['meta']['wcs'] = ww
@@ -557,14 +559,14 @@ def fix_alignment(fn, proposal_id, module, field, basepath, ):
         print(f"{fn} is already aligned ({align_fits[1].header['RAOFFSET']}, {align_fits[1].header['DEOFFSET']})")
     else:
         # ASDF header
-        fa = AsdfInFits.open(fn)
-        wcsobj = fa.tree['meta']['wcs']
+        fa = ImageModel(fn)
+        wcsobj = fa.meta.wcs
         print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-        fa.tree['meta']['oldwcs'] = copy.copy(wcsobj)
+        wcsobj.meta.oldwcs = copy.copy(wcsobj)
         ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
         print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-        fa.tree['meta']['wcs'] = ww
-        fa.write_to(fn, overwrite=True)
+        fa.meta.wcs = ww
+        fa.save(fn, overwrite=True)
 
         # FITS header
         align_fits = fits.open(fn)
@@ -580,13 +582,13 @@ def fix_alignment(fn, proposal_id, module, field, basepath, ):
 
 def check_wcs(fn):
     print(f"Checking WCS of {fn}")
-    fa = AsdfInFits.open(fn)
-    wcsobj = fa.tree['meta']['wcs']
+    fa = ImageModel(fn)
+    wcsobj = fa.meta.wcs
     print(f"fa['meta']['wcs'] crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
     new_1024 = wcsobj.pixel_to_world(1024, 1024)
     print(f"pixel_to_world(1024,1024) = {new_1024}")
-    if 'oldwcs' in fa.tree['meta']:
-        oldwcsobj = fa.tree['meta']['oldwcs']
+    if 'oldwcs' in fa.meta:
+        oldwcsobj = fa.meta.oldwcs
         print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
         old_1024 = oldwcsobj.pixel_to_world(1024, 1024)
         print(f"pixel_to_world(1024,1024) = {old_1024}, sep={old_1024.separation(new_1024)}")
