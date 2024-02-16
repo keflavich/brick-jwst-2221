@@ -581,29 +581,32 @@ def fix_alignment(fn, proposal_id, module, field, basepath, ):
 
 
 def check_wcs(fn):
-    print(f"Checking WCS of {fn}")
-    fa = ImageModel(fn)
-    wcsobj = fa.meta.wcs
-    print(f"fa['meta']['wcs'] crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-    new_1024 = wcsobj.pixel_to_world(1024, 1024)
-    print(f"pixel_to_world(1024,1024) = {new_1024}")
-    if 'oldwcs' in fa.meta:
-        oldwcsobj = fa.meta.oldwcs
-        print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
-        old_1024 = oldwcsobj.pixel_to_world(1024, 1024)
-        print(f"pixel_to_world(1024,1024) = {old_1024}, sep={old_1024.separation(new_1024)}")
+    if os.path.exists(fn):
+        print(f"Checking WCS of {fn}")
+        fa = ImageModel(fn)
+        wcsobj = fa.meta.wcs
+        print(f"fa['meta']['wcs'] crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+        new_1024 = wcsobj.pixel_to_world(1024, 1024)
+        print(f"pixel_to_world(1024,1024) = {new_1024}")
+        if 'oldwcs' in fa.meta:
+            oldwcsobj = fa.meta.oldwcs
+            print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
+            old_1024 = oldwcsobj.pixel_to_world(1024, 1024)
+            print(f"pixel_to_world(1024,1024) = {old_1024}, sep={old_1024.separation(new_1024)}")
 
 
-    # FITS header
-    fh = fits.open(fn)
-    print(f"CRVAL1={fh[1].header['CRVAL1']}, CRVAL2={fh[1].header['CRVAL2']}")
-    if 'OLCRVAL1' in fh[1].header:
-        print(f"OLCRVAL1={fh[1].header['OLCRVAL1']}, OLCRVAL2={fh[1].header['OLCRVAL2']}")
-    if 'RAOFFSET' in fh[1].header:
-        print("RA, DE offset: ", fh[1].header['RAOFFSET'], fh[1].header['DEOFFSET'])
-    ww = WCS(fh[1].header)
-    fits_1024 = ww.pixel_to_world(1024, 1024)
-    print(f"pixel_to_world(1024,1024) = {fits_1024}, sep={fits_1024.separation(new_1024)}")
+        # FITS header
+        fh = fits.open(fn)
+        print(f"CRVAL1={fh[1].header['CRVAL1']}, CRVAL2={fh[1].header['CRVAL2']}")
+        if 'OLCRVAL1' in fh[1].header:
+            print(f"OLCRVAL1={fh[1].header['OLCRVAL1']}, OLCRVAL2={fh[1].header['OLCRVAL2']}")
+        if 'RAOFFSET' in fh[1].header:
+            print("RA, DE offset: ", fh[1].header['RAOFFSET'], fh[1].header['DEOFFSET'])
+        ww = WCS(fh[1].header)
+        fits_1024 = ww.pixel_to_world(1024, 1024)
+        print(f"pixel_to_world(1024,1024) = {fits_1024}, sep={fits_1024.separation(new_1024)}")
+    else:
+        print(f"COULD NOT CHECK WCS FOR {fn}: does not exist")
 
 if __name__ == "__main__":
     from optparse import OptionParser
