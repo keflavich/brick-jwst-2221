@@ -302,6 +302,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                         align_fits[1].header['DEOFFSET'] = decshift.value
                         align_fits.writeto(align_image, overwrite=True)
                         assert 'RAOFFSET' in fits.getheader(align_image, ext=1)
+                    check_wcs(align_image)
             else:
                 print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
@@ -388,6 +389,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             output_dir=output_dir,
             save_results=True)
         print(f"DONE running {asn_file_each}")
+
+        print("After tweakreg step, checking WCS headers:")
+        for member in asn_data['products'][0]['members']:
+            check_wcs(member['expname'])
+        check_wcs(asn_data['products'][0]['name'] + "_i2d.fits")
 
         log.info(f"Realigning to VVV (module={module}, filter={filtername})")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
@@ -515,6 +521,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             save_results=True)
         log.info(f"DONE running {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
 
+        print("After tweakreg step, checking WCS headers:")
+        for member in asn_data['products'][0]['members']:
+            check_wcs(member['expname'])
+        check_wcs(asn_data['products'][0]['name'] + "_i2d.fits")
+
         log.info(f"Realigning to VVV (module={module}) with raoffset={raoffset}, decoffset={decoffset}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
         log.info(f"Realigned to VVV filename: {realigned_vvv_filename}")
@@ -553,6 +564,23 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
     globals().update(locals())
     return locals()
+
+def check_wcs(fn):
+    print(f"Checking WCS of {fn}")
+    fa = AsdfInFits.open(fn)
+    wcsobj = fa.tree['meta']['wcs']
+    print(f"fa['meta']['wcs'] crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
+    if 'oldwcs' in fa.tree['meta']:
+        oldwcsobj = fa.tree['meta']['oldwcs']
+        print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
+
+    # FITS header
+    fh = fits.open(fn)
+    print(f"CRVAL1={fh[1].header['CRVAL1']}, CRVAL2={fh[1].header['CRVAL2']}")
+    if 'OLCRVAL1' in fh[1].header:
+        print(f"OLCRVAL1={fh[1].header['OLCRVAL1']}, OLCRVAL2={fh[1].header['OLCRVAL2']}")
+    if 'RAOFFSET' in fh[1].header:
+        print("RA, DE offset: ", fh[1].header['RAOFFSET'], fh[1].header['DEOFFSET'])
 
 if __name__ == "__main__":
     from optparse import OptionParser
