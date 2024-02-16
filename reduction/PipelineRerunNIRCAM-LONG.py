@@ -562,7 +562,7 @@ def fix_alignment(fn, proposal_id, module, field, basepath, filtername):
         fa = ImageModel(fn)
         wcsobj = fa.meta.wcs
         print(f"Before shift, crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
-        wcsobj.meta.oldwcs = copy.copy(wcsobj)
+        fa.meta.oldwcs = copy.copy(wcsobj)
         ww = adjust_wcs(wcsobj, delta_ra=rashift, delta_dec=decshift)
         print(f"After shift, crval={ww.to_fits()[0]['CRVAL1']}, {ww.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
         fa.meta.wcs = ww
