@@ -226,40 +226,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
         print("Doing pre-alignment from offsets tables")
         for member in asn_data['products'][0]['members']:
-            if proposal_id == '2221' and field == '002' and (filtername.lower() == 'f405n' or filtername.lower() == 'f410m' or filtername.lower() == 'f466n'):
-                # TODO: @Savannah, we should refactor this to merge in with the next elif statement
-                align_image = member['expname'].replace("_destreak.fits", "_align.fits")#.split('.')[0]+'_align.fits'
-                print(f"Copying {member['expname']} to {align_image}")
-                shutil.copy(member['expname'], align_image)
-                offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Cloud_C.csv')
-                row = offsets_tbl[member['expname'].split('/')[-1] == offsets_tbl['Filename_1']]
-                align_fits = fits.open(align_image)
-                pixel_scale = np.sqrt(fits.getheader(align_image, ext=1)['PIXAR_A2']*u.arcsec**2)
-                try:
-                    print('Running manual align.')
-                    xshift = float(row['xshift (arcsec)'])*u.arcsec
-                    yshift = float(row['yshift (arcsec)'])*u.arcsec
-                except:
-                    print('Something went wrong with manual align, running default values.')
-                    visit = member['expname'].split('_')[0][-3:]
-                    if visit == '001':
-                        xshift = 8*u.arcsec
-                        yshift = -0.3*u.arcsec
-                    elif visit == '002':
-                        xshift = 3.9*u.arcsec/pixel_scale
-                        yshift = 1*u.arcsec/pixel_scale
-                    else:
-                        xshift = 0*u.arcsec/pixel_scale
-                        yshift = 0*u.arcsec/pixel_scale
-                fa = ImageModel(align_image)
-                wcsobj = fa.meta.wcs
-                ww = adjust_wcs(wcsobj, delta_ra=-yshift, delta_dec=-xshift)
-                tree = fa.tree
-                tree['meta']['wcs'] = ww
-                fa = asdf.fits_embed.AsdfInFits(align_fits, tree)
-                align_fits.writeto(align_image, overwrite=True)
-                member['expname'] = align_image
-            elif (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
+            if (field == '004' and proposal_id == '1182') or ((field == '001' or field  == '002') and proposal_id == '2221'):
                 for suffix in ("_cal.fits", "_destreak.fits"):
                     align_image = member['expname'].replace("_cal.fits", suffix)
                     fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
@@ -529,30 +496,46 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     globals().update(locals())
     return locals()
 
-
 def fix_alignment(fn, proposal_id, module, field, basepath, filtername):
     if os.path.exists(fn):
         print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}")
     else:
         print(f"Skipping manual align for nonexistent file {module} ({proposal_id} + {field}): {fn}")
         return
-    offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
-    exposure = int(fn.split("_")[-3])
-    thismodule = fn.split("_")[-2]
-    visit = fn.split("_")[0]
-    match = ((offsets_tbl['Visit'] == visit) &
-            (offsets_tbl['Exposure'] == exposure) &
-            ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-            (offsets_tbl['Filter'] == filtername)
-            )
-    if match.sum() != 1:
-        raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-    row = offsets_tbl[match]
-    print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-    rashift = float(row['dra (arcsec)'][0])*u.arcsec
-    decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+    if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
+        offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
+        exposure = int(fn.split("_")[-3])
+        thismodule = fn.split("_")[-2]
+        visit = fn.split("_")[0]
+        match = ((offsets_tbl['Visit'] == visit) &
+                (offsets_tbl['Exposure'] == exposure) &
+                ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                (offsets_tbl['Filter'] == filtername)
+                )
+        if match.sum() != 1:
+            raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
+        row = offsets_tbl[match]
+        print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
+        rashift = float(row['dra (arcsec)'][0])*u.arcsec
+        decshift = float(row['ddec (arcsec)'][0])*u.arcsec
+    elif (field == '002' and proposal_id == '2221'):
+        visit = fn.split('_')[0][-3:]
+        thismodule = fn.split("_")[-2].strip('1234')))
+        if visit == '001':
+            decshift = 7.95*u.arcsec
+            rashift = 0.6*u.arcsec
+        elif visit == '002':
+            decshift = 3.85*u.arcsec
+            rashift = 1.57*u.arcsec
+        else:
+            decshift = 0*u.arcsec
+            rashift = 0*u.arcsec
+        if filtername.upper() in ('F212N', 'F187N', 'F182M'):
+            print('Short wavelength offset correction.')
+            if 'nrca' in thismodule.lower():
+                decshift += 0.1*u.arcsec
+                rashift += -0.23*u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
-
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:
         # don't shift twice if we re-run
