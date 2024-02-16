@@ -330,6 +330,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         log.info(f"Realigned to VVV filename: {realigned_vvv_filename}")
+        raoffset = 0
+        decoffset = 0
         realigned = realign_to_vvv(filtername=filtername.lower(),
                                    fov_regname=fov_regname[regionname],
                                    basepath=basepath, module=module,
@@ -520,7 +522,7 @@ def fix_alignment(fn, proposal_id, module, field, basepath, filtername):
         decshift = float(row['ddec (arcsec)'][0])*u.arcsec
     elif (field == '002' and proposal_id == '2221'):
         visit = fn.split('_')[0][-3:]
-        thismodule = fn.split("_")[-2].strip('1234')))
+        thismodule = fn.split("_")[-2].strip('1234')
         if visit == '001':
             decshift = 7.95*u.arcsec
             rashift = 0.6*u.arcsec
