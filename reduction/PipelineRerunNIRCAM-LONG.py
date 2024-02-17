@@ -330,8 +330,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
                     realigned_vvv_filename)
         log.info(f"Realigned to VVV filename: {realigned_vvv_filename}")
-        raoffset = 0
-        decoffset = 0
         realigned = realign_to_vvv(filtername=filtername.lower(),
                                    fov_regname=fov_regname[regionname],
                                    basepath=basepath, module=module,
@@ -340,8 +338,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                    ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
                                    mag_limit=18 if filtername.lower() == 'f115w' else 15,
                                    max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
-                                   raoffset=raoffset,
-                                   decoffset=decoffset)
+                                   #raoffset=raoffset,
+                                   #decoffset=decoffset
+                                   )
         log.info(f"Done realigning to VVV (module={module}, filtername={filtername})")
 
         log.info(f"Realigning to refcat (module={module}, filtername={filtername})")
@@ -356,7 +355,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        mag_limit=20, proposal_id=proposal_id,
                                        max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                        imfile=realigned_refcat_filename,
-                                       raoffset=raoffset, decoffset=decoffset)
+                                       #raoffset=raoffset, decoffset=decoffset
+                                       )
         log.info(f"Done realigning to refcat (module={module}, filtername={filtername})")
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
@@ -459,7 +459,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             check_wcs(member['expname'])
         check_wcs(asn_data['products'][0]['name'] + "_i2d.fits")
 
-        log.info(f"Realigning to VVV (module={module}) with raoffset={raoffset}, decoffset={decoffset}")
+        log.info(f"Realigning to VVV (module={module})")# with raoffset={raoffset}, decoffset={decoffset}")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
         log.info(f"Realigned to VVV filename: {realigned_vvv_filename}")
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
@@ -471,9 +471,10 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                    max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                    ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
                                    mag_limit=18 if filtername.lower() == 'f115w' else 15,
-                                   raoffset=raoffset, decoffset=decoffset)
+                                   #raoffset=raoffset, decoffset=decoffset
+                                   )
 
-        log.info(f"Realigning to refcat (module={module}) with raoffset={raoffset}, decoffset={decoffset}")
+        log.info(f"Realigning to refcat (module={module})")# with raoffset={raoffset}, decoffset={decoffset}")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
         log.info(f"Realigned refcat filename: {realigned_refcat_filename}")
         shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
@@ -486,7 +487,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        mag_limit=20,
                                        proposal_id=proposal_id,
                                        imfile=realigned_refcat_filename,
-                                       raoffset=raoffset, decoffset=decoffset)
+                                       #raoffset=raoffset, decoffset=decoffset
+                                       )
 
         log.info(f"Removing saturated stars.  cwd={os.getcwd()}")
         try:
@@ -572,12 +574,12 @@ def check_wcs(fn):
         wcsobj = fa.meta.wcs
         print(f"fa['meta']['wcs'] crval={wcsobj.to_fits()[0]['CRVAL1']}, {wcsobj.to_fits()[0]['CRVAL2']}, {wcsobj.forward_transform.param_sets[-1]}")
         new_1024 = wcsobj.pixel_to_world(1024, 1024)
-        print(f"pixel_to_world(1024,1024) = {new_1024}")
+        print(f"new pixel_to_world(1024,1024) = {new_1024}")
         if 'oldwcs' in fa.meta:
             oldwcsobj = fa.meta.oldwcs
             print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
             old_1024 = oldwcsobj.pixel_to_world(1024, 1024)
-            print(f"pixel_to_world(1024,1024) = {old_1024}, sep={old_1024.separation(new_1024)}")
+            print(f"old pixel_to_world(1024,1024) = {old_1024}, sep={old_1024.separation(new_1024)}")
 
 
         # FITS header
@@ -589,7 +591,7 @@ def check_wcs(fn):
             print("RA, DE offset: ", fh[1].header['RAOFFSET'], fh[1].header['DEOFFSET'])
         ww = WCS(fh[1].header)
         fits_1024 = ww.pixel_to_world(1024, 1024)
-        print(f"pixel_to_world(1024,1024) = {fits_1024}, sep={fits_1024.separation(new_1024)}")
+        print(f"FITS pixel_to_world(1024,1024) = {fits_1024}, sep={fits_1024.separation(new_1024)}")
     else:
         print(f"COULD NOT CHECK WCS FOR {fn}: does not exist")
 
