@@ -16,6 +16,38 @@ from astropy.io import fits
 
 import datetime
 
+
+def diagnostic_plots(fn, refcrds, meascrds, dra, ddec, savename=None):
+    import pylab
+    from astropy.visualization import simple_norm
+    fig = pl.figure(dpi=200)
+    ax1 = pl.subplot(2, 2, 1)
+    ra = refcrds.ra
+    dec = refcrds.dec
+    ax1.quiver(ra.to(u.deg).value, dec.to(u.deg).value, dra.to(u.arcsec).value, ddec.to(u.arcsec).value)
+
+    img = ImageModel(fn)
+    ww = img.meta.wcs
+    ax2 = pl.subplot(2, 2, 2, projection=ww)
+    ax2.imshow(img.data, cmap='gray_r', norm=simple_norm(img.data, min_percent=1, max_percent=99, stretch='asinh'))
+    ax2.scatter_coord(refcrds, marker='x', color='r')
+
+    ax3 = pl.subplot(2, 2, 3, projection=ww)
+    ax3.imshow(img.data, cmap='gray_r', norm=simple_norm(img.data, min_percent=1, max_percent=99, stretch='asinh'))
+    ax3.scatter_coord(refcrds, marker='x', color='r')
+    ax3.scatter_coord(meascrds, marker='+', color='b')
+    ax3.axis([1000,1200,1000,1200])
+
+    ax4 = pl.subplot(2, 2, 4, projection=ww)
+    ax4.imshow(img.data, cmap='gray_r', norm=simple_norm(img.data, min_percent=1, max_percent=99, stretch='asinh'))
+    ax4.scatter_coord(refcrds, marker='x', color='r')
+    ax4.scatter_coord(meascrds, marker='+', color='b')
+    ax4.axis([200,400,200,400])
+
+    if savename is not None:
+        pl.tight_layout()
+        pl.savefig(savename, bbox_inches='tight')
+
 def print(*args, **kwargs):
     now = datetime.datetime.now().isoformat()
     from builtins import print as printfunc
@@ -221,6 +253,9 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         warnings.simplefilter('ignore')
         ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+
+    pngname = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_xmatch_diagnostics.png'
+    diagnostic_plots(imfile, reference_coordinates, skycrds_cat_new, dra, ddec, savename=pngname)
 
     idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
     dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
