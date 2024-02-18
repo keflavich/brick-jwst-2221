@@ -289,8 +289,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        if filtername.lower() == 'f405n':
-        # for the VVV cat, use the merged version: no need for independent versions
+        # don't use VVV at all; the catalog does not play nicely with JWST pipe catalogs
+        if False: #filtername.lower() == 'f405n':
+            # for the VVV cat, use the merged version: no need for independent versions
             abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
@@ -440,7 +441,10 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         with open(asn_file_merged, 'w') as fh:
             json.dump(asn_data, fh)
 
-        if filtername.lower() == 'f405n':
+        # don't re-fit to VVV - it's not accurate enough with the JWST-derived
+        # catalogs.  We needed to use our own much more extensive cataloging to
+        # beat down the noise enough to make this approach viable
+        if False: # filtername.lower() == 'f405n':
             vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
             retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module=module, fieldnumber=field)
@@ -485,6 +489,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         calwebb_image3.Image3Pipeline.call(
             asn_file_merged,
             steps={'tweakreg': tweakreg_parameters,},
+            #steps={'tweakreg': False,}
             output_dir=output_dir,
             save_results=True)
         print(f"DONE running Image3Pipeline {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
@@ -636,7 +641,7 @@ def check_wcs(fn):
             oldwcsobj = fa.meta.oldwcs
             print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
             old_1024 = oldwcsobj.pixel_to_world(1024, 1024)
-            print(f"old pixel_to_world(1024,1024) = {old_1024}, sep={old_1024.separation(new_1024)}")
+            print(f"old pixel_to_world(1024,1024) = {old_1024}, sep from new GWCS={old_1024.separation(new_1024).to(u.arcsec)}")
 
 
         # FITS header
@@ -648,7 +653,7 @@ def check_wcs(fn):
             print("RA, DE offset: ", fh[1].header['RAOFFSET'], fh[1].header['DEOFFSET'])
         ww = WCS(fh[1].header)
         fits_1024 = ww.pixel_to_world(1024, 1024)
-        print(f"FITS pixel_to_world(1024,1024) = {fits_1024}, sep={fits_1024.separation(new_1024)}")
+        print(f"FITS pixel_to_world(1024,1024) = {fits_1024}, sep from new GWCS={fits_1024.separation(new_1024).to(u.arcsec)}")
     else:
         print(f"COULD NOT CHECK WCS FOR {fn}: does not exist")
 
