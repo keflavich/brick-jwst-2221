@@ -18,7 +18,7 @@ import datetime
 
 
 def diagnostic_plots(fn, refcrds, meascrds, dra, ddec, savename=None):
-    import pylab
+    import pylab as pl
     from astropy.visualization import simple_norm
     fig = pl.figure(dpi=200)
     ax1 = pl.subplot(2, 2, 1)
