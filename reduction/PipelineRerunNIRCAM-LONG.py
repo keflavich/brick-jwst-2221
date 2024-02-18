@@ -3,6 +3,7 @@ from glob import glob
 from astroquery.mast import Mast, Observations
 import copy
 import os
+import re
 import shutil
 import numpy as np
 import json
@@ -49,6 +50,8 @@ from saturated_star_finding import iteratively_remove_saturated_stars, remove_sa
 import crds
 import jwst
 
+filter_regex = re.compile('f[0-9][0-9][0-9][nmw]')
+
 import warnings
 from astropy.utils.exceptions import AstropyWarning, AstropyDeprecationWarning
 from astropy.wcs import FITSFixedWarning
@@ -70,8 +73,22 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
                 'F182M': 55, 'F187N': 512, 'F212N': 512}
 
 fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
-                'cloudc': 'regions_/nircam_cloudc_fov.reg',
-                }
+               'cloudc': 'regions_/nircam_cloudc_fov.reg',
+               }
+
+# it's very difficult to modify the Webb pipeline in this way
+# # replace Image2Pipeline's 'resample' with one that uses our hand-corrected coordinates
+# def pre_resample(func):
+#   def wrapper(self, input, *args, **kwargs):
+#     print("Before resample is called, fixing coordinates")
+#     for member in inputs:
+#         print(f"Fixing alignment for {member.meta.filename}")
+#         fix_alignment(member.meta.filename)
+#     result = func(*args, **kwargs)
+#     return result
+#   return wrapper
+# 
+# Image2Pipeline.step_defs['resample'] = pre_resample(Image2Pipeline.resample)
 
 def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
          field='001', proposal_id='2221', skip_step1and2=False):
@@ -280,12 +297,14 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             tweakreg_parameters['abs_refcat'] = vvvdr2fn
             tweakreg_parameters['abs_searchrad'] = 1
             reftbl = Table.read(abs_refcat)
+            reftbl.meta['name'] = f'VVV Reference Catalog {filtername}'
             assert 'skycoord' in reftbl.colnames
         else:
             abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
             reftbl = Table.read(abs_refcat)
             # For non-F410M, try aligning to F410M instead of VVV?
             reftblversion = reftbl.meta['VERSION']
+            reftbl.meta['name'] = 'F405N Reference Astrometric Catalog'
 
             # truncate to top 10,000 sources
             reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
@@ -516,12 +535,34 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     globals().update(locals())
     return locals()
 
-def fix_alignment(fn, proposal_id, module, field, basepath, filtername):
+def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, filtername=None):
     if os.path.exists(fn):
         print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}", flush=True)
     else:
         print(f"Skipping manual align for nonexistent file {module} ({proposal_id} + {field}): {fn}", flush=True)
         return
+
+    mod = ImageModel(fn)
+    if proposal_id is None:
+        proposal_id = os.path.basename(fn)[3:7]
+    if filtername is None:
+        try:
+            filtername = filter_regex.search(fn).group()
+        except AttributeError:
+            filters = tuple(map(str.lower, (mod.meta.instrument.filter, mod.meta.instrument.pupil)))
+            if 'clear' in filters:
+                filtername = [x for x in filters if x != 'clear'][0]
+            else:
+                # any filter that is not the wideband filter
+                filtername = [x for x in filters if 'W' not in x][0]
+    if field is None:
+        field = mod.meta.observation.observation_number
+    if basepath is None:
+        basepath = f'/orange/adamginsburg/jwst/{field_name}'
+    if module is None:
+        module = 'nrc' + mod.meta.instrument.module.lower()
+
+
     if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
         offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
         exposure = int(fn.split("_")[-3])
