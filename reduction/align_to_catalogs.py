@@ -10,6 +10,7 @@ from astropy.visualization import quantity_support
 from astropy import log
 from astropy.table import Table
 import warnings
+from jwst.datamodels import ImageModel
 
 from astropy.wcs import WCS
 from astropy.io import fits
