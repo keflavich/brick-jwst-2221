@@ -642,6 +642,7 @@ def check_wcs(fn):
             print(f"fa['meta']['oldwcs'] crval={oldwcsobj.to_fits()[0]['CRVAL1']}, {oldwcsobj.to_fits()[0]['CRVAL2']}, {oldwcsobj.forward_transform.param_sets[-1]}")
             old_1024 = oldwcsobj.pixel_to_world(1024, 1024)
             print(f"old pixel_to_world(1024,1024) = {old_1024}, sep from new GWCS={old_1024.separation(new_1024).to(u.arcsec)}")
+        fa.close()
 
 
         # FITS header
@@ -654,6 +655,7 @@ def check_wcs(fn):
         ww = WCS(fh[1].header)
         fits_1024 = ww.pixel_to_world(1024, 1024)
         print(f"FITS pixel_to_world(1024,1024) = {fits_1024}, sep from new GWCS={fits_1024.separation(new_1024).to(u.arcsec)}")
+        fh.close()
     else:
         print(f"COULD NOT CHECK WCS FOR {fn}: does not exist")
 
