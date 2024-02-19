@@ -22,8 +22,8 @@ def diagnostic_plots(fn, refcrds, meascrds, dra, ddec, savename=None):
     from astropy.visualization import simple_norm
     fig = pl.figure(dpi=200)
     ax1 = pl.subplot(2, 2, 1)
-    ra = refcrds.ra
-    dec = refcrds.dec
+    ra = meascrds.ra
+    dec = meascrds.dec
     ax1.quiver(ra.to(u.deg).value, dec.to(u.deg).value, dra.to(u.arcsec).value, ddec.to(u.arcsec).value)
 
     img = ImageModel(fn)
@@ -254,12 +254,12 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         ww =  WCS(hdulist['SCI'].header)
     skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
 
-    pngname = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_xmatch_diagnostics.png'
-    diagnostic_plots(imfile, reference_coordinates, skycrds_cat_new, dra, ddec, savename=pngname)
-
     idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
     dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
     ddec = (skycrds_cat_new[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
+
+    pngname = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_xmatch_diagnostics.png'
+    diagnostic_plots(imfile, reference_coordinates, skycrds_cat_new[sel][idx], dra, ddec, savename=pngname)
 
     print(f'After realignment, offset is {np.median(dra)}, {np.median(ddec)} with {len(idx)} matches')
 
