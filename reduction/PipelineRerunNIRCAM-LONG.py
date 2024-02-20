@@ -215,7 +215,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
         tweakreg_parameters.update({'fitgeometry': 'general',
                                     # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
-                                    'brightest': 500,
+                                    'brightest': 5000,
                                     'snr_threshold': 30, # was 5, but that produced too many stars
                                     # define later 'abs_refcat': abs_refcat,
                                     'save_catalogs': True,
