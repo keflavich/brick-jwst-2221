@@ -601,6 +601,9 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
             if 'nrca' in thismodule.lower():
                 decshift += 0.1*u.arcsec
                 rashift += -0.23*u.arcsec
+    else:
+        rashift = 0*u.arsec
+        decshift = 0*u.arsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:

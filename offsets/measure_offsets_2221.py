@@ -4,6 +4,7 @@ from astropy.table import Table
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units as u
+from astropy import stats
 import glob
 import os
 
@@ -70,9 +71,25 @@ with warnings.catch_warnings():
 
                 idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel])
                 keep = offset < max_offset
+
+                ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
+                reject = np.zeros(ratio.size, dtype='bool')
+                for ii in range(4):
+                    madstd = stats.mad_std(ratio[~reject])
+                    med = np.median(ratio[~reject])
+                    reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
+                    ratio = 1 / ratio
+                    madstd = stats.mad_std(ratio[~reject])
+                    med = np.median(ratio[~reject])
+                    reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
+                    ratio = 1 / ratio
+
+
                 #idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-                dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
-                ddec = (skycrds_cat[sel][idx[keep]].dec - reference_coordinates[keep].dec).to(u.arcsec)
+                #dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
+                #ddec = (skycrds_cat[sel][idx[keep]].dec - reference_coordinates[keep].dec).to(u.arcsec)
+                dra = (skycrds_cat[sel][idx[keep][~reject]].ra - reference_coordinates[keep][~reject].ra).to(u.arcsec)
+                ddec = (skycrds_cat[sel][idx[keep][~reject]].dec - reference_coordinates[keep][~reject].dec).to(u.arcsec)
 
                 med_dra = np.median(dra)
                 med_ddec = np.median(ddec)
