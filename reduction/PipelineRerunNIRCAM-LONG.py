@@ -213,6 +213,30 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         tweakreg_asdf_filename = filter_match[0][4]
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
+        tweakreg_parameters.update({'fitgeometry': 'general',
+                                    # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
+                                    'brightest': 500,
+                                    'snr_threshold': 30, # was 5, but that produced too many stars
+                                    # define later 'abs_refcat': abs_refcat,
+                                    'save_catalogs': True,
+                                    'catalog_format': 'fits',
+                                    'kernel_fwhm': fwhm_pix,
+                                    'nclip': 5,
+                                    # expand_refcat: A boolean indicating whether or not to expand reference catalog with new sources from other input images that have been already aligned to the reference image. (Default=False)
+                                    'expand_refcat': True,
+                                    # based on DebugReproduceTweakregStep
+                                    'sharplo': 0.3,
+                                    'sharphi': 0.9,
+                                    'roundlo': -0.25,
+                                    'roundhi': 0.25,
+                                    'separation': 0.5, # minimum separation; default is 1
+                                    'tolerance': 0.1, # tolerance: Matching tolerance for xyxymatch in arcsec. (Default=0.7)
+                                    'save_results': True,
+                                    # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
+                                    })
+
+        
+
         print(f'Filter {filtername} tweakreg parameters: {tweakreg_parameters}')
 
 
@@ -250,14 +274,15 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         else:
             print("Skipped step 1 and step2")
 
-        print("Doing pre-alignment from offsets tables")
-        for member in asn_data['products'][0]['members']:
-            if (field == '004' and proposal_id == '1182') or ((field == '001' or field  == '002') and proposal_id == '2221'):
-                for suffix in ("_cal.fits", "_destreak.fits"):
-                    align_image = member['expname'].replace("_cal.fits", suffix)
-                    fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
-            else:
-                print(f"Field {field} proposal {proposal_id} did not require re-alignment")
+        # don't need to do this / it affects Savannah's fixing approach
+        #print("Doing pre-alignment from offsets tables")
+        #for member in asn_data['products'][0]['members']:
+        #    if (field == '004' and proposal_id == '1182') or ((field == '001' or field  == '002') and proposal_id == '2221'):
+        #        for suffix in ("_cal.fits", "_destreak.fits"):
+        #            align_image = member['expname'].replace("_cal.fits", suffix)
+        #            fix_alignment(align_image, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+        #    else:
+        #        print(f"Field {field} proposal {proposal_id} did not require re-alignment")
 
 
     else:
@@ -318,28 +343,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
-        # TODO: with the manual alignment done above, maybe skip=True?
-        tweakreg_parameters.update({'fitgeometry': 'general',
-                                    # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
-                                    'brightest': 500,
-                                    'snr_threshold': 30, # was 5, but that produced too many stars
-                                    'abs_refcat': abs_refcat,
-                                    'save_catalogs': True,
-                                    'catalog_format': 'fits',
-                                    'kernel_fwhm': fwhm_pix,
-                                    'nclip': 5,
-                                    # expand_refcat: A boolean indicating whether or not to expand reference catalog with new sources from other input images that have been already aligned to the reference image. (Default=False)
-                                    'expand_refcat': True,
-                                    # based on DebugReproduceTweakregStep
-                                    'sharplo': 0.3,
-                                    'sharphi': 0.9,
-                                    'roundlo': -0.25,
-                                    'roundhi': 0.25,
-                                    'separation': 0.5, # minimum separation; default is 1
-                                    'tolerance': 0.1, # tolerance: Matching tolerance for xyxymatch in arcsec. (Default=0.7)
-                                    'save_results': True,
-                                    # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
-                                    })
+        tweakreg_parameters.update({'abs_refcat': abs_refcat,}
 
         print(f"Running tweakreg ({module})")
         calwebb_image3.Image3Pipeline.call(
@@ -466,24 +470,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
-
-        tweakreg_parameters.update({'fitgeometry': 'general',
-                                    'brightest': 500,
-                                    'snr_threshold': 30,
-                                    'abs_refcat': abs_refcat,
-                                    'save_catalogs': True,
-                                    'catalog_format': 'fits',
-                                    'kernel_fwhm': fwhm_pix,
-                                    'expand_refcat': True,
-                                    'nclip': 5,
-                                    'sharplo': 0.3,
-                                    'sharphi': 0.9,
-                                    'roundlo': -0.25,
-                                    'roundhi': 0.25,
-                                    'separation': 0.5, # minimum separation; default is 1
-                                    'tolerance': 0.1, # tolerance: Matching tolerance for xyxymatch in arcsec. (Default=0.7)
-                                    'save_results': True,
-                                    })
+        tweakreg_parameters.update({'abs_refcat': abs_refcat,}
 
         print("Running Image3Pipeline with tweakreg (merged)")
         calwebb_image3.Image3Pipeline.call(
