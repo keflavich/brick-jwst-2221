@@ -343,7 +343,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
-        tweakreg_parameters.update({'abs_refcat': abs_refcat,}
+        tweakreg_parameters.update({'abs_refcat': abs_refcat,})
 
         print(f"Running tweakreg ({module})")
         calwebb_image3.Image3Pipeline.call(
