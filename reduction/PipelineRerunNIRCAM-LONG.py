@@ -569,6 +569,8 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
                      (offsets_tbl['Module'] == thismodule.strip('1234'))) &
                     (offsets_tbl['Filter'] == filtername)
                     )
+            row = offsets_tbl[match]
+            print(f'Running manual align for merged for {filtername} {row["Module"][0]}.')
         else:
             tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv'
             print(f"Using offset table {tblfn}")
@@ -578,10 +580,10 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
                     ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
                     (offsets_tbl['Filter'] == filtername)
                     )
+            row = offsets_tbl[match]
+            print(f'Running manual align for merged for {filtername} {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
         if match.sum() != 1:
             raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-        row = offsets_tbl[match]
-        print(f'Running manual align for merged for {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
         rashift = float(row['dra (arcsec)'][0])*u.arcsec
         decshift = float(row['ddec (arcsec)'][0])*u.arcsec
     elif (field == '002' and proposal_id == '2221'):
