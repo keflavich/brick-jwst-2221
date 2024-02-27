@@ -87,7 +87,7 @@ fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
 #     result = func(*args, **kwargs)
 #     return result
 #   return wrapper
-# 
+#
 # Image2Pipeline.step_defs['resample'] = pre_resample(Image2Pipeline.resample)
 
 def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
@@ -235,7 +235,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
                                     })
 
-        
+
 
         print(f'Filter {filtername} tweakreg parameters: {tweakreg_parameters}')
 
@@ -470,7 +470,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
-        tweakreg_parameters.update({'abs_refcat': abs_refcat,}
+        tweakreg_parameters.update({'abs_refcat': abs_refcat,})
 
         print("Running Image3Pipeline with tweakreg (merged)")
         calwebb_image3.Image3Pipeline.call(
@@ -527,7 +527,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     globals().update(locals())
     return locals()
 
-def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, filtername=None):
+def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, filtername=None,
+                  use_average=True):
     if os.path.exists(fn):
         print(f"Running manual align for {module} data ({proposal_id} + {field}): {fn}", flush=True)
     else:
@@ -556,15 +557,27 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
 
 
     if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
-        offsets_tbl = Table.read(f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv')
         exposure = int(fn.split("_")[-3])
         thismodule = fn.split("_")[-2]
         visit = fn.split("_")[0]
-        match = ((offsets_tbl['Visit'] == visit) &
-                (offsets_tbl['Exposure'] == exposure) &
-                ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-                (offsets_tbl['Filter'] == filtername)
-                )
+        if use_average:
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_average.csv'
+            print(f"Using average offset table {tblfn}")
+            offsets_tbl = Table.read(tblfn)
+            match = (
+                    ((offsets_tbl['Module'] == thismodule) |
+                     (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                    (offsets_tbl['Filter'] == filtername)
+                    )
+        else:
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv'
+            print(f"Using offset table {tblfn}")
+            offsets_tbl = Table.read(tblfn)
+            match = ((offsets_tbl['Visit'] == visit) &
+                    (offsets_tbl['Exposure'] == exposure) &
+                    ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                    (offsets_tbl['Filter'] == filtername)
+                    )
         if match.sum() != 1:
             raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
         row = offsets_tbl[match]

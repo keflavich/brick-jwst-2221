@@ -135,3 +135,13 @@ with warnings.catch_warnings():
 tbl = Table(rows)
 # don't necessarily want to write this: if the manual alignment has been run already, the offsets will all be zero
 tbl.write("offsets/Offsets_JWST_Brick2221.csv", format='ascii.csv', overwrite=True)
+
+#TODO: assum all a's have same offsets...
+
+gr = tbl.group_by(['Filter', 'Module'])
+agg = gr.groups.aggregate(np.mean)
+del agg['Exposure']
+aggstd = gr.groups.aggregate(np.std)
+agg['dra_rms'] = aggstd['dra']
+agg['ddec_rms'] = aggstd['ddec']
+agg.write("offsets/Offsets_JWST_Brick2221_average.csv", format='ascii.csv', overwrite=True)
