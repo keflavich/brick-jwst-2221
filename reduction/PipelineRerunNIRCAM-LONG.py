@@ -307,8 +307,14 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
 
-                    # re-do alignment if destreak file doesn't exist at the earlier step above
                     fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+            else: # make align files
+                fname = member['expname']
+                assert fname.endswith('_cal.fits')
+                member['expname'] = fname.replace("_cal.fits", "_align.fits")
+                shutil.copy(fname, member['expname'])
+
+                fix_alignment(member['expname'], proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -439,6 +445,13 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
                     # re-do alignment if destreak file doesn't exist at the earlier step above
                     fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+            else: # make align files
+                fname = member['expname']
+                assert fname.endswith('_cal.fits')
+                member['expname'] = fname.replace("_cal.fits", "_align.fits")
+                shutil.copy(fname, member['expname'])
+
+                fix_alignment(member['expname'], proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
@@ -671,7 +684,7 @@ if __name__ == "__main__":
                       default='F466N,F405N,F410M,F212N,F182M,F187N',
                       help="filter name list", metavar="filternames")
     parser.add_option("-m", "--modules", dest="modules",
-                    default='merged,nrca,nrcb',
+                    default='nrca,nrcb,merged',
                     help="module list", metavar="modules")
     parser.add_option("-d", "--field", dest="field",
                     default='001,002',
