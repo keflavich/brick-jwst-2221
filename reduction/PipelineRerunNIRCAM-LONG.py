@@ -574,7 +574,7 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
         thismodule = fn.split("_")[-2]
         visit = fn.split("_")[0]
         if use_average:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_average.csv'
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_VVV_average.csv'
             print(f"Using average offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
             match = (

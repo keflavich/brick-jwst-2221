@@ -520,6 +520,7 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
              fig=None,
              axes=None,
              module='nrc*',
+             filternames=('F182M', 'F187N', 'F212N', 'F410M', 'F405N', 'F466N')
              ):
     reg = regions.RectangleSkyRegion(center=coords, width=cutoutsize, height=cutoutsize)
     ii = 0
@@ -529,79 +530,80 @@ def starzoom(coords, cutoutsize=1*u.arcsec, fontsize=14,
     with mpl.rc_context({"font.size": fontsize}):
 
         if axes is None:
-            fig, axes = pl.subplots(1,6)
+            axes = fig.subplots(1, len(filternames))
 
         filters_plotted = []
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            for fn in sorted(glob.glob(f'{basepath}/F*/pipeline/*nircam*{module}_i2d.fits')):
-                hdr0 = fits.getheader(fn)
-                filtername = hdr0['PUPIL']+hdr0['FILTER']
-                if filtername in filters_plotted:
-                    continue
-                hdr = fits.getheader(fn, ext=('SCI', 1))
-                ww = wcs.WCS(hdr)
-                if ww.footprint_contains(coords):
-                    data = fits.getdata(fn, ext=('SCI',1))
-                    mask = reg.to_pixel(ww).to_mask()
-                    slcs,_ = mask.get_overlap_slices(data.shape)
+            for thisfiltername in filternames:
+                for fn in sorted(glob.glob(f'{basepath}/{thisfiltername}/pipeline/*nircam*{module}_i2d.fits')):
+                    hdr0 = fits.getheader(fn)
+                    filtername = hdr0['PUPIL']+hdr0['FILTER']
+                    if filtername in filters_plotted:
+                        continue
+                    hdr = fits.getheader(fn, ext=('SCI', 1))
+                    ww = wcs.WCS(hdr)
+                    if ww.footprint_contains(coords):
+                        data = fits.getdata(fn, ext=('SCI',1))
+                        mask = reg.to_pixel(ww).to_mask()
+                        slcs,_ = mask.get_overlap_slices(data.shape)
 
 
-                    xc, yc = map(int, map(np.round, ww.world_to_pixel(coords)))
-                    center_value = data[yc,xc]
-                    good_center = np.isfinite(center_value) and center_value > 2
-                    maxval = None #center_value if good_center else None
-                    #minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
-                    minval = None
-                    stretch = 'asinh'# if np.isfinite(center_value) else 'asinh'
-                    max_percent = 99.95
-                    min_percent = 0.1 if good_center else 1.0
-                    min_percent = 1
-                    #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
+                        xc, yc = map(int, map(np.round, ww.world_to_pixel(coords)))
+                        center_value = data[yc,xc]
+                        good_center = np.isfinite(center_value) and center_value > 2
+                        maxval = None #center_value if good_center else None
+                        #minval = 0 if good_center and np.nanpercentile(data[slcs], 1) < 0 else None
+                        minval = None
+                        stretch = 'asinh'# if np.isfinite(center_value) else 'asinh'
+                        max_percent = 99.95
+                        min_percent = 0.1 if good_center else 1.0
+                        min_percent = 1
+                        #print(f"center_value={center_value}, this is {'good' if good_center else 'bad'}")
 
-                    ax = axes[ii]
-                    ax.imshow(data[slcs], norm=simple_norm(data[slcs],
-                                                           stretch=stretch,
-                                                           min_percent=min_percent,
-                                                           max_percent=max_percent,
-                                                           min_cut=minval,
-                                                           max_cut=maxval),
-                              origin='lower', cmap='gray_r')
-                    xx, yy = ww[slcs].world_to_pixel(coords)
-                    ax.plot(xx, yy, 'r', marker=offset_crosshair, markersize=15)
-                    pixscale = ww.proj_plane_pixel_area()**0.5
-                    quartas = (0.25*u.arcsec/pixscale).decompose().value
+                        ax = axes[ii]
+                        ax.imshow(data[slcs], norm=simple_norm(data[slcs],
+                                                               stretch=stretch,
+                                                               min_percent=min_percent,
+                                                               max_percent=max_percent,
+                                                               min_cut=minval,
+                                                               max_cut=maxval),
+                                  origin='lower', cmap='gray_r')
+                        xx, yy = ww[slcs].world_to_pixel(coords)
+                        ax.plot(xx, yy, 'r', marker=offset_crosshair, markersize=15)
+                        pixscale = ww.proj_plane_pixel_area()**0.5
+                        quartas = (0.25*u.arcsec/pixscale).decompose().value
 
-                    if ii == 0:
-                        xoffset = 4
-                        ax.plot([xoffset, xoffset+quartas], [2, 2], color='r')
-                        ax.text(xoffset+quartas/2, 3, '0.25"', color='r', horizontalalignment='center')
+                        if ii == 0:
+                            xoffset = 4
+                            ax.plot([xoffset, xoffset+quartas], [2, 2], color='r')
+                            ax.text(xoffset+quartas/2, 3, '0.25"', color='r', horizontalalignment='center')
 
-                    shp = data[slcs].shape
+                        shp = data[slcs].shape
 
-                    try:
-                        unit = u.Unit(hdr['BUNIT'])
-                    except Exception as ex:
-                        unit = u.MJy/u.sr
-                    fwhm, fwhm_pix = get_fwhm(hdr0)
-                    fwhm = u.Quantity(fwhm, u.arcsec)
-                    # debug print(unit, fwhm, pixscale)
-                    max_flux_jy = (center_value * unit *
-                                   (2*np.pi / (8*np.log(2))) *
-                                   fwhm_pix**2 *
-                                   pixscale**2).to(u.Jy)
+                        try:
+                            unit = u.Unit(hdr['BUNIT'])
+                        except Exception as ex:
+                            unit = u.MJy/u.sr
+                        fwhm, fwhm_pix = get_fwhm(hdr0)
+                        fwhm = u.Quantity(fwhm, u.arcsec)
+                        # debug print(unit, fwhm, pixscale)
+                        max_flux_jy = (center_value * unit *
+                                       (2*np.pi / (8*np.log(2))) *
+                                       fwhm_pix**2 *
+                                       pixscale**2).to(u.Jy)
 
-                    if good_center:
-                        ax.text(shp[1]-quartas*1.75, shp[0]-quartas/1.1,
-                                f'{max_flux_jy.to(u.mJy):0.1f}', horizontalalignment='center',
-                                #color='r',
-                               )
+                        if good_center:
+                            ax.text(shp[1]-quartas*1.75, shp[0]-quartas/1.1,
+                                    f'{max_flux_jy.to(u.mJy):0.1f}', horizontalalignment='center',
+                                    #color='r',
+                                   )
 
-                    ax.set_title(filtername.replace("CLEAR","").replace("F444W",""))
-                    ax.set_xticklabels([])
-                    ax.set_yticklabels([])
-                    filters_plotted.append(filtername)
-                    ii += 1
+                        ax.set_title(filtername.replace("CLEAR","").replace("F444W",""))
+                        ax.set_xticklabels([])
+                        ax.set_yticklabels([])
+                        filters_plotted.append(filtername)
+                        ii += 1
             for ax in axes[ii:]:
                 # pl.subplots makes blank axes that we have to close
                 ax.set_visible(False)
@@ -948,3 +950,58 @@ def regzoomplot(reg, fontsize=14, axes=None,
                 ax.set_visible(False)
     pl.tight_layout()
     return fig
+
+
+def starzoom_cals(reference_coordinates, filtername='f212n', module='nrca1',
+                  suffix='cal', star_index=0, cutout_size=2*u.arcsec):
+    """
+    Test the pointing of the cal (or other) images using their built-in GWCSes
+    """
+
+    from astropy.wcs.wcsapi import HighLevelWCSWrapper, SlicedLowLevelWCS
+    from jwst.datamodels import ImageModel
+    import regions
+    import glob
+    import os
+
+    globstr = f"{filtername.upper()}/pipeline/*{module}*_{suffix}.fits"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        pl.figure(figsize=(25, 25))
+        incl = np.ones(len(reference_coordinates), dtype='bool')
+        filenames = glob.glob(globstr)
+
+        for ii, fn in enumerate(filenames):
+            img = ImageModel(fn)
+            incl_ = img.meta.wcs.in_image(reference_coordinates)
+            if (incl & incl_).sum() > 0:
+                incl &= incl_
+            else:
+                print(f"{fn} had no overlap with the rest")
+            print(incl.sum(), end=', ')
+
+        crd = reference_coordinates[incl][star_index]
+        reg = regions.RectangleSkyRegion(crd, cutout_size, cutout_size)
+        for ii, fn in enumerate(filenames):
+            img = ImageModel(fn)
+            preg = reg.to_pixel(img.meta.wcs)
+            mask = preg.to_mask()
+            slcs,_ = mask.get_overlap_slices(img.data.shape)
+            co = img.data[slcs]
+
+            ww = HighLevelWCSWrapper(SlicedLowLevelWCS(img.meta.wcs, slcs))
+            ax = pl.subplot(5,5,ii+1, projection=ww)
+            ax.set_title(os.path.basename(fn))
+            ax.imshow(co, origin='lower', norm=simple_norm(co, stretch='log', max_percent=99.95), cmap='gray')
+            axlims = ax.axis()
+
+            tincl = preg.contains(regions.PixCoord(*img.meta.wcs.world_to_pixel(reference_coordinates)))
+            ax.scatter(reference_coordinates[tincl].ra, reference_coordinates[tincl].dec,
+                       edgecolor='r', facecolor='none', transform=ax.get_transform('world'))
+            ax.axis(axlims)
+
+            ax.set_xticks([])
+            ax.set_yticks([])
+        pl.tight_layout()
+
