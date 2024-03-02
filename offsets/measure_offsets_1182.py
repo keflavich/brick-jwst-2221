@@ -5,11 +5,14 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy import stats
+import regions
+from astroquery.vizier import Vizier
+from astropy.coordinates import SkyCoord
 import glob
 import os
 
-project_id = '02221'
-field = '001'
+project_id = '01182'
+field = '004'
 obsid = '001'
 visit = '001'
 
@@ -18,21 +21,42 @@ visit = '001'
 
 # match selection to VVV by checking that K-band mags match and avoiding multiple stars
 # see AlignmentDebugViz for the development work
-reftb_vvv = Table.read('F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-merged_vvvcat.ecsv')
+
+vvvfn = 'catalogs/jw01182_VVV_reference_catalog.ecsv'
+if os.path.exists(vvvfn):
+    reftb_vvv = Table.read(vvvfn)
+else:
+    Vizier.ROW_LIMIT = 1e5
+    coord = SkyCoord(266.534963671, -28.710074995, unit=(u.deg, u.deg), frame='fk5')
+    reftb_vvv = Vizier.query_region(coordinates=coord,
+                                 width=7*u.arcmin,
+                                 height=7*u.arcmin,
+                                 catalog=['II/348/vvv2'])[0]
+    reftb_vvv['RA'] = reftb_vvv['RAJ2000']
+    reftb_vvv['DEC'] = reftb_vvv['DEJ2000']
+
+    # FK5 because it says 'J2000' on the Vizier page (same as twomass)
+    reftb_vvv_crds = SkyCoord(reftb_vvv['RAJ2000'], reftb_vvv['DEJ2000'], frame='fk5')
+    reftb_vvv['skycoord'] = reftb_vvv_crds
+
+    reftb_vvv.write(vvvfn, overwrite=True)
+    reftb_vvv.write(vvvfn.replace(".ecsv", ".fits"), overwrite=True)
+
 vvv_reference_coordinates = reference_coordinates = reftb_vvv['skycoord']
 
-f212tb = Table.read('/orange/adamginsburg/jwst/brick/catalogs/jw02221-o001_t001_nircam_clear-f212n-merged_cat_20240301.ecsv')
-mag212 = f212tb['aper_total_vegamag']
-skycrds_f212 = f212tb['sky_centroid']
+basepath = '/orange/adamginsburg/jwst/brick'
+f200tb = Table.read(f'{basepath}/catalogs/jw01182-o004_t001_nircam_clear-f200w-merged_cat_20240302.ecsv')
+mag200 = f200tb['aper_total_vegamag']
+skycrds_f200 = f200tb['sky_centroid']
 
-idx, sidx, sep, sep3d = vvv_reference_coordinates.search_around_sky(skycrds_f212, 0.5*u.arcsec)
-idx_sel = np.isin(np.arange(len(f212tb)), idx)
-dra = (skycrds_f212[idx].ra - vvv_reference_coordinates[sidx].ra).to(u.arcsec)
-ddec = (skycrds_f212[idx].dec - vvv_reference_coordinates[sidx].dec).to(u.arcsec)
-closeneighbors_idx, closest_sep, _ = skycrds_f212.match_to_catalog_sky(skycrds_f212, 2)
+idx, sidx, sep, sep3d = vvv_reference_coordinates.search_around_sky(skycrds_f200, 0.5*u.arcsec)
+idx_sel = np.isin(np.arange(len(f200tb)), idx)
+dra = (skycrds_f200[idx].ra - vvv_reference_coordinates[sidx].ra).to(u.arcsec)
+ddec = (skycrds_f200[idx].dec - vvv_reference_coordinates[sidx].dec).to(u.arcsec)
+closeneighbors_idx, closest_sep, _ = skycrds_f200.match_to_catalog_sky(skycrds_f200, 2)
 
 # select only sources close enough in magnitude
-magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag212[idx]) < 0.5
+magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag200[idx]) < 0.5
 
 # ignore sources where there are multiple JWST sources close to each other (confusion)
 not_closesel = (closest_sep > 0.5*u.arcsec)
@@ -44,7 +68,7 @@ reference_coordinates = vvv_reference_coordinates[sidx][sel]
 print(f"There are {len(reference_coordinates)} reference coordinates out of {len(reftb_vvv)} in the reference catalog.")
 
 # write out downselected version so we can overplot it in CARTA
-reftb_vvv[sidx][sel].write('/orange/adamginsburg/jwst/brick/catalogs/jw02221-o001_t001_nircam_clear-f212n-merged_cat_20240301_downsel.fits',
+reftb_vvv[sidx][sel].write('/orange/adamginsburg/jwst/brick/catalogs/jw01182-o004_t001_nircam_clear-f200w-merged_cat_20240302_downsel.fits',
                        overwrite=True)
 
 # set 'flux' so we can compute ratio below.  Is arbitrary, but let's use VISTA values anyway
@@ -55,13 +79,13 @@ reftb_vvv['flux'] = (10**(reftb_vvv['Ksmag3'] / 2.5) + 659.10)*u.Jy
 reftb = reftb_vvv[sidx][sel]
 
 
-if True:
+if False:
 
     rows = []
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        for filtername in 'F466N,F405N,F410M,F212N,F182M,F187N'.split(","):
+        for filtername in 'F115W,F200W,F356W,F444W'.split(","):
             for fn in sorted(glob.glob(f"{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits")):
                 ab = 'a' if 'nrca' in fn else 'b'
                 module = f'nrc{ab}long' if 'long' in fn else f'nrc{ab}' + fn.split('nrc')[1][1]
@@ -148,7 +172,7 @@ if True:
                     total_dra = total_dra + med_dra.to(u.arcsec)
                     total_ddec = total_ddec + med_ddec.to(u.arcsec)
 
-                    ww.wcs.crval = ww.wcs.crval + [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
+                    ww.wcs.crval = ww.wcs.crval - [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
 
 
                 print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
@@ -177,7 +201,7 @@ if True:
 
     tbl = Table(rows)
     # don't necessarily want to write this: if the manual alignment has been run already, the offsets will all be zero
-    tbl.write("offsets/Offsets_JWST_Brick2221_VVV.csv", format='ascii.csv', overwrite=True)
+    tbl.write("offsets/Offsets_JWST_Brick1182_VVV.csv", format='ascii.csv', overwrite=True)
 
     # TODO: aggregate with weighted mean
 
@@ -190,4 +214,5 @@ if True:
     agg['ddec_rms'] = aggstd['ddec']
     agg['dra_med'] = aggmed['dra']
     agg['ddec_med'] = aggmed['ddec']
-    agg.write("offsets/Offsets_JWST_Brick2221_VVV_average.csv", format='ascii.csv', overwrite=True)
+    agg.write("offsets/Offsets_JWST_Brick1182_VVV_average.csv", format='ascii.csv', overwrite=True)
+

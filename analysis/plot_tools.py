@@ -953,6 +953,7 @@ def regzoomplot(reg, fontsize=14, axes=None,
 
 
 def starzoom_cals(reference_coordinates, filtername='f212n', module='nrca1',
+                  project='2221', visit='001', field='001',
                   suffix='cal', star_index=0, cutout_size=2*u.arcsec):
     """
     Test the pointing of the cal (or other) images using their built-in GWCSes
@@ -964,7 +965,7 @@ def starzoom_cals(reference_coordinates, filtername='f212n', module='nrca1',
     import glob
     import os
 
-    globstr = f"{filtername.upper()}/pipeline/*{module}*_{suffix}.fits"
+    globstr = f"{filtername.upper()}/pipeline/*{project}{visit}{field}*{module}*_{suffix}.fits"
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
