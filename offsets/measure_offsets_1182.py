@@ -13,8 +13,8 @@ import os
 
 project_id = '01182'
 field = '004'
-obsid = '001'
-visit = '001'
+obsid = '004'
+visit = '002'
 
 #reftb = Table.read("catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv")
 #reference_coordinates = reftb['skycoord']
@@ -79,14 +79,18 @@ reftb_vvv['flux'] = (10**(reftb_vvv['Ksmag3'] / 2.5) + 659.10)*u.Jy
 reftb = reftb_vvv[sidx][sel]
 
 
-if False:
+if True:
 
     rows = []
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         for filtername in 'F115W,F200W,F356W,F444W'.split(","):
-            for fn in sorted(glob.glob(f"{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits")):
+            globstr = f"{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
+            flist = glob.glob(globstr)
+            if len(flist) == 0:
+                raise ValueError(f"No matches to {globstr}")
+            for fn in sorted(flist):
                 ab = 'a' if 'nrca' in fn else 'b'
                 module = f'nrc{ab}long' if 'long' in fn else f'nrc{ab}' + fn.split('nrc')[1][1]
                 expno = fn.split("_")[2]
