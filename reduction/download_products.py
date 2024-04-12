@@ -13,14 +13,14 @@ basepath = '/orange/adamginsburg/jwst/brick/cache'
 Observations.cache_location = basepath
 
 obs_table = Observations.query_criteria(
-    calib_level=3, 
+    calib_level=3,
     proposal_id="2221",
     proposal_pi="Ginsburg*",
     )
-obs_table = Observations.query_criteria(
-    calib_level=3, 
-    proposal_id="1182",
-    )
+# obs_table = Observations.query_criteria(
+#     calib_level=3,
+#     proposal_id="1182",
+#     )
 # for finding filters : obs_table[np.char.find(obs_table['obs_id'], filtername.lower()) >= 0]
 
 #data_products_by_obs = Observations.get_product_list(obs_table[obs_table['calib_level'] == 3])
