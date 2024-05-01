@@ -62,6 +62,7 @@ magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag200[idx]) < 0.5
 not_closesel = (closest_sep > 0.5*u.arcsec)
 
 sel = (not_closesel[idx]) & magmatch
+print(f"Selected {sel.sum()} reference source matching between VVV & F200W")
 
 # downselect to only the coordinates we expect to have good matches
 reference_coordinates = vvv_reference_coordinates[sidx][sel]
@@ -77,6 +78,7 @@ reftb_vvv['flux'] = (10**(reftb_vvv['Ksmag3'] / 2.5) + 659.10)*u.Jy
 
 # for use below, needs to match reference_coordinates
 reftb = reftb_vvv[sidx][sel]
+print(f"reftb has length {len(reftb)}")
 
 
 if True:
@@ -85,7 +87,8 @@ if True:
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        for filtername in 'F115W,F200W,F356W,F444W'.split(","):
+        for filtername in 'F200W,F356W,F444W,F115W'.split(","):
+            print(f"Working on filter {filtername}")
             globstr = f"{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
             flist = glob.glob(globstr)
             if len(flist) == 0:
@@ -114,17 +117,18 @@ if True:
 
                 skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
 
-                sel = slice(None)
                 max_offset = 0.2*u.arcsec
+                med_dra = 100*u.arcsec
+                med_ddec = 100*u.arcsec
+                threshold = 0.01*u.arcsec
+
+                sel = slice(None)
+
                 idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
                 dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
                 ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
 
-                med_dra = 100*u.arcsec
-                med_ddec = 100*u.arcsec
-                threshold = 0.01*u.arcsec
-                max_offset = 0.5*u.arcsec
 
                 total_dra = 0*u.arcsec
                 total_ddec = 0*u.arcsec
@@ -138,16 +142,19 @@ if True:
 
                     ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
                     reject = np.zeros(ratio.size, dtype='bool')
-                    for ii in range(4):
-                        madstd = stats.mad_std(ratio[~reject])
-                        med = np.median(ratio[~reject])
-                        reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
-                        ratio = 1 / ratio
-                        madstd = stats.mad_std(ratio[~reject])
-                        med = np.median(ratio[~reject])
-                        reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
-                        ratio = 1 / ratio
-
+                    ii=0
+                    # rejecting based on flux may have failed?
+                    #if filtername == 'F200W':
+                    #    # for the other filters, we don't expect any agreement at all
+                    #    for ii in range(4):
+                    #        madstd = stats.mad_std(ratio[~reject])
+                    #        med = np.median(ratio[~reject])
+                    #        reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
+                    #        ratio = 1 / ratio
+                    #        madstd = stats.mad_std(ratio[~reject])
+                    #        med = np.median(ratio[~reject])
+                    #        reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
+                    #        ratio = 1 / ratio
 
 
                     #idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
@@ -164,6 +171,9 @@ if True:
                     std_ddec = stats.mad_std(ddec)
 
                     iteration += 1
+                    if iteration > 50:
+                        raise ValueError("Iteration is not converging")
+
 
                     if np.isnan(med_dra):
                         print(f'len(refcoords) = {len(reference_coordinates)}')
@@ -177,6 +187,7 @@ if True:
                     total_ddec = total_ddec + med_ddec.to(u.arcsec)
 
                     ww.wcs.crval = ww.wcs.crval - [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
+                    print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
 
 
                 print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")

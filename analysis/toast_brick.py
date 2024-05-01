@@ -57,9 +57,14 @@ def toast(imfn, targetdir='/orange/adamginsburg/web/public/jwst/brick_2221/'):
     bui.apply_wcs_info(wcsfk5, width=width, height=height)
     bui.imgset.thumbnail_url = bui.imgset.url.format(0, 0, 0, 0)
     bui.imgset.name = os.path.basename(targetdir)
+    bui.imgset.set_position_from_wcs(wcsfk5, width=width, height=height,
+                                     place=bui.place, fov_factor=2.5)
+    # maybe this is only for Brick?
+    bui.imgset.bottoms_up = False
+    bui.imgset.rotation_deg = 90
 
-    ctr = SkyCoord(0.1189 * u.deg, -0.05505 * u.deg, frame='galactic').fk5
-    ctr = wcs.pixel_to_world(tim.shape[1], tim.shape[0])
+    #ctr = SkyCoord(0.1189 * u.deg, -0.05505 * u.deg, frame='galactic').fk5
+    ctr = wcs.pixel_to_world(tim.shape[1]/2, tim.shape[0]/2)
     bui.place.ra_hr = ctr.ra.hourangle
     bui.place.dec_deg = ctr.dec.deg
     bui.place.zoom_level = 4
