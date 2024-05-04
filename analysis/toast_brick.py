@@ -24,7 +24,11 @@ from astropy.wcs.utils import fit_wcs_from_points
 from aces.visualization.toast_aces import fits_to_avmpng
 
 
-def toast(imfn, targetdir='/orange/adamginsburg/web/public/jwst/brick_2221/'):
+def toast(imfn, targetdir=None):
+
+    if targetdir is None:
+        tdr = os.path.basename(imfn).replace(".png", "")
+        targetdir = f'/orange/adamginsburg/web/public/jwst/brick_2221/toasts/{tdr}'
 
     try:
         img = PIL.Image.open(imfn)
@@ -41,7 +45,8 @@ def toast(imfn, targetdir='/orange/adamginsburg/web/public/jwst/brick_2221/'):
 
     bui = builder.Builder(pyramid.PyramidIO(targetdir))
     stud = bui.prepare_study_tiling(tim)
-    if False:  # always redo
+    #if not os.path.exists(f'{targetdir}/0/0/0_0.png'):
+    if True:  # always redo
         bui.execute_study_tiling(tim, stud)
         merge.cascade_images(
             bui.pio, start=7, merger=merge.averaging_merger, cli_progress=True
@@ -57,7 +62,7 @@ def toast(imfn, targetdir='/orange/adamginsburg/web/public/jwst/brick_2221/'):
     bui.apply_wcs_info(wcsfk5, width=width, height=height)
     bui.imgset.thumbnail_url = bui.imgset.url.format(0, 0, 0, 0)
     bui.imgset.name = os.path.basename(targetdir)
-    bui.imgset.set_position_from_wcs(wcsfk5, width=width, height=height,
+    bui.imgset.set_position_from_wcs(wcsfk5.to_header(), width=width, height=height,
                                      place=bui.place, fov_factor=2.5)
     # maybe this is only for Brick?
     bui.imgset.bottoms_up = False
@@ -93,6 +98,7 @@ def make_all_indexes():
         except Exception as ex:
             print(f'{imfn} failed')
             print(ex)
+            raise
             continue
         if ind is not None:
             indexes.append(ind)
