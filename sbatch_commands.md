@@ -7,6 +7,8 @@
 # note that these use ipython; if you add -- flags for the pipeline, you need -- before the --flag stuff
 sbatch --job-name=webb-long-pipeline --output=webb-long-pipeline-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=128gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-LONG.py"
 sbatch --job-name=webb-short-pipeline --output=web-short-pipeline-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineRerunNIRCAM-SHORT.py"
+
+sbatch --job-name=webb-miri-pipeline --output=web-miri-pipeline-%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/ipython /blue/adamginsburg/adamginsburg/jwst/brick/reduction/PipelineMIRI.py"
 ```
 
 Modular pipeline runs:
