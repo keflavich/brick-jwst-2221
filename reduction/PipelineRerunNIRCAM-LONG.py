@@ -91,7 +91,7 @@ fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
 # Image2Pipeline.step_defs['resample'] = pre_resample(Image2Pipeline.resample)
 
 def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
-         field='001', proposal_id='2221', skip_step1and2=False):
+         field='001', proposal_id='2221', skip_step1and2=False, use_average=True):
     """
     skip_step1and2 will not re-fit the ramps to produce the _cal images.  This
     can save time if you just want to redo the tweakreg steps but already have
@@ -307,14 +307,19 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
 
-                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+                    fix_alignment(outname, proposal_id=proposal_id,
+                                  module=module, field=field,
+                                  basepath=basepath, filtername=filtername,
+                                  use_average=use_average)
             else: # make align files
                 fname = member['expname']
                 assert fname.endswith('_cal.fits')
                 member['expname'] = fname.replace("_cal.fits", "_align.fits")
                 shutil.copy(fname, member['expname'])
 
-                fix_alignment(member['expname'], proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+                fix_alignment(member['expname'], proposal_id=proposal_id,
+                              module=module, field=field, basepath=basepath,
+                              filtername=filtername, use_average=use_average)
 
         asn_file_each = asn_file.replace("_asn.json", f"_{module}_asn.json")
         with open(asn_file_each, 'w') as fh:
@@ -444,14 +449,14 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                     member['expname'] = outname
 
                     # re-do alignment if destreak file doesn't exist at the earlier step above
-                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+                    fix_alignment(outname, proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername, use_average=use_average)
             else: # make align files
                 fname = member['expname']
                 assert fname.endswith('_cal.fits')
                 member['expname'] = fname.replace("_cal.fits", "_align.fits")
                 shutil.copy(fname, member['expname'])
 
-                fix_alignment(member['expname'], proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername)
+                fix_alignment(member['expname'], proposal_id=proposal_id, module=module, field=field, basepath=basepath, filtername=filtername, use_average=use_average)
 
         asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged'
         asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
