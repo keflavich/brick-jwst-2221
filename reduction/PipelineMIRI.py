@@ -13,7 +13,7 @@ import stdatamodels
 try:
     from asdf.fits_embed import AsdfInFits
 except ImportError:
-    from stdatamodels.asdf_in_fits import AsdfInFits
+    from stdatamodels import asdf_in_fits as AsdfInFits
 from astropy import log
 from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
