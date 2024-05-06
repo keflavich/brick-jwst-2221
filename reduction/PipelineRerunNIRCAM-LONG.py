@@ -10,7 +10,10 @@ import json
 import requests
 import asdf # requires asdf < 3.0 (there is no replacement for this functionality w/o a major pattern change https://github.com/asdf-format/asdf/issues/1680)
 import stdatamodels
-from asdf.fits_embed import AsdfInFits
+try:
+    from asdf.fits_embed import AsdfInFits
+except ImportError:
+    from stdatamodels.asdf_in_fits import AsdfInFits
 from astropy import log
 from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
