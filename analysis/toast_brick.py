@@ -36,10 +36,18 @@ def toast(imfn, targetdir=None):
         wcs = avm.to_wcs()
     except NoXMPPacketFound:
         return None
-    wcsfk5 = wcs
 
     tim = timage.Image.from_pil(img)
     data = np.array(img)
+
+    if 'GAL' in wcs.wcs.ctype[0]:
+        points = np.mgrid[0:data.shape[1]:1000, 0:data.shape[0]:1000]
+        points = points.reshape(2, np.prod(points.shape[1:])).T
+        wpoints = wcs.pixel_to_world(points[:, 0], points[:, 1])
+
+        wcsfk5 = fit_wcs_from_points((points[:, 0], points[:, 1]), wpoints.fk5)
+    else:
+        wcsfk5 = wcs
 
     height, width, _ = data.shape
 
