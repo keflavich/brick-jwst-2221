@@ -186,9 +186,9 @@ def main(filtername, Observations=None, regionname='brick',
         mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_miri_pars-tweakregstep_0003.rmap')
         print(f"Mapping: {mapping.todict()['selections']}")
         print(f"Filtername: {filtername}")
-        filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
+        filter_match = [x for x in mapping.todict()['selections'] if filtername.upper() in x]
         print(f"Filter_match: {filter_match} n={len(filter_match)}")
-        tweakreg_asdf_filename = filter_match[0][4]
+        tweakreg_asdf_filename = filter_match[0][3]
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
         # may not be needed for MIRI
@@ -586,7 +586,7 @@ if __name__ == "__main__":
                       default='F2550W',
                       help="filter name list", metavar="filternames")
     parser.add_option("-d", "--field", dest="field",
-                    default='001,002',
+                    default='002',
                     help="list of target fields", metavar="field")
     parser.add_option("-s", "--skip_step1and2", dest="skip_step1and2",
                       default=False,
