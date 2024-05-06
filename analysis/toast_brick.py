@@ -45,8 +45,8 @@ def toast(imfn, targetdir=None):
 
     bui = builder.Builder(pyramid.PyramidIO(targetdir))
     stud = bui.prepare_study_tiling(tim)
-    #if not os.path.exists(f'{targetdir}/0/0/0_0.png'):
-    if True:  # always redo
+    if not os.path.exists(f'{targetdir}/0/0/0_0.png'):
+    #if True:  # always redo
         bui.execute_study_tiling(tim, stud)
         merge.cascade_images(
             bui.pio, start=7, merger=merge.averaging_merger, cli_progress=True
