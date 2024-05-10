@@ -199,11 +199,6 @@ if True:
                         std_dra = stats.mad_std(dra)
                         std_ddec = stats.mad_std(ddec)
 
-                        iteration += 1
-                        if iteration > 50:
-                            raise ValueError("Iteration is not converging")
-
-
                         if np.isnan(med_dra):
                             print(f'len(refcoords) = {len(reference_coordinates)}')
                             print(f'len(cat) = {len(cat)}')
@@ -217,6 +212,12 @@ if True:
 
                         ww.wcs.crval = ww.wcs.crval + [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
                         print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
+
+                        iteration += 1
+                        if iteration > 50:
+                            break # there is at least one case in which we converged to an oscillator
+                            raise ValueError("Iteration is not converging")
+
 
 
                     print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
@@ -250,7 +251,7 @@ if True:
 
     # TODO: aggregate with weighted mean
 
-    gr = tbl.group_by(['Filter', 'Module'])
+    gr = tbl.group_by(['Filter', 'Module', 'Visit'])
     agg = gr.groups.aggregate(np.mean)
     del agg['Exposure']
     aggstd = gr.groups.aggregate(np.std)

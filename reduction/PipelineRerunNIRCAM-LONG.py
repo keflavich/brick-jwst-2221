@@ -590,6 +590,8 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
                      (offsets_tbl['Module'] == thismodule.strip('1234'))) &
                     (offsets_tbl['Filter'] == filtername)
                     )
+            if 'Visit' in offsets_tbl.colnames:
+                match &= (offsets_tbl['Visit'] == visit)
             row = offsets_tbl[match]
             print(f'Running manual align for merged for {filtername} {row["Module"][0]}.')
         else:

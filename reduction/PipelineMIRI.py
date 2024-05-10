@@ -314,12 +314,15 @@ def main(filtername, Observations=None, regionname='brick',
 
         print(f"Realigning to VVV (filter={filtername})")
         realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-vvv.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri-{filtername.lower()}_i2d.fits',
+        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_i2d.fits',
                     realigned_vvv_filename)
+        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o002_t001_miri_f2550w_cat.ecsv'
         print(f"Realigned to VVV filename: {realigned_vvv_filename}")
         realigned = realign_to_vvv(filtername=filtername.lower(),
                                    fov_regname=fov_regname[regionname],
+                                   module='miri',
                                    basepath=basepath,
+                                   catfile=catfile,
                                    fieldnumber=field, proposal_id=proposal_id,
                                    imfile=realigned_vvv_filename,
                                    ksmag_limit=11,
@@ -339,6 +342,7 @@ def main(filtername, Observations=None, regionname='brick',
                                        filtername=filtername.lower(),
                                        basepath=basepath,
                                        fieldnumber=field,
+                                       catfile=catfile,
                                        mag_limit=20, proposal_id=proposal_id,
                                        max_offset=0.4*u.arcsec,
                                        imfile=realigned_refcat_filename,
@@ -346,104 +350,6 @@ def main(filtername, Observations=None, regionname='brick',
                                        )
         print(f"Done realigning to refcat (filtername={filtername})")
 
-        print(f"Removing saturated stars.  cwd={os.getcwd()}")
-        try:
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_i2d.fits')
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-vvv.fits')
-        except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
-            print("Failed to run remove_saturated_stars with failure {ex}")
-
-        # try merging all frames & modules
-        print(f"Working on merged reduction (both modules):  asn_file={asn_file}")
-
-        # Load asn_data for both modules
-        with open(asn_file) as f_obj:
-            asn_data = json.load(f_obj)
-
-
-        asn_data['products'][0]['name'] = f'jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}-merged'
-        asn_file_merged = asn_file.replace("_asn.json", f"_merged_asn.json")
-        with open(asn_file_merged, 'w') as fh:
-            json.dump(asn_data, fh)
-
-        # don't re-fit to VVV - it's not accurate enough with the JWST-derived
-        # catalogs.  We needed to use our own much more extensive cataloging to
-        # beat down the noise enough to make this approach viable
-        if False: # filtername.lower() == 'f405n':
-            vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername}_vvvcat.ecsv')
-            print(f"Loaded VVV catalog {vvvdr2fn}")
-            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], fieldnumber=field)
-            tweakreg_parameters['abs_refcat'] = abs_refcat = vvvdr2fn
-            tweakreg_parameters['abs_searchrad'] = 1
-            reftbl = Table.read(abs_refcat)
-            assert 'skycoord' in reftbl.colnames
-        else:
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
-            reftbl = Table.read(abs_refcat)
-            assert 'skycoord' in reftbl.colnames
-            reftblversion = reftbl.meta['VERSION']
-
-            # truncate to top 10,000 sources
-            reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv'
-
-            tweakreg_parameters['abs_searchrad'] = 0.4
-            tweakreg_parameters['searchrad'] = 0.05
-            print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
-
-        tweakreg_parameters.update({'abs_refcat': abs_refcat,})
-
-        print("Running Image3Pipeline with tweakreg (merged)")
-        calwebb_image3.Image3Pipeline.call(
-            asn_file_merged,
-            steps={'tweakreg': tweakreg_parameters,},
-            #steps={'tweakreg': False,}
-            output_dir=output_dir,
-            save_results=True)
-        print(f"DONE running Image3Pipeline {asn_file_merged}.  This should have produced file {asn_data['products'][0]['name']}_i2d.fits")
-
-        print("After tweakreg step, checking WCS headers:")
-        for member in asn_data['products'][0]['members']:
-            check_wcs(member['expname'])
-        check_wcs(asn_data['products'][0]['name'] + "_i2d.fits")
-
-        print(f"Realigning to VVV ")# with raoffset={raoffset}, decoffset={decoffset}")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-vvv.fits'
-        print(f"Realigned to VVV filename: {realigned_vvv_filename}")
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_i2d.fits',
-                    realigned_vvv_filename)
-        realigned = realign_to_vvv(filtername=filtername.lower(),
-                                   fov_regname=fov_regname[regionname], basepath=basepath,
-                                   fieldnumber=field, proposal_id=proposal_id,
-                                   imfile=realigned_vvv_filename,
-                                   max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
-                                   ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
-                                   mag_limit=18 if filtername.lower() == 'f115w' else 15,
-                                   #raoffset=raoffset, decoffset=decoffset
-                                   )
-
-        print(f"Realigning to refcat")# with raoffset={raoffset}, decoffset={decoffset}")
-        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-refcat.fits'
-        print(f"Realigned refcat filename: {realigned_refcat_filename}")
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_i2d.fits',
-                    realigned_refcat_filename)
-        realigned = realign_to_catalog(reftbl['skycoord'],
-                                       filtername=filtername.lower(),
-                                       basepath=basepath,
-                                       fieldnumber=field,
-                                       max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
-                                       mag_limit=20,
-                                       proposal_id=proposal_id,
-                                       imfile=realigned_refcat_filename,
-                                       #raoffset=raoffset, decoffset=decoffset
-                                       )
-
-        print(f"Removing saturated stars.  cwd={os.getcwd()}")
-        try:
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}-merged_i2d.fits')
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-vvv.fits')
-        except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
-            print("Failed to run remove_saturated_stars with failure {ex}")
 
     globals().update(locals())
     return locals()
@@ -516,11 +422,6 @@ def fix_alignment(fn, proposal_id=None, field=None, basepath=None, filtername=No
         else:
             decshift = 0*u.arcsec
             rashift = 0*u.arcsec
-        if filtername.upper() in ('F212N', 'F187N', 'F182M'):
-            print('Short wavelength offset correction.')
-            if 'nrca' in thismodule.lower():
-                decshift += 0.1*u.arcsec
-                rashift += -0.23*u.arcsec
     else:
         rashift = 0*u.arsec
         decshift = 0*u.arsec
