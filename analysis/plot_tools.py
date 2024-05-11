@@ -24,7 +24,10 @@ import matplotlib as mpl
 from matplotlib.path import Path
 import matplotlib.patches as patches
 
-from paths import basepath
+try:
+    from paths import basepath
+except ImportError:
+    basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 import sys
 sys.path.append(f'{basepath}/analysis/')
 sys.path.append(f'{basepath}/reduction/')
