@@ -103,7 +103,7 @@ sbatch --job-name=webb-cat-long --output=web-cat-long%j.log  --account=adamginsb
 # short-> long, doesn't work sbatch --job-name=webb-cat-short --output=web-cat-short%j.log --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py"
 ```
 
-Merge the catalogs (this means merge different filters - this doesn't merge nrca+nrcb):
+Merge (crossmatch) the catalogs (this means merge different filters - this doesn't merge nrca+nrcb):
 ```
 sbatch --job-name=webb-cat-merge --output=web-cat-merge%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py"
 ```

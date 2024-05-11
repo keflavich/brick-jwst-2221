@@ -44,8 +44,8 @@ obs_filters = {
                     '2221': filternames,
                            },
                }
-# Using the 'brick' keyword here makes it work for now, need to figure out how to 
-# refactor it in cases where there are more filters available for other targets! 
+# Using the 'brick' keyword here makes it work for now, need to figure out how to
+# refactor it in cases where there are more filters available for other targets!
 #filter_to_project = {vv: key for key, val in obs_filters.items() for vv in val}
 filter_to_project = {vv: key for key, val in obs_filters['brick'].items() for vv in val}
 # need to refactor this somehow for cloudc
@@ -55,7 +55,7 @@ filter_to_project = {vv: key for key, val in obs_filters['brick'].items() for vv
 
 project_obsnum = {
                   'brick': {
-                      '2221': '001', 
+                      '2221': '001',
                       '1182': '004',
                             },
                   'cloudc': {
@@ -546,7 +546,7 @@ def main():
     print("Starting main")
     import time
     t0 = time.time()
-    
+
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-m", "--modules", dest="modules",
@@ -562,7 +562,7 @@ def main():
     print(options)
 
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
-    
+
     for module in modules:
         for desat in (False, True):
             for bgsub in (False, True):
@@ -572,13 +572,13 @@ def main():
                         print()
                         print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}. ')
                         try:
-                            merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf, 
+                            merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                               fitpsf=fitpsf, target=target, basepath=basepath)
                         except Exception as ex:
                             print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
                         try:
                             print(f'crowdsource unweighted {module}', flush=True)
-                            merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf, 
+                            merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf,
                                               fitpsf=fitpsf, target=target, basepath=basepath)
                         except NotImplementedError:
                             continue
@@ -588,7 +588,7 @@ def main():
                         try:
                             for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
                                 print(f'crowdsource {suffix} {module}')
-                                merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf, 
+                                merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
                                                   fitpsf=fitpsf, target=target, basepath=basepath)
                         except Exception as ex:
                             print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
@@ -597,13 +597,13 @@ def main():
                         print()
                         try:
                             print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}', flush=True)
-                            merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf, 
+                            merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                           fitpsf=fitpsf, target=target, basepath=basepath)
                         except Exception as ex:
                             print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                         try:
                             print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}')
-                            merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf, 
+                            merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                           fitpsf=fitpsf, target=target, basepath=basepath)
                         except Exception as ex:
                             print(f"Exception: {ex}, {type(ex)}, {str(ex)}")

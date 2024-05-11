@@ -16,7 +16,7 @@ from pyavm.exceptions import NoXMPPacketFound
 import glob
 
 from toasty import study, image as timage, pyramid, builder, merge
-from wwt_data_formats import write_xml_doc, folder
+from wwt_data_formats import write_xml_doc, folder, place, imageset
 from astropy.coordinates import SkyCoord
 
 from astropy.wcs.utils import fit_wcs_from_points
@@ -158,17 +158,17 @@ def make_place_notoast(fn):
     url = fn.replace("/orange/adamginsburg/web/public/",
                      "https://data.rc.ufl.edu/pub/adamginsburg/")
 
-    img = Image.open(imfn)
+    img = PIL.Image.open(imfn)
     img.thumbnail((100, 100))
     img.save(imfn.replace(".png", "_thumbnail.png"))
-    img = Image.open(imfn)
+    img = PIL.Image.open(imfn)
 
     avm = pyavm.AVM.from_image(imfn)
     ww = avm.to_wcs()
     height, width, _ = np.array(img).shape
 
     pl = place.Place()
-    pl.name = name
+    pl.name = os.path.splitext(os.path.basename(imfn))[0]
     pl.thumbnail = f'{url.replace(".png", "_thumbnail.png")}'
     pl.constellation = 'SAGITTARIUS'
     pl.data_set_type = 'SKY'
@@ -219,10 +219,25 @@ def make_joint_index_notoast():
     imlist = (glob.glob("/orange/adamginsburg/web/public/jwst/brick_2221/*png") +
               glob.glob("/orange/adamginsburg/web/public/jwst/brick_2221/cloudc/*png"))
     assert "/orange/adamginsburg/web/public/jwst/brick_2221/BrickJWST_212-187-182_RGB_unrotated.png" in imlist
-    print(f"imlist is {imlist}")
+    #print(f"imlist is {imlist}")
     for imfn in imlist:
-        place = make_place_notoast(imfn)
-        fld.children.append(place)
+        if 'thumbnail' in imfn:
+            continue
+        try:
+            avm = pyavm.AVM.from_image(imfn)
+            avm.to_wcs()
+            print(imfn, 'success')
+        except Exception as ex:
+            print(imfn, ex)
+            continue
+
+
+        try:
+            place = make_place_notoast(imfn)
+            fld.children.append(place)
+        except Exception as ex:
+            print(ex)
+            continue
 
     with open('/orange/adamginsburg/web/public/jwst/brick_2221/Brick_NoToast.wtml', 'w') as fh:
         write_xml_doc(fld.to_xml(), dest_stream=fh)
@@ -238,6 +253,11 @@ def main():
     print(indexes)
 
     print("Making joint indexes")
+    make_joint_index(indexes)
+
+
+if __name__ == "__main__":
+    main()
     make_joint_index(indexes)
 
 
