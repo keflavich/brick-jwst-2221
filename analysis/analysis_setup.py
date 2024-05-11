@@ -42,7 +42,10 @@ pl.rcParams['figure.dpi'] = 100
 pl.rcParams['font.size'] = 16
 
 
-from paths import basepath
+try:
+    from paths import basepath
+except ImportError:
+    basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
 sys.path.append(f'{basepath}/analysis/')
 sys.path.append(f'{basepath}/reduction/')
