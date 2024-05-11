@@ -211,6 +211,7 @@ def main(basetable, ww):
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+    print("Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_401b.sum()}.")
 
     blue_BrA_and_PaA = (oksep & ~any_saturated &
                         (basetable['flux_f405n'] > basetable['flux_f410m']) &
@@ -229,6 +230,12 @@ def main(basetable, ww):
                         basetable['good_f187n'] &
                         basetable['good_f182m']
                        )
+    veryblue_BrA_and_PaA = (blue_BrA_and_PaA &
+                     ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
+                      (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -0.5) &
+                     ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) +
+                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.5)
+                           )
                         #& (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
     detected = ((~basetable['mag_ab_f405n'].mask) &
                 (~basetable['mag_ab_f410m'].mask) &
@@ -240,6 +247,7 @@ def main(basetable, ww):
                          (~basetable['mag_ab_f212n'].mask) &
                          (~basetable['mag_ab_f187n'].mask) &
                          (~basetable['mag_ab_f182m'].mask))
+    print("Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
     print(f"Strongly blue [410-466] sources: {blue_410_466.sum()}")
     print(f"Somewhat blue [410-466] sources: {slightly_blue_410_466.sum()}")
     print(oklong.sum(), blue_410_466.sum(), slightly_blue_410_466.sum(), blue_405_410.sum(), blue_405_410b.sum(), blue_BrA_and_PaA.sum(), detected.sum(), blue_BrA_and_PaA.sum() / detected.sum())
@@ -520,11 +528,11 @@ if __name__ == "__main__":
     # result = main(basetable_nrca, ww=ww)
     # globals().update({key+"_a": val for key, val in result.items()})
 
-    print()
-    print("NRCB")
-    from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
-    result = main(basetable_nrcb, ww=ww)
-    globals().update({key+"_b": val for key, val in result.items()})
+    #print()
+    #print("NRCB")
+    #from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
+    #result = main(basetable_nrcb, ww=ww)
+    #globals().update({key+"_b": val for key, val in result.items()})
 
     print()
     print("merged-reproject")

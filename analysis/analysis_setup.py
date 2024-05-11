@@ -115,6 +115,6 @@ basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged
 def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
-for module in ('nrca', 'nrcb', 'merged', 'merged-reproject'):
+for module in ('merged', 'merged-reproject'):
     fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
     print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
