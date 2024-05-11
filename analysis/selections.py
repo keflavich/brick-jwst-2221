@@ -45,7 +45,7 @@ from astropy import units as u
 from analysis_setup import (basepath, reg, regzoom, distance_modulus,
                             filternames, basetable, plot_tools, basetable,
                             basetable_merged_reproject,
-                            basetable_merged, basetable_nrca, basetable_nrcb,
+                            basetable_merged, #basetable_nrca, basetable_nrcb,
                             basetable_merged_reproject_dao_iter_bg_epsf ,
                             basetable_merged_reproject_dao_iter_epsf,
                             basetable_merged_reproject_dao_iter,
@@ -514,11 +514,11 @@ if __name__ == "__main__":
     print(f"Selecting module {options.module}")
 
     # save nrca and nrcb result tables
-    print()
-    print("NRCA")
-    from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
-    result = main(basetable_nrca, ww=ww)
-    globals().update({key+"_a": val for key, val in result.items()})
+    # print()
+    # print("NRCA")
+    # from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
+    # result = main(basetable_nrca, ww=ww)
+    # globals().update({key+"_a": val for key, val in result.items()})
 
     print()
     print("NRCB")
@@ -538,19 +538,19 @@ if __name__ == "__main__":
     result = main(basetable_merged, ww=ww)
     globals().update({key+"_m": val for key, val in result.items()})
 
-    if options.module == 'nrca':
-        from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
-        result = main(basetable_nrca, ww=ww)
-        globals().update(result)
-        basetable = basetable_nrca
-        print("Loaded nrca")
-    elif options.module == 'nrcb':
-        from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
-        result = main(basetable_nrcb, ww=ww)
-        globals().update(result)
-        basetable = basetable_nrcb
-        print("Loaded nrcb")
-    elif options.module == 'merged':
+    #if options.module == 'nrca':
+    #    from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
+    #    result = main(basetable_nrca, ww=ww)
+    #    globals().update(result)
+    #    basetable = basetable_nrca
+    #    print("Loaded nrca")
+    #elif options.module == 'nrcb':
+    #    from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
+    #    result = main(basetable_nrcb, ww=ww)
+    #    globals().update(result)
+    #    basetable = basetable_nrcb
+    #    print("Loaded nrcb")
+    if options.module == 'merged':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         result = main(basetable_merged, ww=ww)
         globals().update(result)

@@ -32,7 +32,7 @@ os.environ['WEBBPSF_PATH'] = '/orange/adamginsburg/jwst/webbpsf-data/'
 import webbpsf
 from webbpsf.utils import to_griddedpsfmodel
 
-basepath = '/orange/adamginsburg/jwst/brick/'
+from paths import basepath
 
 def get_fwhm(header, instrument_replacement='NIRCam'):
     """

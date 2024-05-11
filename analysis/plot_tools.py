@@ -24,9 +24,13 @@ import matplotlib as mpl
 from matplotlib.path import Path
 import matplotlib.patches as patches
 
+from paths import basepath
+import sys
+sys.path.append(f'{basepath}/analysis/')
+sys.path.append(f'{basepath}/reduction/')
+import filtering
 from filtering import get_fwhm
 
-basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 
 sqgrid = strategies.SquareStrategy()
