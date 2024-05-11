@@ -61,13 +61,13 @@ regzoom = regions.Regions.read(f'{basepath}/regions_/leftside_brick_rezoom.reg')
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
-    fh_nrca = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')
-    ww410_nrca = wcs.WCS(fh_nrca[1].header)
-    ww_nrca = ww410_nrca
+    #fh_nrca = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrca_i2d.fits')
+    #ww410_nrca = wcs.WCS(fh_nrca[1].header)
+    #ww_nrca = ww410_nrca
 
-    fh_nrcb = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrcb_i2d.fits')
-    ww410_nrcb = wcs.WCS(fh_nrcb[1].header)
-    ww_nrcb = ww410_nrcb
+    #fh_nrcb = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-nrcb_i2d.fits')
+    #ww410_nrcb = wcs.WCS(fh_nrcb[1].header)
+    #ww_nrcb = ww410_nrcb
 
     fh_merged = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits')
     ww410_merged = wcs.WCS(fh_merged[1].header)
@@ -77,27 +77,18 @@ with warnings.catch_warnings():
     ww410_merged_reproject = wcs.WCS(fh_merged_reproject[1].header)
     ww_merged_reproject = ww410_merged_reproject
 
-avm_nostars_nrca = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png')
-img_nostars_nrca = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png'))[::-1,:,:]
-wwi_nostars_nrca = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
+avm_nostars = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png')
+img_nostars = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png'))[::-1,:,:]
+wwi_nostars = wcs.WCS(fits.Header.fromstring(avm_nostars.Spatial.FITSheader))
 
-avm_nrca = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_nrca_longwave_stars_rotated.png')
-img_nrca = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_nrca_longwave_stars_rotated.png'))[::-1,:,:]
-wwi_nrca = wcs.WCS(fits.Header.fromstring(avm_nrca.Spatial.FITSheader))
-
-
-# placeholder until we replace this with merge
-avm = avm_nrca
-img = img_nrca
-wwi = wwi_nrca
 
 avm_nostars_merged = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_merged_longwave_narrowband_rotated.png')
 img_nostars_merged = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_merged_longwave_narrowband_rotated.png'))[::-1,:,:]
-wwi_nostars_merged = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
+wwi_nostars_merged = wcs.WCS(fits.Header.fromstring(avm_nostars.Spatial.FITSheader))
 
 avm_short_merged = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_shortwave_RGB_187_212_182.png')
 img_short_merged = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_shortwave_RGB_187_212_182.png'))[::-1,:,:]
-wwi_short_merged = wcs.WCS(fits.Header.fromstring(avm_nostars_nrca.Spatial.FITSheader))
+wwi_short_merged = wcs.WCS(fits.Header.fromstring(avm_nostars.Spatial.FITSheader))
 
 
 # the merged version is the one I *want* to work with, but nrca is the one I've tested most
@@ -111,9 +102,6 @@ basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_
 basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20230827.fits')
 # updated version: new magnitude calcs
 basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20231003.fits')
-
-basetable_nrca = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrca_photometry_tables_merged.fits')
-basetable_nrcb = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrcb_photometry_tables_merged.fits')
 
 basetable_merged_reproject_dao_iter = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged.fits')
 basetable_merged_reproject_dao_iter_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_epsf.fits')
