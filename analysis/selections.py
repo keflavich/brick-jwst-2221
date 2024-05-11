@@ -211,7 +211,7 @@ def main(basetable, ww):
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
-    print("Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_401b.sum()}.")
+    print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_401b.sum()}.")
 
     blue_BrA_and_PaA = (oksep & ~any_saturated &
                         (basetable['flux_f405n'] > basetable['flux_f410m']) &
@@ -247,7 +247,7 @@ def main(basetable, ww):
                          (~basetable['mag_ab_f212n'].mask) &
                          (~basetable['mag_ab_f187n'].mask) &
                          (~basetable['mag_ab_f182m'].mask))
-    print("Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
+    print(f"Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
     print(f"Strongly blue [410-466] sources: {blue_410_466.sum()}")
     print(f"Somewhat blue [410-466] sources: {slightly_blue_410_466.sum()}")
     print(oklong.sum(), blue_410_466.sum(), slightly_blue_410_466.sum(), blue_405_410.sum(), blue_405_410b.sum(), blue_BrA_and_PaA.sum(), detected.sum(), blue_BrA_and_PaA.sum() / detected.sum())
@@ -563,6 +563,12 @@ if __name__ == "__main__":
         result = main(basetable_merged, ww=ww)
         globals().update(result)
         basetable = basetable_merged
+        print("Loaded merged")
+    elif options.module == 'merged1182':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        result = main(basetable_merged1182, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182
         print("Loaded merged")
     elif options.module == 'merged-reproject':
         from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
