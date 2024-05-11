@@ -106,9 +106,9 @@ basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_
 # updated version: new magnitude calcs
 basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20231003.fits')
 
-basetable_merged_reproject_dao_iter = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged.fits')
-basetable_merged_reproject_dao_iter_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_epsf.fits')
-basetable_merged_reproject_dao_iter_bg_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_bgsub_epsf.fits')
+#basetable_merged_reproject_dao_iter = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged.fits')
+#basetable_merged_reproject_dao_iter_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_epsf.fits')
+#basetable_merged_reproject_dao_iter_bg_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_bgsub_epsf.fits')
 
 basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
 

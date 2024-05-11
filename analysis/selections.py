@@ -45,10 +45,12 @@ from astropy import units as u
 from analysis_setup import (basepath, reg, regzoom, distance_modulus,
                             filternames, basetable, plot_tools, basetable,
                             basetable_merged_reproject,
-                            basetable_merged, #basetable_nrca, basetable_nrcb,
-                            basetable_merged_reproject_dao_iter_bg_epsf ,
-                            basetable_merged_reproject_dao_iter_epsf,
-                            basetable_merged_reproject_dao_iter,
+                            basetable_merged,
+                            basetable_merged1182,
+                            #basetable_nrca, basetable_nrcb,
+                            #basetable_merged_reproject_dao_iter_bg_epsf ,
+                            #basetable_merged_reproject_dao_iter_epsf,
+                            #basetable_merged_reproject_dao_iter,
                             )
 from plot_tools import regzoomplot, starzoom
 
@@ -169,6 +171,9 @@ def main(basetable, ww):
     filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint'])-abconv.value
     zeropoint_offset_410_466 = filtconv410-filtconv466
     print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
+    # May 11, 2024: the new versions of the catalogs don't have this magnitude offset error
+    # so this should be gone now, right?
+    zeropoint_offset_410_466 = 0
 
     slightly_blue_410_466 =  (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
@@ -211,7 +216,7 @@ def main(basetable, ww):
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
-    print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_401b.sum()}.")
+    print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_410b.sum()}.")
 
     blue_BrA_and_PaA = (oksep & ~any_saturated &
                         (basetable['flux_f405n'] > basetable['flux_f410m']) &
@@ -248,8 +253,11 @@ def main(basetable, ww):
                          (~basetable['mag_ab_f187n'].mask) &
                          (~basetable['mag_ab_f182m'].mask))
     print(f"Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
-    print(f"Strongly blue [410-466] sources: {blue_410_466.sum()}")
-    print(f"Somewhat blue [410-466] sources: {slightly_blue_410_466.sum()}")
+    print(f"Pretty blue [410-466] sources: {blue_410_466.sum()}")
+    print(f"Pretty blue [410m405-466] sources: {blue_410m405_466.sum()}")
+    print(f"Very blue [410-466] sources: {veryblue_410_466.sum()}")
+    print(f"Very blue [410m405-466] sources: {veryblue_410m405_466.sum()}")
+    print(f"Somewhat blue [410m405-466] sources: {slightly_blue_410_466.sum()}")
     print(oklong.sum(), blue_410_466.sum(), slightly_blue_410_466.sum(), blue_405_410.sum(), blue_405_410b.sum(), blue_BrA_and_PaA.sum(), detected.sum(), blue_BrA_and_PaA.sum() / detected.sum())
 
     neg_405m410 = basetable['flux_jy_405m410'] < 0
@@ -558,6 +566,8 @@ if __name__ == "__main__":
     #    globals().update(result)
     #    basetable = basetable_nrcb
     #    print("Loaded nrcb")
+    print()
+    print(options.module)
     if options.module == 'merged':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         result = main(basetable_merged, ww=ww)
@@ -569,7 +579,7 @@ if __name__ == "__main__":
         result = main(basetable_merged1182, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182
-        print("Loaded merged")
+        print("Loaded merged1182")
     elif options.module == 'merged-reproject':
         from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
         result = main(basetable_merged_reproject, ww=ww)
