@@ -42,7 +42,7 @@ pl.rcParams['figure.dpi'] = 100
 pl.rcParams['font.size'] = 16
 
 
-basepath = '/orange/adamginsburg/jwst/brick/'
+from paths import basepath
 
 sys.path.append(f'{basepath}/analysis/')
 sys.path.append(f'{basepath}/reduction/')
@@ -118,6 +118,8 @@ basetable_nrcb = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_nrcb_photome
 basetable_merged_reproject_dao_iter = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged.fits')
 basetable_merged_reproject_dao_iter_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_epsf.fits')
 basetable_merged_reproject_dao_iter_bg_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_bgsub_epsf.fits')
+
+basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
 
 def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
