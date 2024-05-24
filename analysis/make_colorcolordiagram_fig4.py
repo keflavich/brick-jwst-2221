@@ -11,7 +11,7 @@ import selections
 import plot_tools
 from plot_tools import plot_extvec_ccd
 
-from analysis_setup import filternames, basepath, img
+from analysis_setup import filternames, basepath, img_nostars as img
 from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
 from selections import main, basetable_merged_reproject, basetable_merged_reproject  as basetable
 
