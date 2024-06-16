@@ -235,7 +235,10 @@ def save_crowdsource_results(results, ww, filename, suffix,
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
-                     'f410m': 11, 'f405n':11, 'f466n':11},
+                     'f410m': 11, 'f405n':11, 'f466n':11,
+                     'f444w': 11, 'f356w':11,
+                     'f200w':19, 'f115w':19,
+                    },
         crowdsource_default_kwargs={'maxstars': 500000, },
         ):
     from optparse import OptionParser
@@ -246,6 +249,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     parser.add_option("-m", "--modules", dest="modules",
                     default='nrca,nrcb,merged,merged-reproject',
                     help="module list", metavar="modules")
+    parser.add_option("-i", "--field", dest="field",
+                    default='001',
+                    help="target field", metavar="field")
     parser.add_option("-d", "--desaturated", dest="desaturated",
                     default=False,
                     action='store_true',
@@ -307,7 +313,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             epsf_ = "_epsf" if options.epsf else ""
 
             pupil = 'clear'
-            filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_nodestreak_realigned-to-refcat.fits'
+            filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
             if not os.path.exists(filename):
                 filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits'
             if not os.path.exists(filename):
@@ -370,7 +376,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
             #         grid = grid[0]
 
-            with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+            with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
                 api_token = fh.read().strip()
             from astroquery.mast import Mast
 
