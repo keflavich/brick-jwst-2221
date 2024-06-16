@@ -237,7 +237,10 @@ def load_data(filename):
     fh = fits.open(filename)
     im1 = fh
     data = im1[1].data
-    wht = im1['WHT'].data
+    try:
+        wht = im1['WHT'].data
+    except KeyError:
+        wht = None
     err = im1['ERR'].data
     instrument = im1[0].header['INSTRUME']
     telescope = im1[0].header['TELESCOP']
@@ -445,21 +448,21 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
         detector = module # no sub-detectors for long-NIRCAM
         for filtername in filternames:
             if options.each_exposure:
-                filenames = get_filenames(basepath, filtername, proposal_id, field, module, options.each_suffix pupil='clear')
+                filenames = get_filenames(basepath, filtername, proposal_id, field, each_suffix=options.each_suffix, pupil='clear')
                 print(f"Looping over filenames {filenames}")
                 # jw02221001001_07101_00024_nrcblong_destreak_o001_crf.fits
                 for filename in filenames:
                     exposure_id = filename.split("_")[2]
-                    do_photometry_step(options, module, detector, field, basepath, filename, exposurenumber=int(exposure_id))
+                    do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs, exposurenumber=int(exposure_id))
             else:
                 filename = get_filename(basepath, filtername, proposal_id, field, module, pupil='clear')
-                do_photometry_step(options, module, detector, field, basepath, filename)
+                do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs)
 
 
-def get_filenames(basepath, filtername, proposal_id, field, module, each_suffix, pupil='clear'):
+def get_filenames(basepath, filtername, proposal_id, field, each_suffix, pupil='clear'):
 
     # 001001_07101_00024
-    glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}{field}001*{module}*{each_suffix}.fits'
+    glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}{field}001*{each_suffix}.fits'
     fglob = glob.glob(glstr)
     if len(fglob) == 0:
         raise ValueError(f"No matches found to {glstr}")
@@ -499,7 +502,7 @@ def get_filename(basepath, filtername, proposal_id, field, module, pupil='clear'
     return filename
 
 
-def do_photometry_step(options, module, detector, field, basepath, filename, exposurenumber=None):
+def do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs, exposurenumber=None, pupil='clear'):
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -513,7 +516,7 @@ def do_photometry_step(options, module, detector, field, basepath, filename, exp
     desat = '_unsatstar' if options.desaturated else ''
     bgsub = '_bgsub' if options.bgsub else ''
     epsf_ = "_epsf" if options.epsf else ""
-    exposure_ = f'_exp{exposurenumber:05i}' if exposurenumber is not None else ''
+    exposure_ = f'_exp{exposurenumber:05d}' if exposurenumber is not None else ''
 
     print(f"Starting cataloging on {filename}", flush=True)
     fh, im1, data, wht, err, instrument, telescope, obsdate = load_data(filename)
@@ -547,8 +550,6 @@ def do_photometry_step(options, module, detector, field, basepath, filename, exp
     filter_table.add_index('filterID')
     instrument = 'NIRCam'
     eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filt}']['WavelengthEff'] * u.AA
-    pixscale = ww.proj_plane_pixel_area()**0.5
-
 
 
     # DAO Photometry setup
@@ -574,6 +575,7 @@ def do_photometry_step(options, module, detector, field, basepath, filename, exp
 
     # Set up visualization
     ww = wcs.WCS(im1[1].header)
+    pixscale = ww.proj_plane_pixel_area()**0.5
     cen = ww.pixel_to_world(im1[1].shape[1]/2, im1[1].shape[0]/2)
     reg = regions.RectangleSkyRegion(center=cen, width=1.5*u.arcmin, height=1.5*u.arcmin)
     preg = reg.to_pixel(ww)
