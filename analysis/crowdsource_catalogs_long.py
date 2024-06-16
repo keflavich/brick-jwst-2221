@@ -222,7 +222,10 @@ def save_crowdsource_results(results, ww, filename, suffix,
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
-                     'f410m': 11, 'f405n':11, 'f466n':11},
+                     'f410m': 11, 'f405n':11, 'f466n':11,
+                     'f444w': 11, 'f356w':11,
+                     'f200w':19, 'f115w':19,
+                    },
         crowdsource_default_kwargs={'maxstars': 500000, },
         ):
     from optparse import OptionParser
