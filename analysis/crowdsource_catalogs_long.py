@@ -542,7 +542,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
                                     use_webbpsf=False, use_grid=False,
                                     basepath='/blue/adamginsburg/adamginsburg/jwst/brick/')
-    dao_psf_model = psf_model_blur = psf_model
+    dao_psf_model = grid
+    psf_model_blur = psf_model
 
     dq, weight, bad = get_uncertainty(err, data, wht=wht)
 
