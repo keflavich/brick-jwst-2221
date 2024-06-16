@@ -23,7 +23,7 @@ import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, EPSFStars
+from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, EPSFStars, EPSFModel
 try:
     # version >=1.7.0, doesn't work: the PSF is broken
     from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
@@ -130,6 +130,19 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         rows, cols = np.indices(self.stampsz, dtype=float) - (np.array(self.stampsz)-1)[:, None, None] / 2.
 
         return self.psfgridmodel.evaluate(cols, rows, 1, col, row).T.squeeze()
+
+
+def save_epsf(epsf, filename, overwrite=True):
+    header = {}
+    header['OVERSAMP'] = list(epsf.oversampling)
+    hdu = fits.PrimaryHDU(data=epsf.data, header=header)
+    hdu.writeto(filename, overwrite=overwrite)
+
+def read_epsf(filename):
+    fh = fits.open(filename)
+    hdu = fh[0]
+    return EPSFModel(data=hdu.data, oversampling=hdu.header['OVERSAMP'])
+
 
 
 def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
@@ -453,7 +466,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             #weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
             weight[np.isnan(weight)] = 0
             bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (err == 0) | (wht == 0) | (data < 1e-5)
-            
+
             weight[weight > maxweight] = maxweight
             weight[weight < minweight] = minweight
             # it seems that crowdsource doesn't like zero weights
@@ -727,6 +740,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{epsf_}_daophot_epsf.png',
                                bbox_inches='tight')
                     dao_psf_model = epsf
+
+                    save_epsf(epsf,
+                              f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{desat}{bgsub}{epsf_}_daophot_epsf.fits')
+
 
                 phot = PSFPhotometry(finder=daofind_tuned,#finder_maker(),
                                      #grouper=grouper,

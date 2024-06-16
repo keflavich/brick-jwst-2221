@@ -17,14 +17,17 @@ def footprint_contains(x, y, shape):
 def make_merged_psf(filtername, basepath, halfstampsize=25,
                     grid_step=200,
                     oversampling=1,
+                    blur=False,
+                    smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55, 'f200w': 0.55, 'f115w': 0.25,
+                                      'f356w': 0.55, 'f444w': 0.55, 'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
                     project_id='2221', obs_id='001', suffix='merged_i2d'):
-    
+
     wavelength = int(filtername[1:-1])
     if wavelength < 230:
         detectors = [f'NRC{ab}{num}' for ab in 'AB' for num in (1,2,3,4)]
     else:
         detectors = [f'NRC{ab}5' for ab in 'AB']
-    
+
     nrc = webbpsf.NIRCam()
     nrc.filter = filtername
     grids = {}
@@ -89,6 +92,13 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
             meanpsf = np.mean(psfs, axis=0)
         else:
             meanpsf = np.zeros((halfstampsize*2*oversampling, halfstampsize*2*oversampling))
+
+        if blur:
+            kernwidth = smoothing_scales[filtername]
+            kernel = Gaussian2DKernel(kernwidth * oversampling)
+            meanpsf = convolve(meanpsf, kernel)
+            psfmeta['BLUR'] = kernwidth
+
         allpsfs.append(meanpsf)
         psfmeta[f'DET_YX{ii}'] =  (str((float(pgyc), float(pgxc))),
                                    "The #{} PSF's (y,x) detector pixel position".format(ii))
@@ -177,6 +187,9 @@ if __name__ == "__main__":
     parser.add_option("--target", dest="target",
                     default='brick',
                     help="target", metavar="target")
+    parser.add_option("--blur", dest="blur",
+                    default=False, action='store_true',
+                    help="blur", metavar="blur")
     (options, args) = parser.parse_args()
 
     selected_filters = options.filternames.upper().split(",")
@@ -188,11 +201,12 @@ if __name__ == "__main__":
                '1182': {'brick': '004'}}
 
     target = options.target
+    blur = '_blur' if options.blur else ''
 
     project_ids = options.proposal_id.split(",")
 
     basepath = f'/orange/adamginsburg/jwst/{target}/'
-    
+
     for oversampling, halfstampsize in [(1, 50), (2, 50), (4, 50), ]:
         for project_id in project_ids:
             for filtername in set(obs_filters[project_id]) & set(selected_filters):
@@ -201,15 +215,16 @@ if __name__ == "__main__":
 
                 obs_id = obs_ids[project_id][target]
 
-                outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid_oversample{oversampling}.fits'
+                outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid_oversample{oversampling}{blur}.fits'
                 if not os.path.exists(outfilename):
                     print(f"Making PSF grid {outfilename}")
                     psfg = make_merged_psf(filtername.upper(),
-                                        basepath=basepath,
-                                        halfstampsize=halfstampsize,
-                                        grid_step=200 if wavelength > 230 else 400,
-                                        oversampling=oversampling,
-                                        project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
+                                           basepath=basepath,
+                                           halfstampsize=halfstampsize,
+                                           grid_step=200 if wavelength > 230 else 400,
+                                           oversampling=oversampling,
+                                           blur = options.blur,
+                                           project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
                     save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
                 else:
                     print(f"PSF grid {outfilename} exists!  Fixing metadata if needed")
