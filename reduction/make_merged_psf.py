@@ -10,6 +10,7 @@ import webbpsf
 from astropy.nddata import NDData
 from tqdm.auto import tqdm
 from webbpsf.utils import to_griddedpsfmodel
+from astropy.convolution import convolve, Gaussian2DKernel
 
 def footprint_contains(x, y, shape):
     return (x > 0) and (y > 0) and (y < shape[0]) and (x < shape[1])
@@ -94,7 +95,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
             meanpsf = np.zeros((halfstampsize*2*oversampling, halfstampsize*2*oversampling))
 
         if blur:
-            kernwidth = smoothing_scales[filtername]
+            kernwidth = smoothing_scales[filtername.lower()]
             kernel = Gaussian2DKernel(kernwidth * oversampling)
             meanpsf = convolve(meanpsf, kernel)
             psfmeta['BLUR'] = kernwidth
