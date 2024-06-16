@@ -187,7 +187,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 
 def save_crowdsource_results(results, ww, filename, suffix,
                              im1, detector,
-                             basepath, filtername, module, desat, bgsub,
+                             basepath, filtername, module, desat, bgsub, exposure_,
                              psf=None,
                              fpsf=""):
     print(f"Saving crowdsource results.  filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf}")
@@ -630,11 +630,12 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
         stars, modsky, skymsky, psf = results_unweighted
         stars = save_crowdsource_results(results_unweighted, ww, filename,
-            im1=im1, detector=detector, basepath=basepath,
-            filtername=filtername, module=module, desat=desat, bgsub=bgsub,
-            suffix="unweighted",
-            psf=None
-            )
+                                         im1=im1, detector=detector,
+                                         basepath=basepath,
+                                         filtername=filtername, module=module,
+                                         desat=desat, bgsub=bgsub,
+                                         exposure_=exposure_,
+                                         suffix="unweighted", psf=None)
 
         zoomcut = slice(128, 256), slice(128, 256)
 
@@ -733,11 +734,14 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
                 print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results_blur
                 stars = save_crowdsource_results(results_blur, ww, filename,
-                    im1=im1, detector=detector, basepath=basepath,
-                    filtername=filtername, module=module, desat=desat, bgsub=bgsub,
-                    fpsf=fpsf,
-                    psf=psf if refit_psf else None,
-                    suffix=f"nsky{nsky}")
+                                                 im1=im1, detector=detector,
+                                                 basepath=basepath,
+                                                 filtername=filtername,
+                                                 module=module, desat=desat,
+                                                 bgsub=bgsub, fpsf=fpsf,
+                                                 exposure_=exposure_, psf=psf
+                                                 if refit_psf else None,
+                                                 suffix=f"nsky{nsky}")
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
