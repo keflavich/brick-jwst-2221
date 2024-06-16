@@ -73,16 +73,16 @@ def toast(imfn, targetdir=None):
     bui.imgset.set_position_from_wcs(wcsfk5.to_header(), width=width, height=height,
                                      place=bui.place, fov_factor=2.5)
     # maybe this is only for Brick?
-    bui.imgset.bottoms_up = False
-    #bui.imgset.rotation_deg = 90
-    bui.imgset.offset_x = width/2
-    bui.imgset.offset_y = height/2
+    #bui.imgset.bottoms_up = False
+    bui.imgset.rotation_deg = 90
+    #bui.imgset.offset_x = width/2
+    #bui.imgset.offset_y = height/2
 
     #ctr = SkyCoord(0.1189 * u.deg, -0.05505 * u.deg, frame='galactic').fk5
     ctr = wcs.pixel_to_world(tim.shape[1]/2, tim.shape[0]/2)
     bui.place.ra_hr = ctr.ra.hourangle
     bui.place.dec_deg = ctr.dec.deg
-    bui.place.zoom_level = 6
+    bui.place.zoom_level = 1
 
     fldr = bui.create_wtml_folder()
 
@@ -180,7 +180,7 @@ def make_place_notoast(fn):
     imgset.url = url
     imgset.thumbnail_url = pl.thumbnail
     imgset.bottoms_up = False
-    #imgset.rotation_deg = 90
+    imgset.rotation_deg = 180
     imgset.band_pass = "INFRARED"
     imgset.offset_x = width/2
     imgset.offset_y = height/2

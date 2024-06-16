@@ -296,6 +296,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
                 warnings.simplefilter('ignore')
                 filtername = tbl.meta["filter"]
                 zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
+                print(f"Zeropoint for {filtername} is {zeropoint}")
                 abmag = -2.5 * np.log10(flux_jy / zeropoint)
                 abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
                 tbl.add_column(flux_jy, name='flux_jy')

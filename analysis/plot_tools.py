@@ -107,13 +107,15 @@ def ccd(basetable,
         ext=CT06_MWGC(),
         extvec_scale=200,
          rasterized=True,
+        alpha=0.5,
+        alpha_sel=0.5,
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
     keys2 = [f'mag_ab_{col}' for col in color2]
     colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
     colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
-    ax.scatter(colorp1, colorp2, s=5, alpha=0.5, c='k', rasterized=rasterized)
-    ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=0.5, c='r', rasterized=rasterized)
+    ax.scatter(colorp1, colorp2, s=5, alpha=alpha, c='k', rasterized=rasterized)
+    ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=alpha_sel, c='r', rasterized=rasterized)
     ax.set_xlabel(f"{color1[0]} - {color1[1]}")
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)
@@ -151,6 +153,8 @@ def cmds(basetable, sel=True,
          extvec_scale=30,
          markersize=5,
          rasterized=True,
+         alpha=0.5,
+         alpha_sel=0.5,
         ):
     if fig is None:
         fig = pl.figure()
@@ -159,8 +163,8 @@ def cmds(basetable, sel=True,
         ax = fig.add_subplot(gridspec[ii])
         colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
         magp = basetable[f'mag_ab_{f1}']
-        ax.scatter(colorp, magp, s=markersize, alpha=0.5, c='k', rasterized=rasterized)
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r', rasterized=rasterized)
+        ax.scatter(colorp, magp, s=markersize, alpha=alpha, c='k', rasterized=rasterized)
+        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c='r', rasterized=rasterized)
         ax.set_xlabel(f"{f1} - {f2}")
         ax.set_ylabel(f"{f1}")
         ax.axis(axlims)
