@@ -23,9 +23,9 @@ import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, EPSFStars, EPSFModel
+from photutils.psf import IntegratedGaussianPRF, extract_stars, EPSFStars, EPSFModel
 try:
-    # version >=1.7.0, doesn't work: the PSF is broken
+    # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
     from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
 except:
     # version 1.6.0, which works
@@ -455,7 +455,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     exposure_id = filename.split("_")[2]
                     do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs, exposurenumber=int(exposure_id))
             else:
-                filename = get_filename(basepath, filtername, proposal_id, field, module, pupil='clear')
+                filename = get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear')
                 do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs)
 
 
@@ -470,7 +470,7 @@ def get_filenames(basepath, filtername, proposal_id, field, each_suffix, pupil='
         return fglob
 
 
-def get_filename(basepath, filtername, proposal_id, field, module, pupil='clear'):
+def get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear'):
     desat = '_unsatstar' if options.desaturated else ''
     bgsub = '_bgsub' if options.bgsub else ''
     epsf_ = "_epsf" if options.epsf else ""
