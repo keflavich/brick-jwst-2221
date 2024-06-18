@@ -819,7 +819,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
 
         phot = PSFPhotometry(finder=daofind_tuned,#finder_maker(),
                              #grouper=grouper,
-                             localbkg_estimator=None, # must be none or it un-saturates pixels
+                             # localbkg_estimator=None, # must be none or it un-saturates pixels
+                             localbkg_estimator=LocalBackground(5, 15),
                              psf_model=dao_psf_model,
                              fitter=LevMarLSQFitter(),
                              fit_shape=(5, 5),
