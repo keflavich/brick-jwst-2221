@@ -330,7 +330,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
             return grid, psf_model
     else:
 
-        grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample1.fits')
+        grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample1_blur.fits')
 
         # if isinstance(grid, list):
         #     print(f"Grid is a list: {grid}")
