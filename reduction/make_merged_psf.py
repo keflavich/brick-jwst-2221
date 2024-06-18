@@ -77,13 +77,18 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
                 detectorstr = detector.replace('5', 'long').lower()
             else:
                 detectorstr = detector.lower()
+
+            # loop over each frame dithered to make the final mosaic
             for fn in glob.glob(f'{basepath}/{filtername}/pipeline/*{detectorstr.lower()}*_cal.fits'):
                 dmod = stdatamodels.jwst.datamodels.open(fn)
                 xc, yc = dmod.meta.wcs.world_to_pixel(skyc1)
                 if footprint_contains(xc, yc, dmod.data.shape):
                     # force xc, yc to integers so they stay centered
                     # (mgrid is forced to be integers, and allowing xc/yc not to be would result in arbitrary subpixel shifts)
-                    # oversamplign allows non-integers again though, and increases the grid size
+                    # oversampling allows non-integers again though, and increases the grid size
+
+                    # yy, xx was being used before, but it looks like that might've created a 90deg rotation?
+                    # OVERSAMPLING SHIFTS BY HALF-PIXEL!
                     yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize:1/oversampling,
                                       int(xc)-halfstampsize:int(xc)+halfstampsize:1/oversampling]
                     psf = grids[f'{detector.upper()}'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
@@ -191,7 +196,11 @@ if __name__ == "__main__":
     parser.add_option("--blur", dest="blur",
                     default=False, action='store_true',
                     help="blur", metavar="blur")
+    parser.add_option("--redo", dest="redo",
+                    default=False, action='store_true',
+                    help="redo", metavar="redo")
     (options, args) = parser.parse_args()
+    print(options)
 
     selected_filters = options.filternames.upper().split(",")
 
@@ -217,14 +226,14 @@ if __name__ == "__main__":
                 obs_id = obs_ids[project_id][target]
 
                 outfilename = f'{basepath}/psfs/{filtername.upper()}_{project_id}_{obs_id}_merged_PSFgrid_oversample{oversampling}{blur}.fits'
-                if not os.path.exists(outfilename):
+                if options.redo or not os.path.exists(outfilename):
                     print(f"Making PSF grid {outfilename}")
                     psfg = make_merged_psf(filtername.upper(),
                                            basepath=basepath,
                                            halfstampsize=halfstampsize,
                                            grid_step=200 if wavelength > 230 else 400,
                                            oversampling=oversampling,
-                                           blur = options.blur,
+                                           blur=options.blur,
                                            project_id=project_id, obs_id=obs_id, suffix='merged_i2d')
                     save_psfgrid(psfg, outfilename=outfilename, overwrite=True)
                 else:
