@@ -67,7 +67,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
               }
     allpsfs = []
 
-    for ii,(pgxc, pgyc) in tqdm(enumerate(psf_grid_coords)):
+    for ii,(pgxc, pgyc) in enumerate(tqdm(psf_grid_coords)):
         skyc1 = parent_wcs.pixel_to_world(pgxc, pgyc)
 
         psfs = []
