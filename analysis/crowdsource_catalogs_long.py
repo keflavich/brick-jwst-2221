@@ -1,4 +1,4 @@
-print("Starting cataloging", flush=True)
+print("Starting crowdsource_catalogs_long", flush=True)
 import glob
 import time
 import numpy
@@ -103,7 +103,10 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         for i in range(len(col)):
             # the +0.5 is required to actually center the PSF (empirically)
             stamps.append(self.psfgridmodel.evaluate(cols+col[i]+0.5, rows+row[i]+0.5, 1, col[i], row[i]))
-        stamps = np.transpose(stamps, axes=(0,2,1))
+
+        stamps = np.array(stamps)
+        # this is evidently an incorrect transpose
+        #stamps = np.transpose(stamps, axes=(0,2,1))
 
         if deriv:
             dpsfdrow, dpsfdcol = np.gradient(stamps, axis=(1, 2))
@@ -470,7 +473,7 @@ def get_filenames(basepath, filtername, proposal_id, field, each_suffix, pupil='
         return fglob
 
 
-def get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear'):
+def get_filename(basepath, filtername, proposal_id, field, module, options, pupil='clear'):
     desat = '_unsatstar' if options.desaturated else ''
     bgsub = '_bgsub' if options.bgsub else ''
     epsf_ = "_epsf" if options.epsf else ""
