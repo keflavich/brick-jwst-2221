@@ -21,6 +21,9 @@ from astropy import wcs
 from astropy import table
 from astropy import units as u
 from astroquery.svo_fps import SvoFps
+
+from tqdm.auto import tqdm
+
 import pylab as pl
 pl.rcParams['figure.facecolor'] = 'w'
 pl.rcParams['image.origin'] = 'lower'
@@ -67,10 +70,10 @@ def getmtime(x):
 
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f405n',
-                   epsf=False, bgsub=False, desat=False,
+                   epsf=False, bgsub=False, desat=False, blur=False,
                    max_offset=0.15*u.arcsec, target='brick',
                    basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
-    print(f'Starting merge catalogs: catalog_type: {catalog_type} module: {module} target: {target}')
+    print(f'Starting merge catalogs: catalog_type: {catalog_type} module: {module} target: {target}', flush=True)
 
     basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
@@ -80,14 +83,13 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
-    epsf = "_epsf" if epsf else ""
 
     reffiltercol = [ref_filter] * len(basetable)
-    print(f"Started with {len(basetable)} in filter {ref_filter}")
+    print(f"Started with {len(basetable)} in filter {ref_filter}", flush=True)
 
     # build up a reference coordinate catalog by adding in those with no matches each time
     basecrds = basetable['skycoord']
-    for tb in tbls:
+    for tb in tqdm(tbls, desc='Table Meta Loop'):
         if tb.meta['filter'] == ref_filter:
             continue
         crds = tb['skycoord']
@@ -95,8 +97,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         newcrds = crds[sep > max_offset]
         basecrds = SkyCoord([basecrds, newcrds])
         reffiltercol += [tb.meta['filter']] * len(newcrds)
-        print(f"Added {len(newcrds)} new sources in filter {tb.meta['filter']}")
-    print(f"Base coordinate length = {len(basecrds)}")
+        print(f"Added {len(newcrds)} new sources in filter {tb.meta['filter']}", flush=True)
+    print(f"Base coordinate length = {len(basecrds)}", flush=True)
 
     basetable = Table()
     basetable['skycoord_ref'] = basecrds
@@ -114,7 +116,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         #for colname in basetable.colnames:
         #    basetable.rename_column(colname, colname+"_"+basetable.meta['filter'])
 
-        for tbl in tbls:
+        for tbl in tqdm(tbls, desc='Table Loop'):
             t0 = time.time()
             wl = tbl.meta['filter']
             flag_near_saturated(tbl, filtername=wl, target=target, basepath=basepath)
@@ -124,7 +126,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
             crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-            print(f"filter {wl} has {len(tbl)} rows.  Matching took {time.time()-t0:0.1f} seconds")
+            print(f"filter {wl} has {len(tbl)} rows.  Matching took {time.time()-t0:0.1f} seconds", flush=True)
 
             # removed Jan 21, 2023 because this *should* be handled by the pipeline now
             # # do one iteration of bulk offset measurement
@@ -175,10 +177,10 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             print(f"Flagged {tbl[f'near_saturated_{wl}'].sum()} stars that are near saturated stars "
                   f"in filter {wl} out of {len(tbl)}.  "
                   f"There are then {basetable[f'near_saturated_{wl}_{wl}'].sum()} in the merged table.  "
-                  f"There are also {basetable[f'replaced_saturated_{wl}'].sum()} replaced saturated.")
+                  f"There are also {basetable[f'replaced_saturated_{wl}'].sum()} replaced saturated.", flush=True)
 
 
-        print(f"Stacked all rows into table with len={len(basetable)}")
+        print(f"Stacked all rows into table with len={len(basetable)}", flush=True)
         zeropoint410 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F410M']['ZeroPoint'], u.Jy)
         zeropoint182 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F182M']['ZeroPoint'], u.Jy)
         zeropoint405 = u.Quantity(jfilts.loc[f'JWST/NIRCam.F405N']['ZeroPoint'], u.Jy)
@@ -217,12 +219,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
         tablename = f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged{desat}{bgsub}{epsf}"
         t0 = time.time()
-        print(f"Writing table {tablename}")
+        print(f"Writing table {tablename}", flush=True)
         # use caps b/c FITS will force it to caps anyway
         basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
         # takes FOR-EV-ER
         basetable.write(f"{tablename}.ecsv", overwrite=True)
-        print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds")
+        print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
         t0 = time.time()
         # DO NOT USE FITS in production, it drops critical metadata
         # I wish I had noted *what* metadata it drops, though, since I still seem to be using
@@ -230,10 +232,11 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # OH, I think the FITS file turns "True" into "False"?
         # Yes, specifically: it DROPS masked data types, converting "masked" into "True"?
         basetable.write(f"{tablename}.fits", overwrite=True)
-        print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds")
+        print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds", flush=True)
 
 
-def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=False, fitpsf=False, target='brick',
+def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
+                      epsf=False, fitpsf=False, blur=False, target='brick',
                       basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     if epsf:
         raise NotImplementedError
@@ -250,6 +253,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
     fitpsf = '_fitpsf' if fitpsf else ''
+    blur_ = "_blur" if blur else ""
 
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
@@ -257,7 +261,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
     filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
     catfns = [x
               for filn in filternames
-              for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}{fitpsf}_crowdsource{suffix}.fits")
+              for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
              ]
     if target == 'brick' and len(catfns) != 10:
         raise ValueError(f"len(catfns) = {len(catfns)}.  catfns: {catfns}")
@@ -311,10 +315,11 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False, epsf=F
     merge_catalogs(tbls,
                    catalog_type=f'crowdsource{suffix}{"_desat" if desat else ""}{"_bgsub" if bgsub else ""}',
                    module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
+                   blur=blur,
                    basepath=basepath)
 
 
-def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False, epsf=False, target='brick',
+def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False, epsf=False, blur=False, target='brick',
                   basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
 
     desat = "_unsatstar" if desat else ""
@@ -381,6 +386,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         tbl.add_column(abmag_err, name='emag_ab')
 
     merge_catalogs(tbls, catalog_type=daophot_type, module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
+                   blur=blur,
                    basepath=basepath)
 
 
@@ -567,47 +573,48 @@ def main():
             for bgsub in (False, True):
                 for epsf in (False, True):
                     for fitpsf in (False, True):
-                        t0 = time.time()
-                        print()
-                        print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}. ')
-                        try:
-                            merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                              fitpsf=fitpsf, target=target, basepath=basepath)
-                        except Exception as ex:
-                            print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
-                        try:
-                            print(f'crowdsource unweighted {module}', flush=True)
-                            merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf,
-                                              fitpsf=fitpsf, target=target, basepath=basepath)
-                        except NotImplementedError:
-                            continue
-                        except Exception as ex:
-                            print(f"Exception for unweighted crowdsource: {ex}, {type(ex)}, {str(ex)}")
-                            #raise ex
-                        try:
-                            for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
-                                print(f'crowdsource {suffix} {module}')
-                                merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                  fitpsf=fitpsf, target=target, basepath=basepath)
-                        except Exception as ex:
-                            print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
-                        print(f'crowdsource phase done.  time elapsed={time.time()-t0}')
-                        t0 = time.time()
-                        print()
-                        try:
-                            print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}', flush=True)
-                            merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                          fitpsf=fitpsf, target=target, basepath=basepath)
-                        except Exception as ex:
-                            print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
-                        try:
-                            print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}')
-                            merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                          fitpsf=fitpsf, target=target, basepath=basepath)
-                        except Exception as ex:
-                            print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
-                        print(f'dao phase done.  time elapsed={time.time()-t0}')
-                        print()
+                        for blur in (False, True):
+                            t0 = time.time()
+                            print()
+                            print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}. ', flush=True)
+                            try:
+                                merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf,
+                                                  fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                            except Exception as ex:
+                                print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
+                            try:
+                                print(f'crowdsource unweighted {module}', flush=True)
+                                merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf,
+                                                  fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                            except NotImplementedError:
+                                continue
+                            except Exception as ex:
+                                print(f"Exception for unweighted crowdsource: {ex}, {type(ex)}, {str(ex)}")
+                                #raise ex
+                            try:
+                                for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
+                                    print(f'crowdsource {suffix} {module}')
+                                    merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
+                                                      fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                            except Exception as ex:
+                                print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                            print(f'crowdsource phase done.  time elapsed={time.time()-t0}')
+                            t0 = time.time()
+                            print()
+                            try:
+                                print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}', flush=True)
+                                merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
+                                              fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                            except Exception as ex:
+                                print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                            try:
+                                print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}')
+                                merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
+                                              fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                            except Exception as ex:
+                                print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                            print(f'dao phase done.  time elapsed={time.time()-t0}')
+                            print()
 
 if __name__ == "__main__":
     main()
