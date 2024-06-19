@@ -849,7 +849,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
             filename.replace(".fits", "_daophot_basic_residual.fits"),
             overwrite=True)
-        fits.PrimaryHDU(data=model, header=im1[1].header).writeto(
+        fits.PrimaryHDU(data=modelim, header=im1[1].header).writeto(
             filename.replace(".fits", "_daophot_basic_model.fits"),
             overwrite=True)
         print("Saved BASIC residual image, now making diagnostics.")
@@ -950,7 +950,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
             filename.replace(".fits", "_daophot_iterative_residual.fits"),
             overwrite=True)
-        fits.PrimaryHDU(data=model, header=im1[1].header).writeto(
+        fits.PrimaryHDU(data=modelim, header=im1[1].header).writeto(
             filename.replace(".fits", "_daophot_iterative_model.fits"),
             overwrite=True)
         print("Saved iterative residual")
