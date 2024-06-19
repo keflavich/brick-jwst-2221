@@ -8,9 +8,7 @@ import glob
 from photutils.background import MMMBackground, MADStdBackgroundRMS
 from photutils.aperture import CircularAperture, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder, find_peaks
-from photutils.psf import (DAOGroup, IntegratedGaussianPRF, extract_stars,
-                           IterativelySubtractedPSFPhotometry,
-                           BasicPSFPhotometry, EPSFBuilder)
+from photutils.psf import (IntegratedGaussianPRF, extract_stars, EPSFBuilder)
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy import stats
 from astropy.table import Table, Column, MaskedColumn
