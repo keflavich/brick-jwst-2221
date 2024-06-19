@@ -843,7 +843,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 11x11 patches")
-        modelim = phot.make_model_image(data, (11, 11), include_localbkg=False)
+        modelim = phot.make_model_image(data.shape, (11, 11), include_localbkg=False)
         residual = data - modelim
         print("Done creating BASIC residual image, using 11x11 patches")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
@@ -944,7 +944,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         stars['y'] = stars['y_fit']
 
         print("Creating iterative residual")
-        modelim = phot_.make_model_image(data, (11, 11), include_localbkg=False)
+        modelim = phot_.make_model_image(data.shape, (11, 11), include_localbkg=False)
         residual = data - modelim
         print("finished iterative residual")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
