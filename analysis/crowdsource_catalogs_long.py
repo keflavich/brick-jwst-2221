@@ -256,11 +256,14 @@ def load_data(filename):
 
 def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
                   use_grid=False,
+                  blur=False,
                   basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     """
     Return two types of PSF model, the first for DAOPhot and the second for Crowdsource
     """
 
+    blur_ = "_blur" if blur else ""
+    
     # psf_fn = f'{basepath}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
     # if os.path.exists(str(psf_fn)):
     #     # As a file
@@ -553,6 +556,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
     # Load PSF model
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
                                     use_webbpsf=False, use_grid=False,
+                                    blur=options.blur,
                                     basepath='/blue/adamginsburg/adamginsburg/jwst/brick/')
     dao_psf_model = grid
     psf_model_blur = psf_model

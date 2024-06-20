@@ -22,7 +22,6 @@ try:
 except ImportError:
     from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
 from photutils.background import MMMBackground, MADStdBackgroundRMS
 from astropy.modeling.fitting import LevMarLSQFitter
 
