@@ -2,7 +2,16 @@ import photutils
 import regions
 from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
+from photutils.psf import extract_stars, BasicPSFPhotometry
+
+try:
+    # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
+    from photutils.psf import PSFPhotometry, SourceGrouper
+except:
+    # version 1.6.0, which works
+    from photutils.psf import (BasicPSFPhotometry as PSFPhotometry,
+                               DAOGroup as SourceGrouper)
+
 import numpy as np
 import time
 from astropy.stats import mad_std
@@ -357,7 +366,7 @@ def estimate_background(data, header, medfilt_size=[15,15], do_segment_mask=Fals
     # ## Do the PSF photometry
     #
     # DAOGroup decides which subset of stars needs to be simultaneously fitted together - i.e., it deals with blended sources.
-    daogroup = DAOGroup(5 * fwhm_pix)
+    daogroup = SourceGrouper(5 * fwhm_pix)
     mmm_bkg = MMMBackground()
 
     filtered_errest = stats.mad_std(filtered_data, ignore_nan=True)
