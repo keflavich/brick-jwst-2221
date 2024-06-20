@@ -2,7 +2,7 @@ import photutils
 import regions
 from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import extract_stars, BasicPSFPhotometry
+from photutils.psf import extract_stars
 
 try:
     # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
@@ -410,14 +410,14 @@ def estimate_background(data, header, medfilt_size=[15,15], do_segment_mask=Fals
     #    pb.update()
     #    return lmfitter(*args, **kwargs)
 
-    phot = BasicPSFPhotometry(finder=None, #filtered_finder,
-                              group_maker=None,
-                              bkg_estimator=None, #mmm_bkg,
-                              #psf_model=psf_modelgrid[0],
-                              psf_model=grid,
-                              fitter=LevMarLSQFitter(),
-                              fitshape=(11, 11),
-                              aperture_radius=2*fwhm_pix)
+    phot = PSFPhotometry(finder=None, #filtered_finder,
+                         group_maker=None,
+                         bkg_estimator=None, #mmm_bkg,
+                         #psf_model=psf_modelgrid[0],
+                         psf_model=grid,
+                         fitter=LevMarLSQFitter(),
+                         fitshape=(11, 11),
+                         aperture_radius=2*fwhm_pix)
 
     # operate on the full data
     log.info(f"Doing full photometry.  t={time.time()-t0:0.1f}")
