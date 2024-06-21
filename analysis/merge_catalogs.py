@@ -75,6 +75,9 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     print(f'Starting merge catalogs: catalog_type: {catalog_type} module: {module} target: {target}', flush=True)
 
+    epsf_ = "_epsf" if epsf else ""
+    blur_ = "_blur" if blur else ""
+
     basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
 
@@ -217,7 +220,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         assert '212PXDG' in meta
         assert '212PXDG' in basetable.meta
 
-        tablename = f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged{desat}{bgsub}{epsf}"
+        tablename = f"{basepath}/catalogs/{catalog_type}_{module}_photometry_tables_merged{desat}{bgsub}{epsf_}{blur_}"
         t0 = time.time()
         print(f"Writing table {tablename}", flush=True)
         # use caps b/c FITS will force it to caps anyway
@@ -324,13 +327,14 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
-    epsf = "_epsf" if epsf else ""
+    epsf_ = "_epsf" if epsf else ""
+    blur_ = "_blur" if blur else ""
 
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
 
     catfns = daocatfns = [
-        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf}_daophot_{daophot_type}.fits"
+        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf_}{blur_}_daophot_{daophot_type}.fits"
         for filtername in filternames
     ]
     imgfns = [x
