@@ -580,7 +580,7 @@ def main():
                         for blur in (False, True):
                             t0 = time.time()
                             print()
-                            print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}. ', flush=True)
+                            print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}. ', flush=True)
                             try:
                                 merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                                   fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
@@ -606,13 +606,13 @@ def main():
                             t0 = time.time()
                             print()
                             try:
-                                print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}', flush=True)
+                                print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                 merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                               fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
                             except Exception as ex:
                                 print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                             try:
-                                print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} fitpsf={fitpsf} target={target}')
+                                print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
                                 merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                               fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
                             except Exception as ex:
