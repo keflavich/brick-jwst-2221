@@ -194,7 +194,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
                              psf=None,
                              blur=False,
                              fpsf=""):
-    print(f"Saving crowdsource results.  filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
+    print(f"Saving crowdsource results.")
     blur_ = "_blur" if blur else ""
 
     stars, modsky, skymsky, psf_ = results
@@ -212,8 +212,11 @@ def save_crowdsource_results(results, ww, filename, suffix,
 
 
     tblfilename = (f"{basepath}/{filtername}/"
-                    f"{filtername.lower()}_{module}{exposure_}{desat}{bgsub}{fpsf}"
+                    f"{filtername.lower()}_{module}{exposure_}{desat}{bgsub}{fpsf}{blur_}"
                     f"_crowdsource_{suffix}.fits")
+
+    print("tblfilename={tblfilename}, filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
+
     stars.write(tblfilename, overwrite=True)
     # add WCS-containing header
     with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
@@ -263,7 +266,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
     """
 
     blur_ = "_blur" if blur else ""
-    
+
     # psf_fn = f'{basepath}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
     # if os.path.exists(str(psf_fn)):
     #     # As a file
@@ -738,11 +741,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
 
 
 
-        for refit_psf, fpsf in zip((True, False), ('_fitpsf', '')):
+        for refit_psf, fpsf in zip((False, True), ('', '_fitpsf',)):
             for nsky in (0, 1, ):
                 t0 = time.time()
                 print()
-                print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky}")
+                print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky} & fpsf={fpsf}")
                 print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
                 results_blur = fit_im(np.nan_to_num(data), psf_model_blur, weight=weight,
                                     nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,

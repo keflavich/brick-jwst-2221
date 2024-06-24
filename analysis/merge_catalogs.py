@@ -293,7 +293,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
             crds = tbl['skycoord']
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
-        print('Calculating Flux [Jy]')
+        print(f'Calculating Flux [Jy].  fwhm={tbl["fwhm"].mean()}, pixscale={tbl.meta["pixscel_arcsec"]}')
         flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
         eflux_jy = (tbl['dflux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
         with np.errstate(all='ignore'):
@@ -304,10 +304,10 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                 print(f"Zeropoint for {filtername} is {zeropoint}")
                 abmag = -2.5 * np.log10(flux_jy / zeropoint)
                 abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
-                tbl.add_column(flux_jy, name='flux_jy')
-                tbl.add_column(eflux_jy, name='eflux_jy')
-                tbl.add_column(abmag, name='mag_ab')
-                tbl.add_column(abmag_err, name='emag_ab')
+                tbl.add_column(flux_jy, name='flux_jy', unit=u.Jy)
+                tbl.add_column(eflux_jy, name='eflux_jy', unit=u.Jy)
+                tbl.add_column(abmag, name='mag_ab', unit=u.mag)
+                tbl.add_column(abmag_err, name='emag_ab', unit=u.mag)
         if hasattr(tbl['mag_ab'], 'mask'):
             print(f'ab mag tbl col has mask sum = {tbl["mag_ab"].mask.sum()} masked values')
         if hasattr(abmag, 'mask'):
@@ -608,13 +608,13 @@ def main():
                             try:
                                 print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                 merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                              fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                                              target=target, basepath=basepath, blur=blur)
                             except Exception as ex:
                                 print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                             try:
                                 print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
                                 merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                              fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                                              target=target, basepath=basepath, blur=blur)
                             except Exception as ex:
                                 print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                             print(f'dao phase done.  time elapsed={time.time()-t0}')
