@@ -293,15 +293,20 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
             crds = tbl['skycoord']
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
         tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
-        print(f'Calculating Flux [Jy].  fwhm={tbl["fwhm"].mean()}, pixscale={tbl.meta["pixscel_arcsec"]}')
-        flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
-        eflux_jy = (tbl['dflux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+        print(f'Calculating Flux [Jy].  fwhm={tbl["fwhm"].mean()}, pixscale={tbl.meta["pixelscale_arcsec"]}')
+        # The 'flux' is the sum of pixels whose values are each in MJy/sr.
+        # To get to the correct flux, we need to multiply by the pixel area in steradians to get to megaJanskys, which can be summed
+        # That's it.  There's no need to account for the FWHM.  We only needed that if tbl['flux'] was the _peak_, but it's not.
+        #flux_jy = (tbl['flux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+        #eflux_jy = (tbl['dflux'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * tbl['fwhm']**2 * tbl.meta['pixelscale_deg2']).to(u.Jy)
+        flux_jy = (tbl['flux'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
+        eflux_jy = (tbl['dflux'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
         with np.errstate(all='ignore'):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 filtername = tbl.meta["filter"]
                 zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
-                print(f"Zeropoint for {filtername} is {zeropoint}")
+                print(f"Zeropoint for {filtername} is {zeropoint}.  Max flux is {flux_jy.max()}")
                 abmag = -2.5 * np.log10(flux_jy / zeropoint)
                 abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
                 tbl.add_column(flux_jy, name='flux_jy', unit=u.Jy)
