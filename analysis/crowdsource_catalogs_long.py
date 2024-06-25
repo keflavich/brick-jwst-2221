@@ -182,7 +182,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
         # used in analysis
         qgood = ((stars['qf'] > 0.6) &
                  (stars['spread_model'] < 0.25) &
-                 (stars['fracflux'] > 0.8) &
+                 (stars['fracflux'] > 0.8)
                 )
     elif 'qfit' in stars:
         # guesses, no tests don
