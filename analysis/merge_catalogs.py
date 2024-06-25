@@ -158,12 +158,16 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                         matchtb[f'{cn}_{wl}'].meta = matchtb[cn].meta
                     matchtb.remove_column(cn)
 
+            print(f"Max flux in tbl for {wl}: {tbl['flux'].max()}")
+            print(f"merging tables step: max flux for {wl} is {matchtb['flux_'+cn].max()}")
+
             basetable = table.hstack([basetable, matchtb], join_type='exact')
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
             meta[f'{wl[1:-1]}pxas'.upper()] = tbl.meta['pixelscale_arcsec']
             for key in tbl.meta:
                 meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
 
+            print(f"merging tables step: max flux for {wl} in merged table is {basetable['flux_'+cn].max()}")
             # DEBUG
             # DEBUG if hasattr(basetable[f'{cn}_{wl}'], 'mask'):
             # DEBUG     print(f"Table has mask sum for column {cn} {basetable[cn+'_'+wl].mask.sum()}")
@@ -307,12 +311,13 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                 filtername = tbl.meta["filter"]
                 zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
                 print(f"Zeropoint for {filtername} is {zeropoint}.  Max flux is {flux_jy.max()}")
-                abmag = -2.5 * np.log10(flux_jy / zeropoint)
-                abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
-                tbl.add_column(flux_jy, name='flux_jy', unit=u.Jy)
-                tbl.add_column(eflux_jy, name='eflux_jy', unit=u.Jy)
-                tbl.add_column(abmag, name='mag_ab', unit=u.mag)
-                tbl.add_column(abmag_err, name='emag_ab', unit=u.mag)
+                abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+                abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
+                tbl.add_column(Column(flux_jy, name='flux_jy', unit=u.Jy))
+                tbl.add_column(Column(eflux_jy, name='eflux_jy', unit=u.Jy))
+                tbl.add_column(Column(abmag, name='mag_ab', unit=u.mag))
+                tbl.add_column(Column(abmag_err, name='emag_ab', unit=u.mag))
+                print(f"Max flux={tbl['flux_jy'].max()}, min mag={np.nanmin(tbl['mag_ab'])}")
         if hasattr(tbl['mag_ab'], 'mask'):
             print(f'ab mag tbl col has mask sum = {tbl["mag_ab"].mask.sum()} masked values')
         if hasattr(abmag, 'mask'):

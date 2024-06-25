@@ -286,6 +286,8 @@ def main(basetable, ww):
     print(f"Not-bad:{(~bad).sum()}, bad: {bad.sum()},"# bad.mask: {bad.mask.sum()},"
           f" len(bad):{len(bad)}, len(table):{len(basetable)}.")
 
+    for filt in filternames:
+        print(f"{filt} median mag={np.nanmedian(np.array(basetable['mag_ab_'+filt][basetable['good_'+filt]]))}")
 
     # Basic selections for CMD, CCD plotting
     sel = reg.contains(basetable['skycoord_f410m'], ww)

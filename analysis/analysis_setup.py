@@ -55,7 +55,9 @@ from plot_tools import regzoomplot, starzoom, ccd, ccds, cmds, plot_extvec_ccd
 
 distance_modulus = dm = 5*np.log10(8.3*u.kpc / (10*u.pc))
 
-filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
+filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m',
+               'f444w', 'f356w', 'f200w', 'f115w',
+              ]
 
 reg = regions.Regions.read(f'{basepath}/regions_/leftside_brick_zoom.reg')[0]
 regzoom = regions.Regions.read(f'{basepath}/regions_/leftside_brick_rezoom.reg')[0]
@@ -95,7 +97,7 @@ wwi_short_merged = wcs.WCS(fits.Header.fromstring(avm_nostars.Spatial.FITSheader
 
 # the merged version is the one I *want* to work with, but nrca is the one I've tested most
 # and can really vouch for
-basetable_merged = basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
+basetable_merged = basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
 
 # use locked-in 2023/07/02 version to make sure analysis stays stable
 # (this version is confirmed to have good long-wave astrometry, at least)
@@ -109,7 +111,7 @@ basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_
 #basetable_merged_reproject_dao_iter_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_epsf.fits')
 #basetable_merged_reproject_dao_iter_bg_epsf = Table.read(f'{basepath}/catalogs/iterative_merged-reproject_photometry_tables_merged_bgsub_epsf.fits')
 
-basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged.fits')
+basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
 
 def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
