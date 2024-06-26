@@ -70,7 +70,10 @@ def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
 def sanity_check_individual_table(tbl):
-    finite_fluxes = np.isfinite(np.array(tbl['flux_jy']))
+    tbl = tbl.copy()
+    tbl.sort('flux_jy')
+    #finite_fluxes = np.isfinite(np.array(tbl['flux_jy']))
+    finite_fluxes = tbl['flux_jy'] > 0
     wl = filtername = tbl.meta['filter']
 
     jfilts = SvoFps.get_filter_list('JWST')
@@ -82,14 +85,15 @@ def sanity_check_individual_table(tbl):
 
     abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
 
-    try:
-        np.testing.assert_almost_equal(abmag, abmag_tbl, decimal=4)
-    except Exception as ex:
-        print(ex)
-        print(np.abs(abmag-abmag_tbl).max())
+    # there are negative fluxes -> nan mags
+    #print(f"Maximum difference between the two tables: {np.abs(abmag-abmag_tbl).max()}")
+    print("SANITY CHECK")
+    print(f"Nanmax difference between the two tables: {np.nanmax(np.abs(abmag-abmag_tbl))}")
+    #print("NaNs: (mag, flux) ", abmag_tbl[np.isnan(abmag_tbl)], flux_jy[np.isnan(abmag_tbl)])
 
     print(f"Max flux in tbl for {wl}: {tbl['flux'].max()};"
-          f" in jy={flux_jy.max()}; mag={abmag_tbl.max()}")
+          f" in jy={flux_jy.max()}; magmin={abmag_tbl.min()}={np.nanmin(abmag_tbl)}, magmax={abmag_tbl.max()}={np.nanmax(abmag_tbl)}")
+    print(f"100th brightest flux={flux_jy[-100]} abmag={abmag[-100]} abmag_tbl={abmag_tbl[-100]}")
 
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f405n',
@@ -289,6 +293,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     jfilts.add_index('filterID')
 
     filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
+    print("Merging filters {filternames}")
     catfns = [x
               for filn in filternames
               for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
@@ -433,6 +438,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
 def flag_near_saturated(cat, filtername, radius=None, target='brick',
                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
+    print(f"Flagging near saturated stars for filter {filtername}")
     satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
@@ -596,7 +602,7 @@ def main():
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-m", "--modules", dest="modules",
-                    default='merged,nrca,nrcb,merged-reproject',
+                    default='merged,merged-reproject',
                     help="module list", metavar="modules")
     parser.add_option("--target", dest="target",
                     default='brick',
