@@ -22,6 +22,9 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
                     smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55, 'f200w': 0.55, 'f115w': 0.25,
                                       'f356w': 0.55, 'f444w': 0.55, 'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
                     project_id='2221', obs_id='001', suffix='merged_i2d'):
+    """
+    Halfstampsize allows us to force odd-shaped PSF
+    """
 
     wavelength = int(filtername[1:-1])
     if wavelength < 230:
@@ -89,15 +92,15 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
 
                     # yy, xx was being used before, but it looks like that might've created a 90deg rotation?
                     # OVERSAMPLING SHIFTS BY HALF-PIXEL!
-                    yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize:1/oversampling,
-                                      int(xc)-halfstampsize:int(xc)+halfstampsize:1/oversampling]
+                    yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize + 1/oversampling:1/oversampling,
+                                      int(xc)-halfstampsize:int(xc)+halfstampsize + 1/oversampling:1/oversampling]
                     psf = grids[f'{detector.upper()}'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
                     psfs.append(psf)
 
         if len(psfs) > 0:
             meanpsf = np.mean(psfs, axis=0)
         else:
-            meanpsf = np.zeros((halfstampsize*2*oversampling, halfstampsize*2*oversampling))
+            meanpsf = np.zeros((halfstampsize*2*oversampling + 1, halfstampsize*2*oversampling + 1))
 
         if blur:
             kernwidth = smoothing_scales[filtername.lower()]
@@ -111,6 +114,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
     psfmeta['OVERSAMP'] = oversampling
     psfmeta['DET_SAMP'] = oversampling
     psfmeta['FILTER'] = filtername
+    psfmeta['DETECTOR'] = detectorstr # only the last one in the loop...
 
     allpsfs = np.array(allpsfs)
 
