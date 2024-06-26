@@ -87,16 +87,16 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
                 xc, yc = dmod.meta.wcs.world_to_pixel(skyc1)
                 if footprint_contains(xc, yc, dmod.data.shape):
                     # force xc, yc to integers so they stay centered
-                    # (mgrid is forced to be integers, and allowing xc/yc not to be would result in arbitrary subpixel shifts)
+                    # (mgrid is forced to be integers for oversampling=1, and allowing xc/yc not to be would result in arbitrary subpixel shifts)
                     # oversampling allows non-integers again though, and increases the grid size
 
-                    # yy, xx was being used before, but it looks like that might've created a 90deg rotation?
-                    # OVERSAMPLING SHIFTS BY HALF-PIXEL!
+                    # OVERSAMPLING SHIFTS BY HALF-PIXEL!  Maybe by recentering, we fix that?
                     yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize + 1/oversampling:1/oversampling,
                                       int(xc)-halfstampsize:int(xc)+halfstampsize + 1/oversampling:1/oversampling]
                     assert yy.shape[0] % 2 == 1
                     assert yy.shape[1] % 2 == 1
                     psf = grids[f'{detector.upper()}'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
+                    assert not np.any(np.isnan(psf))
                     psfs.append(psf)
 
         if len(psfs) > 0:
@@ -104,6 +104,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
         else:
             meanpsf = np.zeros((halfstampsize*2*oversampling + 1, halfstampsize*2*oversampling + 1))
         assert meanpsf.shape[0] % 2 == 1
+        assert not np.any(np.isnan(meanpsf))
 
         if blur:
             kernwidth = smoothing_scales[filtername.lower()]
@@ -124,6 +125,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
     cdata = allpsfs / allpsfs.sum(axis=(1,2))[:,None,None]
     avg = np.nanmean(cdata, axis=0)
     cdata[np.any(np.isnan(cdata), axis=(1,2)), :, :] = avg
+    assert not np.any(np.isnan(cdata))
 
     return NDData(cdata, meta=psfmeta)
 

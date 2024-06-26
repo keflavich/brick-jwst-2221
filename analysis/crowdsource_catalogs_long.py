@@ -288,10 +288,13 @@ def load_data(filename):
 def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
                   use_grid=False,
                   blur=False,
-                  basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
+                  target='brick',
+                  basepath='/blue/adamginsburg/adamginsburg/jwst/'):
     """
     Return two types of PSF model, the first for DAOPhot and the second for Crowdsource
     """
+
+    basepath = f'{basepath}/{target}'
 
     blur_ = "_blur" if blur else ""
 
@@ -587,7 +590,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
                                     use_webbpsf=False, use_grid=False,
                                     blur=options.blur,
-                                    basepath='/blue/adamginsburg/adamginsburg/jwst/brick/')
+                                    target=field,
+                                    basepath='/blue/adamginsburg/adamginsburg/jwst/')
     dao_psf_model = grid
 
     dq, weight, bad = get_uncertainty(err, data, wht=wht)
