@@ -43,9 +43,9 @@ from astropy import units as u
 
 from analysis_setup import (basepath, reg, regzoom, distance_modulus,
                             filternames, basetable, plot_tools, basetable,
-                            basetable_merged_reproject,
-                            basetable_merged,
-                            basetable_merged1182,
+                            #basetable_merged_reproject,
+                            #basetable_merged,
+                            #basetable_merged1182,
                             #basetable_nrca, basetable_nrcb,
                             #basetable_merged_reproject_dao_iter_bg_epsf ,
                             #basetable_merged_reproject_dao_iter_epsf,
