@@ -164,11 +164,12 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                                    min_cut=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
     pl.colorbar(mappable=im)
-    im = pl.subplot(2,2,3).imshow((data-modsky)[zoomcut],
-                                  norm=simple_norm((data-modsky)[zoomcut],
-                                                   stretch='asinh',
-                                                   max_percent=99.5,
-                                                   min_percent=0.5),
+    resid = (data[zoomcut]-modsky[zoomcut])
+    norm = (simple_norm(resid, stretch='asinh', max_percent=99.5, min_percent=0.5)
+            if np.nanmin(resid) > 0 else
+            simple_norm(resid, stretch='log', max_percent=99.5, min_cut=0))
+    im = pl.subplot(2,2,3).imshow(resid,
+                                  norm=norm,
                                   cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("data-modsky")
     pl.colorbar(mappable=im)
@@ -189,6 +190,8 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
         qgood = ((stars['qfit'] < 2) &
                  (stars['cfit'] < 0.1) &
                  (stars['flags'] == 0))
+    else:
+        qgood = np.ones(len(stars), dtype='bool')
 
     axlims = pl.axis()
     if zoomcut[0].start:
@@ -197,17 +200,17 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
               (stars['x'] <= zoomcut[1].stop) &
               (stars['y'] >= zoomcut[0].start) &
               (stars['y'] <= zoomcut[0].stop))
-        pl.subplot(2,2,4).scatter(stars['x'][ok]-zoomcut[1].start,
-                                  stars['y'][ok]-zoomcut[0].start,
+        pl.subplot(2,2,4).scatter(stars['x'][ok & ~qgood]-zoomcut[1].start,
+                                  stars['y'][ok & ~qgood]-zoomcut[0].start,
                                   marker='x', color='r', s=8, linewidth=0.5)
         pl.subplot(2,2,4).scatter(stars['x'][ok & qgood]-zoomcut[1].start,
                                   stars['y'][ok & qgood]-zoomcut[0].start,
-                                  marker='x', color='g', s=8, linewidth=0.5)
+                                  marker='+', color='g', s=8, linewidth=0.5)
     else:
-        pl.subplot(2,2,4).scatter(stars['x'],
-                                  stars['y'], marker='x', color='r', s=5, linewidth=0.5)
+        pl.subplot(2,2,4).scatter(stars['x'][~qgood],
+                                  stars['y'][~qgood], marker='x', color='r', s=5, linewidth=0.5)
         pl.subplot(2,2,4).scatter(stars['x'][qgood],
-                                  stars['y'][qgood], marker='x', color='g', s=5, linewidth=0.5)
+                                  stars['y'][qgood], marker='+', color='g', s=5, linewidth=0.5)
     pl.axis(axlims)
     pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
     pl.colorbar(mappable=im)
