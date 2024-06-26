@@ -94,6 +94,8 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
                     # OVERSAMPLING SHIFTS BY HALF-PIXEL!
                     yy, xx = np.mgrid[int(yc)-halfstampsize:int(yc)+halfstampsize + 1/oversampling:1/oversampling,
                                       int(xc)-halfstampsize:int(xc)+halfstampsize + 1/oversampling:1/oversampling]
+                    assert yy.shape[0] % 2 == 1
+                    assert yy.shape[1] % 2 == 1
                     psf = grids[f'{detector.upper()}'].evaluate(x=xx, y=yy, flux=1, x_0=int(xc), y_0=int(yc))
                     psfs.append(psf)
 
@@ -101,6 +103,7 @@ def make_merged_psf(filtername, basepath, halfstampsize=25,
             meanpsf = np.mean(psfs, axis=0)
         else:
             meanpsf = np.zeros((halfstampsize*2*oversampling + 1, halfstampsize*2*oversampling + 1))
+        assert meanpsf.shape[0] % 2 == 1
 
         if blur:
             kernwidth = smoothing_scales[filtername.lower()]
