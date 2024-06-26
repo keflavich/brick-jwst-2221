@@ -2,6 +2,7 @@ import numpy as np
 import time
 import datetime
 import os
+import sys
 import warnings
 from astropy.io import fits
 import glob
@@ -67,6 +68,28 @@ project_obsnum = {
 
 def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
+
+def sanity_check_individual_table(tbl):
+    finite_fluxes = np.isfinite(np.array(tbl['flux_jy']))
+    wl = filtername = tbl.meta['filter']
+
+    jfilts = SvoFps.get_filter_list('JWST')
+    jfilts.add_index('filterID')
+    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
+
+    flux_jy = tbl['flux_jy'][finite_fluxes].quantity
+    abmag_tbl = tbl['mag_ab'][finite_fluxes].quantity
+
+    abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+
+    try:
+        np.testing.assert_almost_equal(abmag, abmag_tbl, decimal=4)
+    except Exception as ex:
+        print(ex)
+        print(np.abs(abmag-abmag_tbl).max())
+
+    print(f"Max flux in tbl for {wl}: {tbl['flux'].max()};"
+          f" in jy={flux_jy.max()}; mag={abmag_tbl.max()}")
 
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f405n',
@@ -158,8 +181,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                         matchtb[f'{cn}_{wl}'].meta = matchtb[cn].meta
                     matchtb.remove_column(cn)
 
-            print(f"Max flux in tbl for {wl}: {tbl['flux'].max()}")
-            print(f"merging tables step: max flux for {wl} is {matchtb['flux_'+cn].max()}")
+            print(f"Max flux in tbl for {wl}: {tbl['flux'].max()}; in jy={np.nanmax(np.array(tbl['flux_jy']))}; mag={np.nanmin(np.array(tbl['mag_ab']))}")
+            print(f"merging tables step: max flux for {wl} is {matchtb['flux_'+wl].max()} {matchtb['flux_jy_'+wl].max()} {matchtb['mag_ab_'+wl].min()}")
 
             basetable = table.hstack([basetable, matchtb], join_type='exact')
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
@@ -167,7 +190,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             for key in tbl.meta:
                 meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
 
-            print(f"merging tables step: max flux for {wl} in merged table is {basetable['flux_'+cn].max()}")
+            print(f"merging tables step: max flux for {wl} in merged table is {basetable['flux_'+wl].max()} {np.nanmax(np.array(basetable['flux_jy_'+wl]))} {np.nanmin(np.array(basetable['mag_ab_'+wl]))}")
             # DEBUG
             # DEBUG if hasattr(basetable[f'{cn}_{wl}'], 'mask'):
             # DEBUG     print(f"Table has mask sum for column {cn} {basetable[cn+'_'+wl].mask.sum()}")
@@ -317,13 +340,16 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                 tbl.add_column(Column(eflux_jy, name='eflux_jy', unit=u.Jy))
                 tbl.add_column(Column(abmag, name='mag_ab', unit=u.mag))
                 tbl.add_column(Column(abmag_err, name='emag_ab', unit=u.mag))
-                print(f"Max flux={tbl['flux_jy'].max()}, min mag={np.nanmin(tbl['mag_ab'])}")
+                print(f"Max flux={tbl['flux_jy'].max()}, min mag={np.nanmin(tbl['mag_ab'])}, median={np.nanmedian(tbl['mag_ab'])}")
         if hasattr(tbl['mag_ab'], 'mask'):
             print(f'ab mag tbl col has mask sum = {tbl["mag_ab"].mask.sum()} masked values')
         if hasattr(abmag, 'mask'):
             print(f'ab mag has mask sum = {abmag.mask.sum()} masked values')
         if hasattr(tbl['flux'], 'mask'):
-            print(f'ab mag has mask sum = {tbl["flux"].mask.sum()} masked values')
+            print(f'flux has mask sum = {tbl["flux"].mask.sum()} masked values')
+
+    for tbl in tbls:
+        sanity_check_individual_table(tbl)
 
     merge_catalogs(tbls,
                    catalog_type=f'crowdsource{suffix}{"_desat" if desat else ""}{"_bgsub" if bgsub else ""}',
@@ -386,6 +412,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         tbl.meta['fwhm_pix'] = fwhm_pix
 
         with np.errstate(all='ignore'):
+            # TODO: Is DAOPHOT fitting the peak or the sum?  I think it's the sum, in which case this is wrong...
             flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
             abmag = -2.5 * np.log10(flux_jy / zeropoint)
@@ -612,6 +639,9 @@ def main():
                                                       fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
                             except Exception as ex:
                                 print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                exc_type, exc_obj, exc_tb = sys.exc_info()
+                                print(f"Exception occurred on line {exc_tb.tb_lineno}")
+
                             print(f'crowdsource phase done.  time elapsed={time.time()-t0}')
                             t0 = time.time()
                             print()
