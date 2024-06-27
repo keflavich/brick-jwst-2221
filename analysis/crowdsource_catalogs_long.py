@@ -604,7 +604,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
                                     use_webbpsf=False, use_grid=False,
                                     blur=options.blur,
-                                    target=field,
+                                    target=options.target,
                                     basepath='/blue/adamginsburg/adamginsburg/jwst/')
     dao_psf_model = grid
 
