@@ -107,6 +107,9 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
             stamps.append(self.psfgridmodel.evaluate(cols+col[i], rows+row[i], 1, col[i], row[i]))
 
         stamps = np.array(stamps)
+
+        # for oversampled stamps, they may not be normalized
+        stamps /= stamps.sum(axis=(1,2))[:,None,None]
         # this is evidently an incorrect transpose
         #stamps = np.transpose(stamps, axes=(0,2,1))
 
@@ -299,6 +302,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
                   blur=False,
                   target='brick',
                   stampsz=19,
+                  oversample=1,
                   basepath='/blue/adamginsburg/adamginsburg/jwst/'):
     """
     Return two types of PSF model, the first for DAOPhot and the second for Crowdsource
@@ -380,7 +384,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
             return grid, psf_model
     else:
 
-        grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample1{blur_}.fits')
+        grid = psfgrid = to_griddedpsfmodel(f'{basepath}/psfs/{filtername.upper()}_{proposal_id}_{field}_merged_PSFgrid_oversample{oversample}{blur_}.fits')
 
         # if isinstance(grid, list):
         #     print(f"Grid is a list: {grid}")
