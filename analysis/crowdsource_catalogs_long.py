@@ -102,7 +102,9 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
         stamps = []
         for i in range(len(col)):
             # the +0.5 is required to actually center the PSF (empirically)
-            stamps.append(self.psfgridmodel.evaluate(cols+col[i]+0.5, rows+row[i]+0.5, 1, col[i], row[i]))
+            #stamps.append(self.psfgridmodel.evaluate(cols+col[i]+0.5, rows+row[i]+0.5, 1, col[i], row[i]))
+            # the above may have been true when we were using (incorrectly) offset PSFs
+            stamps.append(self.psfgridmodel.evaluate(cols+col[i], rows+row[i], 1, col[i], row[i]))
 
         stamps = np.array(stamps)
         # this is evidently an incorrect transpose
@@ -122,7 +124,6 @@ class WrappedPSFModel(crowdsource.psf.SimplePSF):
 
         return ret
 
-
     def render_model(self, col, row, stampsz=None):
         """
         this function likely does nothing?
@@ -141,14 +142,21 @@ def save_epsf(epsf, filename, overwrite=True):
     hdu = fits.PrimaryHDU(data=epsf.data, header=header)
     hdu.writeto(filename, overwrite=overwrite)
 
+
 def read_epsf(filename):
     fh = fits.open(filename)
     hdu = fh[0]
     return EPSFModel(data=hdu.data, oversampling=hdu.header['OVERSAMP'])
 
 
-
 def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
+
+    # make sure stars is a table
+    try:
+        'qf' in stars.colnames
+    except AttributeError:
+        stars = Table(stars)
+
     pl.figure(figsize=(12,12))
     im = pl.subplot(2,2,1).imshow(data[zoomcut],
                                   norm=simple_norm(data[zoomcut],
@@ -167,7 +175,8 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     resid = (data[zoomcut]-modsky[zoomcut])
     norm = (simple_norm(resid, stretch='asinh', max_percent=99.5, min_percent=0.5)
             if np.nanmin(resid) > 0 else
-            simple_norm(resid, stretch='log', max_percent=99.5, min_cut=0))
+            simple_norm(resid, stretch='log', max_cut=np.nanpercentile(resid, 99.5), min_cut=0))
+    print(resid.min(), np.nanmin(resid) > 0, norm)
     im = pl.subplot(2,2,3).imshow(resid,
                                   norm=norm,
                                   cmap='gray')
@@ -179,13 +188,13 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                                    max_percent=99.95,
                                                    min_cut=0), cmap='gray')
 
-    if 'qf' in stars:
+    if 'qf' in stars.colnames:
         # used in analysis
         qgood = ((stars['qf'] > 0.6) &
                  (stars['spread_model'] < 0.25) &
                  (stars['fracflux'] > 0.8)
                 )
-    elif 'qfit' in stars:
+    elif 'qfit' in stars.colnames:
         # guesses, no tests don
         qgood = ((stars['qfit'] < 2) &
                  (stars['cfit'] < 0.1) &
@@ -289,6 +298,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
                   use_grid=False,
                   blur=False,
                   target='brick',
+                  stampsz=19,
                   basepath='/blue/adamginsburg/adamginsburg/jwst/'):
     """
     Return two types of PSF model, the first for DAOPhot and the second for Crowdsource
@@ -307,20 +317,20 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
     #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
     #         grid = grid[0]
 
-    with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
-        api_token = fh.read().strip()
-    from astroquery.mast import Mast
-
-    for ii in range(10):
-        try:
-            Mast.login(api_token.strip())
-            break
-        except (requests.exceptions.ReadTimeout, urllib3.exceptions.ReadTimeoutError, TimeoutError) as ex:
-            print(f"Attempt {ii} to log in to MAST: {ex}")
-            time.sleep(5)
-    os.environ['MAST_API_TOKEN'] = api_token.strip()
-
     if use_webbpsf:
+        with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
+            api_token = fh.read().strip()
+        from astroquery.mast import Mast
+
+        for ii in range(10):
+            try:
+                Mast.login(api_token.strip())
+                break
+            except (requests.exceptions.ReadTimeout, urllib3.exceptions.ReadTimeoutError, TimeoutError) as ex:
+                print(f"Attempt {ii} to log in to MAST: {ex}")
+                time.sleep(5)
+        os.environ['MAST_API_TOKEN'] = api_token.strip()
+
         has_downloaded = False
         ntries = 0
         while not has_downloaded:
@@ -351,7 +361,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
                     continue
 
         if use_grid:
-            return grid, WrappedPSFModel(grid)
+            return grid, WrappedPSFModel(grid, stampsz=stampsz)
         else:
             # there's no way to use a grid across all detectors.
             # the right way would be to use this as a grid of grids, but that apparently isn't supported.
@@ -378,7 +388,7 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
         #     dao_psf_model = grid[0]
         # else:
 
-        psf_model = WrappedPSFModel(grid)
+        psf_model = WrappedPSFModel(grid, stampsz=stampsz)
         dao_psf_model = grid
 
         return grid, psf_model
@@ -707,6 +717,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
                         bbox_inches='tight')
         except Exception as ex:
             print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for unweighted crowdsource: {ex}')
+            exc_tb = sys.exc_info()[2]
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
 
         fig = pl.figure(0, figsize=(10,10))
         fig.clf()
@@ -761,6 +774,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
                                 bbox_inches='tight')
                 except Exception as ex:
                     print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for crowdsource nsky={nsky} refitpsf={refit_psf} blur={options.blur}: {ex}')
+                    exc_tb = sys.exc_info()[2]
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
 
 
 
@@ -865,6 +881,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
                         bbox_inches='tight')
         except Exception as ex:
             print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} BASIC photometry: {ex}')
+            exc_tb = sys.exc_info()[2]
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
+
         print(f"Done with diagnostics for BASIC photometry.  dt={time.time() - t0}")
         pl.close('all')
 
@@ -966,6 +986,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
                         bbox_inches='tight')
         except Exception as ex:
             print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for ITERATIVE daophot: {ex}')
+            exc_tb = sys.exc_info()[2]
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
 
 if __name__ == "__main__":
     main()
