@@ -179,7 +179,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     norm = (simple_norm(resid, stretch='asinh', max_percent=99.5, min_percent=0.5)
             if np.nanmin(resid) > 0 else
             simple_norm(resid, stretch='log', max_cut=np.nanpercentile(resid, 99.5), min_cut=0))
-    print(resid.min(), np.nanmin(resid) > 0, norm)
+
     im = pl.subplot(2,2,3).imshow(resid,
                                   norm=norm,
                                   cmap='gray')
@@ -220,9 +220,9 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                   marker='+', color='g', s=8, linewidth=0.5)
     else:
         pl.subplot(2,2,4).scatter(stars['x'][~qgood],
-                                  stars['y'][~qgood], marker='x', color='r', s=5, linewidth=0.5)
+                                  stars['y'][~qgood], marker='+', color='y', s=5, linewidth=0.5)
         pl.subplot(2,2,4).scatter(stars['x'][qgood],
-                                  stars['y'][qgood], marker='+', color='g', s=5, linewidth=0.5)
+                                  stars['y'][qgood], marker='x', color='r', s=5, linewidth=0.5)
     pl.axis(axlims)
     pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
     pl.colorbar(mappable=im)
