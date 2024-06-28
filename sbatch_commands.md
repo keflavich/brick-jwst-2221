@@ -106,6 +106,9 @@ sbatch --job-name=webb-cat-long --output=web-cat-long%j.log  --account=adamginsb
 Merge (crossmatch) the catalogs (this means merge different filters - this doesn't merge nrca+nrcb) = merge catalogs:
 ```
 sbatch --job-name=webb-cat-merge --output=web-cat-merge%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py"
+
+sbatch --job-name=webb-cat-merge-daophot --output=web-cat-merge-daophot%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --skip-crowdsource"
+sbatch --job-name=webb-cat-merge-crowdsource --output=web-cat-merge-crowdsource%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --skip-daophot"
 ```
 
 With extra options:
