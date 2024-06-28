@@ -374,6 +374,9 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
 
+    filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
+    print(f"Merging daophot {daophot_type}, {detector}, {module}, {desat}, {bgsub}, {epsf_}, {blur_}. filters {filternames}")
+
     catfns = daocatfns = [
         f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf_}{blur_}_daophot_{daophot_type}.fits"
         for filtername in filternames
