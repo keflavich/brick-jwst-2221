@@ -421,13 +421,13 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
         with np.errstate(all='ignore'):
             # TODO: Is DAOPHOT fitting the peak or the sum?  I think it's the sum, in which case this is wrong...
-            flux_jy = (flux * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
+            flux_jy = (flux * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
             abmag = -2.5 * np.log10(flux_jy / zeropoint)
             try:
-                eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
+                eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             except KeyError:
-                eflux_jy = (tbl['flux_err'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm_arcsec**2).to(u.Jy)
+                eflux_jy = (tbl['flux_err'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy
         tbl.add_column(flux_jy, name='flux_jy')
         tbl.add_column(abmag, name='mag_ab')
