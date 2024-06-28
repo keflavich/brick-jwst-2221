@@ -214,10 +214,10 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
               (stars['y'] <= zoomcut[0].stop))
         pl.subplot(2,2,4).scatter(stars['x'][ok & ~qgood]-zoomcut[1].start,
                                   stars['y'][ok & ~qgood]-zoomcut[0].start,
-                                  marker='x', color='r', s=8, linewidth=0.5)
+                                  marker='+', color='y', s=8, linewidth=0.5)
         pl.subplot(2,2,4).scatter(stars['x'][ok & qgood]-zoomcut[1].start,
                                   stars['y'][ok & qgood]-zoomcut[0].start,
-                                  marker='+', color='g', s=8, linewidth=0.5)
+                                  marker='x', color='r', s=8, linewidth=0.5)
     else:
         pl.subplot(2,2,4).scatter(stars['x'][~qgood],
                                   stars['y'][~qgood], marker='+', color='y', s=5, linewidth=0.5)
