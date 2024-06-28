@@ -176,9 +176,12 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
     pl.colorbar(mappable=im)
     resid = (data[zoomcut]-modsky[zoomcut])
+
+    rms = stats.mad_std(resid)
+
     norm = (simple_norm(resid, stretch='asinh', max_percent=99.5, min_percent=0.5)
             if np.nanmin(resid) > 0 else
-            simple_norm(resid, stretch='log', max_cut=np.nanpercentile(resid, 99.5), min_cut=0))
+            simple_norm(resid, stretch='log', max_cut=np.nanpercentile(resid, 99.5), min_cut=-2*rms))
 
     im = pl.subplot(2,2,3).imshow(resid,
                                   norm=norm,
