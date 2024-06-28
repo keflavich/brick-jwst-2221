@@ -106,7 +106,7 @@ def main(basetable, ww):
     minfracflux = 0.8
 
     # daophot parameters
-    max_qfit = 2
+    max_qfit = 0.4
     max_cfit = 0.1
 
     for filt in filternames:
@@ -641,21 +641,37 @@ if __name__ == "__main__":
         basetable = basetable_merged1182_blur
         print("Loaded merged1182_blur")
 
-    elif options.module == 'merged1182_daophot':
+    elif options.module == 'merged1182_daophot_iterative':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/iterative_merged_photometry_tables_merged.fits')
         result = main(basetable_merged1182_daophot, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182_daophot
-        print("Loaded merged1182_daophot")
+        print("Loaded merged1182_daophot_iterative")
 
-    elif options.module == 'merged1182_daophot_blur':
+    elif options.module == 'merged1182_daophot_iterative_blur':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot_blur = Table.read(f'{basepath}/catalogs/iterative_merged_photometry_tables_merged_blur.fits')
         result = main(basetable_merged1182_daophot_blur, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182_daophot_blur
-        print("Loaded merged1182_daophot")
+        print("Loaded merged1182_daophot_iterative_blur")
+
+    elif options.module == 'merged1182_daophot_basic':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged.fits')
+        result = main(basetable_merged1182_daophot, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182_daophot
+        print("Loaded merged1182_daophot_basic")
+
+    elif options.module == 'merged1182_daophot_basic_blur':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182_daophot_blur = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_blur.fits')
+        result = main(basetable_merged1182_daophot_blur, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182_daophot_blur
+        print("Loaded merged1182_daophot_basic_blur")
 
 
     elif options.module == 'merged-reproject':

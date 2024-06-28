@@ -202,7 +202,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                 )
     elif 'qfit' in stars.colnames:
         # guesses, no tests don
-        qgood = ((stars['qfit'] < 2) &
+        qgood = ((stars['qfit'] < 0.4) &
                  (stars['cfit'] < 0.1) &
                  (stars['flags'] == 0))
     else:
