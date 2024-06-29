@@ -289,7 +289,7 @@ bash run_all:
 for filter in F115W F200W F356W F444W; do
     for blur in " " "--blur"; do
         for bgsub in " " "--bgsub"; do
-            sbatch --job-name=webb-cat-${filter}mrg${blur:2}${bgsub:2} --output=web-cat-${filter}-mrg${blur:2}${bgsub:2}%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --proposal_id=1182 --modules=merged $blur $bgsub --daophot"
+            sbatch --job-name=webb-cat-${filter}mrg${blur:2}${bgsub:2} --output=web-cat-${filter}-mrg${blur:2}${bgsub:2}%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --proposal_id=1182 --modules=merged $blur $bgsub --daophot --skip-crowdsource"
         done
     done
 done
@@ -297,7 +297,7 @@ done
 for filter in F212N F182M F182M F410M F405N F466N; do
     for blur in " " "--blur"; do
         for bgsub in " " "--bgsub"; do
-            sbatch --job-name=webb-cat-${filter}mrg${blur:2}${bgsub:2} --output=web-cat-${filter}-mrg${blur:2}${bgsub:2}%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=merged $blur $bgsub --daophot"
+            sbatch --job-name=webb-cat-${filter}mrg${blur:2}${bgsub:2} --output=web-cat-${filter}-mrg${blur:2}${bgsub:2}%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=merged $blur $bgsub --daophot --skip-crowdsource"
         done
     done
 done
