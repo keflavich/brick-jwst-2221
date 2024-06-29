@@ -612,11 +612,11 @@ def main():
                     help="target", metavar="target")
     parser.add_option("--skip-crowdsource", dest="skip_crowdsource",
                     default=False,
-                    action="store_true"
+                    action="store_true",
                     help="skip_crowdsource", metavar="skip_crowdsource")
     parser.add_option("--skip-daophot", dest="skip_daophot",
                     default=False,
-                    action="store_true"
+                    action="store_true",
                     help="skip_daophot", metavar="skip_daophot")
     (options, args) = parser.parse_args()
 
