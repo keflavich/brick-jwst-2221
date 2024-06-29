@@ -516,10 +516,16 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 # jw02221001001_07101_00024_nrcblong_destreak_o001_crf.fits
                 for filename in filenames:
                     exposure_id = filename.split("_")[2]
-                    do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs, exposurenumber=int(exposure_id))
+                    do_photometry_step(options, filtername, module, detector,
+                                       field, basepath, filename, proposal_id,
+                                       crowdsource_default_kwargs, exposurenumber=int(exposure_id),
+                                       bg_boxsizes=bg_boxsizes)
             else:
                 filename = get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear')
-                do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs)
+                do_photometry_step(options, filtername, module, detector, field,
+                                   basepath, filename, proposal_id, crowdsource_default_kwargs,
+                                   bg_boxsizes=bg_boxsizes
+                                   )
 
 
 def get_filenames(basepath, filtername, proposal_id, field, each_suffix, pupil='clear'):
@@ -566,7 +572,10 @@ def get_filename(basepath, filtername, proposal_id, field, module, options, pupi
     return filename
 
 
-def do_photometry_step(options, filtername, module, detector, field, basepath, filename, proposal_id, crowdsource_default_kwargs, exposurenumber=None, pupil='clear'):
+def do_photometry_step(options, filtername, module, detector, field, basepath,
+                       filename, proposal_id, crowdsource_default_kwargs, exposurenumber=None,
+                       bg_boxsizes=None,
+                       pupil='clear'):
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -859,17 +868,16 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
-        modelim = phot.make_model_image(data.shape, (21, 21), include_localbkg=False)
-        residual = data - modelim
+        modsky = phot.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        residual = data - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
-            filename.replace(".fits", "_daophot_basic_residual.fits"),
+            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{exposure_}{desat}{bgsub}{epsf_}{blur_}_daophot_basic_residual.fits',
             overwrite=True)
-        fits.PrimaryHDU(data=modelim, header=im1[1].header).writeto(
-            filename.replace(".fits", "_daophot_basic_model.fits"),
+        fits.PrimaryHDU(data=modsky, header=im1[1].header).writeto(
+            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{exposure_}{desat}{bgsub}{epsf_}{blur_}_daophot_basic_model.fits',
             overwrite=True)
         print("Saved BASIC residual image, now making diagnostics.")
-        modsky = data - residual
         try:
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
             pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{exposure_}{desat}{bgsub}{epsf_}{blur_}")
@@ -964,17 +972,16 @@ def do_photometry_step(options, filtername, module, detector, field, basepath, f
         stars['y'] = stars['y_fit']
 
         print("Creating iterative residual")
-        modelim = phot_.make_model_image(data.shape, (21, 21), include_localbkg=False)
-        residual = data - modelim
+        modsky = phot_.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        residual = data - modsky
         print("finished iterative residual")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
-            filename.replace(".fits", "_daophot_iterative_residual.fits"),
+            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{exposure_}{desat}{bgsub}{epsf_}{blur_}_daophot_iterative_residual.fits',
             overwrite=True)
-        fits.PrimaryHDU(data=modelim, header=im1[1].header).writeto(
-            filename.replace(".fits", "_daophot_iterative_model.fits"),
+        fits.PrimaryHDU(data=modsky, header=im1[1].header).writeto(
+            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{exposure_}{desat}{bgsub}{epsf_}{blur_}_daophot_iterative_model.fits',
             overwrite=True)
         print("Saved iterative residual")
-        modsky = data - residual
         try:
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
             pl.suptitle(f"daophot iterative Catalog Diagnostics zoomed {filtername} {module}{exposure_}{desat}{bgsub}{epsf_}{blur_}")
