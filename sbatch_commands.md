@@ -283,6 +283,16 @@ sbatch --job-name=webb-cat-F466Nmrgblur --output=web-cat-F466N-mrgblur%j.log  --
 sbatch --job-name=webb-cat-F187Nmrgblur --output=web-cat-F187N-mrgblur%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F187N --modules=merged --blur --daophot"
 sbatch --job-name=webb-cat-F182Mmrgblur --output=web-cat-F182M-mrgblur%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F182M --modules=merged --blur --daophot"
 sbatch --job-name=webb-cat-F212Nmrgblur --output=web-cat-F212N-mrgblur%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F212N --modules=merged --blur --daophot"
+
+bash run_all:
+for filter in F212N F182M F200W F115W F182M F356W F410M F405N F466N; do
+    for blur in " " "--blur"; do
+        for bgsub in " " "--bgsub"; do
+            sbatch --job-name=webb-cat-${filter}mrg${blur:2}${bgsub:2} --output=web-cat-${filter}-mrg${blur:2}${bgsub:2}%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=merged $blur $bgsub --daophot"
+        done
+    done
+done
+
 ```
 
 For 1182:
