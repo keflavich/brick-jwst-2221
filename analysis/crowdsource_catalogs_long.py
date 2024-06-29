@@ -611,6 +611,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         fits.PrimaryHDU(data=data, header=im1['SCI'].header).writeto(filename.replace(".fits", "_bgsub.fits"), overwrite=True)
 
+    # try to limit memory use before we start photometry
+    data = data.astype('float32')
 
     # Load PSF model
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
@@ -856,6 +858,12 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print("About to do BASIC photometry....")
         result = phot(np.nan_to_num(data))
         print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
+
+        # remove negative-peak and zero-peak sources (they affect the residuals badly)
+        bad = result['flux_fit'] <= 0
+        result = result[~bad]
+        phot._fit_models = [mod for mod, ok in zip(phot._fit_models, ~bad) if ok]
+
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
         result['skycoord_centroid'] = coords
@@ -960,6 +968,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print("About to do ITERATIVE photometry....")
         result2 = phot_(data)
         print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
+
+        bad = result2['flux_fit'] <= 0
+        result2 = result2[~bad]
+        phot_._fit_models = [mod for mod, ok in zip(phot_._fit_models, ~bad) if ok]
+
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
         print(f'len(result2) = {len(result2)}, len(coords) = {len(coords2)}', flush=True)
