@@ -862,7 +862,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         # remove negative-peak and zero-peak sources (they affect the residuals badly)
         bad = result['flux_fit'] <= 0
         result = result[~bad]
-        phot._fit_models = [mod for mod, ok in zip(phot._fit_models, ~bad) if ok]
+        try:
+            phot._fit_model_params = [mod for mod, ok in zip(phot._fit_model_params, ~bad) if ok]
+        except AttributeError:
+            phot._fit_models = [mod for mod, ok in zip(phot._fit_models, ~bad) if ok]
 
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
@@ -971,7 +974,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         bad = result2['flux_fit'] <= 0
         result2 = result2[~bad]
-        phot_._fit_models = [mod for mod, ok in zip(phot_._fit_models, ~bad) if ok]
+        try:
+            phot._fit_model_params = [mod for mod, ok in zip(phot._fit_model_params, ~bad) if ok]
+        except AttributeError:
+            phot._fit_models = [mod for mod, ok in zip(phot._fit_models, ~bad) if ok]
 
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
