@@ -863,7 +863,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         bad = result['flux_fit'] <= 0
         result = result[~bad]
         try:
-            phot._fit_model_params = [mod for mod, ok in zip(phot._fit_model_params, ~bad) if ok]
+            #phot._fit_model_params = [mod for mod, ok in zip(phot._fit_model_params, ~bad) if ok]
+            phot._fit_model_params = phot._fit_model_params[~bad]
         except AttributeError:
             phot._fit_models = [mod for mod, ok in zip(phot._fit_models, ~bad) if ok]
 
@@ -975,7 +976,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         bad = result2['flux_fit'] <= 0
         result2 = result2[~bad]
         try:
-            phot._fit_model_params = [mod for mod, ok in zip(phot._fit_model_params, ~bad) if ok]
+            phot._fit_model_params = phot._fit_model_params[~bad]
+            #phot._fit_model_params = [mod for mod, ok in zip(phot._fit_model_params, ~bad) if ok]
         except AttributeError:
             phot._fit_models = [mod for mod, ok in zip(phot._fit_models, ~bad) if ok]
 
