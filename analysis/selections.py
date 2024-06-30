@@ -673,6 +673,23 @@ if __name__ == "__main__":
         basetable = basetable_merged1182_daophot_blur
         print("Loaded merged1182_daophot_basic_blur")
 
+    elif options.module == 'merged1182_daophot_basic_bgsub':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182_daophot_bgsub = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_bgsub.fits')
+        result = main(basetable_merged1182_daophot_bgsub, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182_daophot_bgsub
+        print("Loaded merged1182_daophot_basic_bgsub")
+
+    elif options.module == 'merged1182_daophot_basic_bgsub_blur':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182_daophot_bgsub_blur = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_bgsub_blur.fits')
+        result = main(basetable_merged1182_daophot_bgsub_blur, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182_daophot_bgsub_blur
+        print("Loaded merged1182_daophot_basic_bgsub_blur")
+
+
 
     elif options.module == 'merged-reproject':
         from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
