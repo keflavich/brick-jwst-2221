@@ -16,7 +16,7 @@ from astropy import units as u
 from astroquery.svo_fps import SvoFps
 
 try:
-    from photutils.apeture import CircularAnnulus, CircularAperture
+    from photutils.aperture import CircularAnnulus, CircularAperture
     from photutils.psf import EPSFBuilder
     from photutils.detection import find_peaks
 except ImportError:
