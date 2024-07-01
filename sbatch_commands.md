@@ -338,4 +338,11 @@ sbatch --job-name=webb-cat-F444W-mrgrep --output=web-cat-F444W-mrgrep%j.log  --a
 sbatch --job-name=webb-cat-F356W-mrgrep --output=web-cat-F356W-mrgrep%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F356W --proposal_id=1182 --modules=merged-reproject"
 sbatch --job-name=webb-cat-F200W-mrgrep --output=web-cat-F200W-mrgrep%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F200W --proposal_id=1182 --modules=merged-reproject"
 sbatch --job-name=webb-cat-F115W-mrgrep --output=web-cat-F115W-mrgrep%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F115W --proposal_id=1182 --modules=merged-reproject"
+
+```
+
+
+Each exposure
+```
+sbatch --job-name=webb-cat-F410M-eachexp --output=web-cat-F410M-eachexp%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00  --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F410M --modules=merged --each-exposure --daophot"
 ```

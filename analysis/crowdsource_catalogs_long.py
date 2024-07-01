@@ -629,6 +629,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                     basepath='/blue/adamginsburg/adamginsburg/jwst/')
     dao_psf_model = grid
 
+    # bound the flux to be >= 0 (no negative peak fitting)
+    dao_psf_model.flux.min = 0
+
     dq, weight, bad = get_uncertainty(err, data, wht=wht)
 
     filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)

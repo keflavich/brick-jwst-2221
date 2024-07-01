@@ -500,7 +500,7 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
         ax.set_title(filtername)
 
         ax2 = fig2.add_subplot(gridspec[ii])
-        ax2.hist(sep.to(u.arcsec).value, bins=np.linspace(0, 0.5))
+        ax2.hist(sep.to(u.arcsec).value, bins=np.linspace(0, maxsep.to(u.arcsec).value))
         #ax2.set_xlabel("Separation (\")")
         ax2.set_title(filtername)
 
