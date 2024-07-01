@@ -862,10 +862,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         # remove negative-peak and zero-peak sources (they affect the residuals badly)
         bad = result['flux_fit'] <= 0
         result = result[~bad]
-        try:
-            phot_basic._fit_model_params = phot_basic._fit_model_params[~bad]
-        except AttributeError:
-            phot_basic._fit_models = [mod for mod, ok in zip(phot_basic._fit_models, ~bad) if ok]
 
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
@@ -879,7 +875,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
-        modsky = phot_basic.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        modsky = phot_basic.make_model_image(data.shape, (21, 21), include_localbkg=False, exclude_negative_peaks=True)
         residual = data - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
@@ -974,10 +970,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         bad = result2['flux_fit'] <= 0
         result2 = result2[~bad]
-        try:
-            phot_iter._fit_model_params = phot_iter._fit_model_params[~bad]
-        except AttributeError:
-            phot_iter._fit_models = [mod for mod, ok in zip(phot_iter._fit_models, ~bad) if ok]
 
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
@@ -991,7 +983,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['y'] = stars['y_fit']
 
         print("Creating iterative residual")
-        modsky = phot_iter.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        modsky = phot_iter.make_model_image(data.shape, (21, 21), include_localbkg=False, exclude_negative_peaks=True)
         residual = data - modsky
         print("finished iterative residual")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
