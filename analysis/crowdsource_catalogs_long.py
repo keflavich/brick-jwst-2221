@@ -200,11 +200,13 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                  (stars['spread_model'] < 0.25) &
                  (stars['fracflux'] > 0.8)
                 )
+        neg = stars['flux'] < 0
     elif 'qfit' in stars.colnames:
         # guesses, no tests don
         qgood = ((stars['qfit'] < 0.4) &
                  (stars['cfit'] < 0.1) &
                  (stars['flags'] == 0))
+        neg = stars['flux_fit'] < 0
     else:
         qgood = np.ones(len(stars), dtype='bool')
 
@@ -221,11 +223,16 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
         pl.subplot(2,2,4).scatter(stars['x'][ok & qgood]-zoomcut[1].start,
                                   stars['y'][ok & qgood]-zoomcut[0].start,
                                   marker='x', color='r', s=8, linewidth=0.5)
+        pl.subplot(2,2,4).scatter(stars['x'][neg]-zoomcut[1].start,
+                                  stars['y'][neg]-zoomcut[0].start,
+                                  marker='1', color='b', s=8, linewidth=0.5)
     else:
         pl.subplot(2,2,4).scatter(stars['x'][~qgood],
                                   stars['y'][~qgood], marker='+', color='y', s=5, linewidth=0.5)
         pl.subplot(2,2,4).scatter(stars['x'][qgood],
                                   stars['y'][qgood], marker='x', color='r', s=5, linewidth=0.5)
+        pl.subplot(2,2,4).scatter(stars['x'][neg],
+                                  stars['y'][neg], marker='1', color='b', s=5, linewidth=0.5)
     pl.axis(axlims)
     pl.xticks([]); pl.yticks([]); pl.title("Data with stars");
     pl.colorbar(mappable=im)
@@ -860,8 +867,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
 
         # remove negative-peak and zero-peak sources (they affect the residuals badly)
-        bad = result['flux_fit'] <= 0
-        result = result[~bad]
+        # we don't want to remove them now; we need to flag out objects that are too close to negative stars
+        #bad = result['flux_fit'] <= 0
+        #result = result[~bad]
 
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
@@ -968,8 +976,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         result2 = phot_iter(data)
         print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
-        bad = result2['flux_fit'] <= 0
-        result2 = result2[~bad]
+        # need to flag stars near negative stars, so we don't want to exclude them _yet_
+        #bad = result2['flux_fit'] <= 0
+        #result2 = result2[~bad]
 
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
