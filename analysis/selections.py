@@ -97,8 +97,12 @@ def main(basetable, ww):
         any_replaced_saturated = any_replaced_saturated | col
     print(f"{any_replaced_saturated.sum()} saturated out of {len(basetable)}.  That leaves {(~any_replaced_saturated).sum()} unsaturated")
 
-    magerr_gtpt1 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.2 for filtername in filternames])
-    magerr_gtpt1.sum()
+    magerr_gtpt1 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames])
+
+    magerr_gtpt05 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames])
+
+    magerr_gtpt1_notwide = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames if 'w' not in filtername.lower()])
+    magerr_gtpt05_notwide = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames if 'w' not in filtername.lower()])
 
     # crowdsource parameters
     minqf = 0.60
@@ -369,7 +373,6 @@ def main(basetable, ww):
     badblue = blue_410m405_466 & ( ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) > 2)
                                  # | ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) > -1)
                                  )
-
 
     c187_212 = basetable['mag_ab_f187n'] - basetable['mag_ab_f212n']
     c212_405 = basetable['mag_ab_f212n'] - basetable['mag_ab_f405n']
