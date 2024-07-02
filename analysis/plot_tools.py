@@ -164,6 +164,7 @@ def cmds(basetable, sel=True,
          exclude=False,
          alpha=0.5,
          alpha_sel=0.5,
+         xlim_percentiles=None,
         ):
     if fig is None:
         fig = pl.figure()
@@ -184,6 +185,10 @@ def cmds(basetable, sel=True,
         ax.set_xlabel(f"{f1} - {f2}")
         ax.set_ylabel(f"{f1}")
         ax.axis(axlims)
+        if xlim_percentiles:
+            xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
+            xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
+            ax.set_xlim(xlow, xhigh)
 
         if ext is not None:
             w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
