@@ -346,3 +346,9 @@ Each exposure
 ```
 sbatch --job-name=webb-cat-F410M-eachexp --output=web-cat-F410M-eachexp%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00  --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F410M --modules=merged --each-exposure --daophot"
 ```
+
+
+Analyses
+```
+sbatch --job-name=brick-ccds-cmds --output=brick_ccds_cmds%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=4 --nodes=1 --mem=16gb --time=96:00:00  --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/make_CCDsandCMDs.py"
+```
