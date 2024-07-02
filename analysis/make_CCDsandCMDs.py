@@ -100,3 +100,5 @@ for ii, (color1, color2) in enumerate(combos):
         fig.savefig(f'{basepath}/ccds_cmds/cmd_{color1[0]}-{color1[1]}_{color1[0]}.pdf')
     except Exception as ex:
         print(ex)
+
+    pl.close('all')
