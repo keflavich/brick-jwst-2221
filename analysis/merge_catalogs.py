@@ -245,6 +245,37 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
         basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_ab_187m182')
 
+
+        # Add some important colors
+
+        colors=[('f410m', 'f466n'),
+                ('f405n', 'f410m'),
+                ('f405n', 'f466n'),
+                ('f187n', 'f182m', ),
+                ('f182m', 'f410m'),
+                ('f182m', 'f212n', ),
+                ('f187n', 'f405n'),
+                ('f187n', 'f212n'),
+                ('f212n', '410m405'),
+                ('f212n', 'f410m'),
+                ('182m187', '410m405'),
+                ('f356w', 'f444w'),
+                ('f356w', 'f410m'),
+                ('f410m', 'f444w'),
+                ('f405n', 'f444w'),
+                ('f444w', 'f466n'),
+                ('f200w', 'f356w'),
+                ('f200w', 'f212n'),
+                ('f182m', 'f200w'),
+                ('f115w', 'f182m'),
+                ('f115w', 'f212n'),
+                ('f115w', 'f200w'),
+            ]
+        for c1, c2 in colors:
+            if f'mag_ab_{c1}' in basetable.colnames and f'mag_ab_{c2}' in basetable.colnames:
+                basetable.add_column(basetable[f'mag_ab_{c1}']-basetable[f'mag_ab_{c2}'], name=f'color_{c1}-{c2}')
+                basetable.add_column((basetable[f'emag_ab_{c1}']**2 + basetable[f'emag_ab_{c2}']**2)**0.5, name=f'ecolor_{c1}-{c2}')
+
         # DEBUG for colname in basetable.colnames:
         # DEBUG     print(f"colname {colname} has mask: {hasattr(basetable[colname], 'mask')}")
         basetable.meta = meta

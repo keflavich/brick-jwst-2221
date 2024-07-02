@@ -290,6 +290,12 @@ def main(basetable, ww):
                         basetable['good_f187n'] &
                         basetable['good_f182m']
                        )
+    prettyblue_BrA_and_PaA = (blue_BrA_and_PaA &
+                     ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
+                      (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -0.2) &
+                     ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) +
+                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.2)
+                           )
     veryblue_BrA_and_PaA = (blue_BrA_and_PaA &
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -0.5) &
