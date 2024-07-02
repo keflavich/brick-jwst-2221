@@ -151,8 +151,9 @@ def main(basetable, ww):
             f" totaling {allok.sum()}.  There are {len(basetable)} total, of which "
             f"{mask.sum()} are masked and {(~mask).sum()} are unmasked. qfmasksum={qfmask.sum()}, inverse={(~qfmask).sum()}.")
 
-    all_good = np.all([basetable[f'good_{filt}'] for filt in filternames], axis=0)
-    any_good = np.any([basetable[f'good_{filt}'] for filt in filternames], axis=0)
+    # DO NOT exclude missing f115w; it removes too much
+    all_good = np.all([basetable[f'good_{filt}'] for filt in filternames if filt.lower() != 'f115w'], axis=0)
+    any_good = np.any([basetable[f'good_{filt}'] for filt in filternames  if filt.lower() != 'f115w'], axis=0)
     long_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' in filt], axis=0)
     short_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' not in filt], axis=0)
     print(f"Of {len(all_good)} rows, {all_good.sum()} are good in all filters.")
@@ -217,6 +218,7 @@ def main(basetable, ww):
     print(f"Found {oksep.sum()} of {len(oksep)} sources with separations < 0.1 arcsec")
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
 
+    # This text is just to check what the offset was to account for an error I made in 2023.  We no longer need to correct that error because it's done right in cataloging.
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
     abconv = (1*u.Jy).to(u.ABmag)
@@ -299,12 +301,14 @@ def main(basetable, ww):
                 (~basetable['mag_ab_f410m'].mask) &
                 (~basetable['mag_ab_f187n'].mask) &
                 (~basetable['mag_ab_f182m'].mask))
-    detected_allbands = ((~basetable['mag_ab_f405n'].mask) &
+    detected_allnonwidebands = ((~basetable['mag_ab_f405n'].mask) &
                          (~basetable['mag_ab_f410m'].mask) &
                          (~basetable['mag_ab_f466n'].mask) &
                          (~basetable['mag_ab_f212n'].mask) &
                          (~basetable['mag_ab_f187n'].mask) &
                          (~basetable['mag_ab_f182m'].mask))
+    detected_allbands = np.vstack([(~basetable[f'mag_ab_{filt}'].mask) for filt in filternames]).min(axis=0)
+    print(f"Detected in 405, 410, 187, and 182: {detected.sum()}.  In all 2221: {detected_allnonwidebands.sum()}.  All incl 1182: {detected_allbands.sum()}")
     print(f"Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
     print(f"Pretty blue [410-466] sources: {blue_410_466.sum()}")
     print(f"Pretty blue [410m405-466] sources: {blue_410m405_466.sum()}")
