@@ -97,12 +97,18 @@ def main(basetable, ww):
         any_replaced_saturated = any_replaced_saturated | col
     print(f"{any_replaced_saturated.sum()} saturated out of {len(basetable)}.  That leaves {(~any_replaced_saturated).sum()} unsaturated")
 
-    magerr_gtpt1 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames])
+    magerr_gtpt1_any = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames])
+    magerr_gtpt05_any = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames])
+    magerr_gtpt1_all = np.logical_and.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames])
+    magerr_gtpt05_all = np.logical_and.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames])
 
-    magerr_gtpt05 = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames])
+    magerr_gtpt05 = magerr_gtpt05_all
+    magerr_gtpt1 = magerr_gtpt1_all
 
-    magerr_gtpt1_notwide = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames if 'w' not in filtername.lower()])
-    magerr_gtpt05_notwide = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames if 'w' not in filtername.lower()])
+    magerr_gtpt1_notwide_any = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames if 'w' not in filtername.lower()])
+    magerr_gtpt05_notwide_any = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames if 'w' not in filtername.lower()])
+    magerr_gtpt1_notwide_all = np.logical_and.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames if 'w' not in filtername.lower()])
+    magerr_gtpt05_notwide_all = np.logical_and.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames if 'w' not in filtername.lower()])
 
     # crowdsource parameters
     minqf = 0.60
@@ -389,6 +395,24 @@ def main(basetable, ww):
 
     # Coarse color cut eyeballed in CatalogExploration_Sep2023
     recomb_excess_over_212 = c212_405 > c187_212 * (4/3.) + 0.35
+
+    # calculate A_V from colors
+    # super naive version
+    av212410 = (basetable['mag_ab_f212n'] - basetable['mag_ab_f410m']) / (CT06_MWGC()(2.12*u.um) - CT06_MWGC()(4.10*u.um))
+    # but empirically, this value appears to start at 1.2 (f212n - f410m has a locus at -1.2)
+    av212410 = (1.2 + basetable['mag_ab_f212n'] - basetable['mag_ab_f410m']) / (CT06_MWGC()(2.12*u.um) - CT06_MWGC()(4.10*u.um))
+    # so why not just use the 182m?
+    av182212 = (basetable['mag_ab_f182m'] - basetable['mag_ab_f212n']) / (CT06_MWGC()(1.82*u.um) - CT06_MWGC()(2.12*u.um))
+    # or 182-410
+    av182410 = (basetable['mag_ab_f182m'] - basetable['mag_ab_f410m']) / (CT06_MWGC()(1.82*u.um) - CT06_MWGC()(4.10*u.um))
+    # or 187-405
+    av187405 = (basetable['mag_ab_f187n'] - basetable['mag_ab_f405n']) / (CT06_MWGC()(1.87*u.um) - CT06_MWGC()(4.05*u.um))
+
+    if 'mag_ab_f444w' in basetable.colnames:
+        av356444 = (basetable['mag_ab_f356w'] - basetable['mag_ab_f444w']) / (CT06_MWGC()(3.56*u.um) - CT06_MWGC()(4.44*u.um))
+        av200356 = (basetable['mag_ab_f200w'] - basetable['mag_ab_f356w']) / (CT06_MWGC()(2.00*u.um) - CT06_MWGC()(3.56*u.um))
+        # CT06 doesn't work short of 2um
+        av115200 = (basetable['mag_ab_f115w'] - basetable['mag_ab_f200w']) / (RRP89_MWGC()(1.15*u.um) - RRP89_MWGC()(2.00*u.um))
 
     return locals()
 
