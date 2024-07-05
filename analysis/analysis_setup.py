@@ -1,7 +1,8 @@
 import numpy as np
 import datetime
 import os
-import sys, imp
+import sys
+import importlib as imp
 import regions
 import warnings
 import glob
@@ -17,7 +18,7 @@ from astropy import table
 from astropy import units as u
 
 try:
-    from photutils.apeture import CircularAnnulus, CircularAperture
+    from photutils.aperture import CircularAnnulus, CircularAperture
     from photutils.psf import EPSFBuilder
     from photutils.detection import find_peaks
 except ImportError:
