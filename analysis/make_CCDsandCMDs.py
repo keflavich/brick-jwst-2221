@@ -74,17 +74,18 @@ for ii, (color1, color2) in enumerate(combos):
         fig.clf()
         ax = fig.gca()
         ccd(basetable, ax=ax, color1=color1, color2=color2,
-            axlims=(-1, 10, -1, 10) if 'f115w' in color1 or 'f115w' in color2 else (-1, 5, -1, 5), 
+            axlims=(-1, 10, -1, 10) if 'f115w' in color1 or 'f115w' in color2 else (-1, 5, -1, 5),
             sel=sel,
             alpha=0.02,
             alpha_sel=0.02,
             exclude=exclude,
+            max_uncertainty=0.05,
             rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,)
         fig.savefig(f'{basepath}/ccds_cmds/ccd_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.png')
         fig.savefig(f'{basepath}/ccds_cmds/ccd_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.pdf')
     except Exception as ex:
         print(ex)
-    
+
     try:
         fig.clf()
         cmds(basetable, colors=[color1],
@@ -93,6 +94,7 @@ for ii, (color1, color2) in enumerate(combos):
              alpha_sel=0.02,
              fig=fig,
              exclude=exclude,
+             max_uncertainty=0.05,
              axlims=(-2,5,26,15) if 'f115w' in color1 else (-2,5,22,12),
              xlim_percentiles=(0.1, 99.),
              rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,)
