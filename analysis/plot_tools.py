@@ -111,11 +111,21 @@ def ccd(basetable,
         rasterized=True,
         alpha=0.5,
         alpha_sel=0.5,
+        max_uncertainty=None,
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
     keys2 = [f'mag_ab_{col}' for col in color2]
     colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
     colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
+
+    if max_uncertainty is not None:
+        reject_1 = (basetable['e'+keys1[0]] > max_uncertainty) | (basetable['e'+keys1[1]] > max_uncertainty)
+        reject_2 = (basetable['e'+keys2[0]] > max_uncertainty) | (basetable['e'+keys2[1]] > max_uncertainty)
+        if exclude is None:
+            exclude = reject_1 | reject_2
+        else:
+            exclude = exclude | reject_1 | reject_2
+
     if exclude is None:
         include = slice(None)
     else:
@@ -165,6 +175,7 @@ def cmds(basetable, sel=True,
          alpha=0.5,
          alpha_sel=0.5,
          xlim_percentiles=None,
+         max_uncertainty=None,
         ):
     if fig is None:
         fig = pl.figure()
@@ -174,9 +185,17 @@ def cmds(basetable, sel=True,
         include = slice(None)
     else:
         include = ~exclude
-        sel = sel & include
+        default_sel = sel & include
 
     for ii, (f1, f2) in enumerate(colors):
+
+        if max_uncertainty is not None:
+            reject = (basetable[f'emag_ab_{f1}'] > max_uncertainty) | (basetable[f'emag_ab_{f2}'] > max_uncertainty)
+            include = (~exclude) & (~reject)
+            sel = default_sel & (~reject)
+        else:
+            sel = default_sel
+
         ax = fig.add_subplot(gridspec[ii])
         colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
         magp = basetable[f'mag_ab_{f1}']
@@ -394,6 +413,7 @@ def ccds_withiso(basetable, sel=True,
                  iso=True,
                  arrowhead_width=0.5,
                  rasterized=True,
+                 max_uncertainty=None,
         ):
     if fig is None:
         fig = pl.figure()
