@@ -256,9 +256,9 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                 ('f182m', 'f212n', ),
                 ('f187n', 'f405n'),
                 ('f187n', 'f212n'),
-                ('f212n', '410m405'),
+                #('f212n', '410m405'), no emag defined
                 ('f212n', 'f410m'),
-                ('182m187', '410m405'),
+                #('182m187', '410m405'), no emag defined
                 ('f356w', 'f444w'),
                 ('f356w', 'f410m'),
                 ('f410m', 'f444w'),
@@ -287,10 +287,6 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         print(f"Writing table {tablename}", flush=True)
         # use caps b/c FITS will force it to caps anyway
         basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
-        # takes FOR-EV-ER
-        basetable.write(f"{tablename}.ecsv", overwrite=True)
-        print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
-        t0 = time.time()
         # DO NOT USE FITS in production, it drops critical metadata
         # I wish I had noted *what* metadata it drops, though, since I still seem to be using
         # it in production code down the line...
@@ -298,6 +294,11 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # Yes, specifically: it DROPS masked data types, converting "masked" into "True"?
         basetable.write(f"{tablename}.fits", overwrite=True)
         print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds", flush=True)
+
+        t0 = time.time()
+        # takes FOR-EV-ER
+        basetable.write(f"{tablename}.ecsv", overwrite=True)
+        print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
 
 def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
@@ -636,26 +637,31 @@ def main():
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-m", "--modules", dest="modules",
-                    default='merged,merged-reproject',
-                    help="module list", metavar="modules")
+                      default='merged,merged-reproject',
+                      help="module list", metavar="modules")
     parser.add_option("--target", dest="target",
-                    default='brick',
-                    help="target", metavar="target")
+                      default='brick',
+                      help="target", metavar="target")
     parser.add_option("--skip-crowdsource", dest="skip_crowdsource",
-                    default=False,
-                    action="store_true",
-                    help="skip_crowdsource", metavar="skip_crowdsource")
+                      default=False,
+                      action="store_true",
+                      help="skip_crowdsource", metavar="skip_crowdsource")
     parser.add_option("--skip-daophot", dest="skip_daophot",
-                    default=False,
-                    action="store_true",
-                    help="skip_daophot", metavar="skip_daophot")
+                      default=False,
+                      action="store_true",
+                      help="skip_daophot", metavar="skip_daophot")
+    parser.add_option("--make-refcat", dest='make_refcat', default=False,
+                       action='store_true')
     (options, args) = parser.parse_args()
 
     modules = options.modules.split(",")
     target = options.target
-    print(options)
+    print("Options:", options)
 
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
+
+    # need to have incrementing _before_ test
+    index = -1
 
     for module in modules:
         for desat in (False, True):
@@ -663,19 +669,26 @@ def main():
                 for epsf in (False, True):
                     for fitpsf in (False, True):
                         for blur in (False, True):
+
+                            index += 1
+                            # enable array jobs
+                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
+                                print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
+                                continue
+
                             t0 = time.time()
-                            print()
+                            print(f"Index {index}")
                             if not options.skip_crowdsource:
                                 print(f'crowdsource {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}. ', flush=True)
                                 try:
                                     merge_crowdsource(module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                    fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                                                      fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
                                 except Exception as ex:
                                     print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
                                 try:
                                     print(f'crowdsource unweighted {module}', flush=True)
                                     merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf,
-                                                    fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                                                      fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
                                 except NotImplementedError:
                                     continue
                                 except Exception as ex:
@@ -685,7 +698,7 @@ def main():
                                     for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
                                         print(f'crowdsource {suffix} {module}')
                                         merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                        fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
+                                                          fitpsf=fitpsf, target=target, basepath=basepath, blur=blur)
                                 except Exception as ex:
                                     print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                                     exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -695,24 +708,35 @@ def main():
 
                             if not options.skip_daophot:
                                 t0 = time.time()
-                                print()
+                                print("DAOPHOT")
                                 try:
                                     print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                     merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                target=target, basepath=basepath, blur=blur)
+                                                  target=target, basepath=basepath, blur=blur)
                                 except Exception as ex:
                                     print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                    exc_tb = sys.exc_info()[2]
+                                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
                                 try:
                                     print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
                                     merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                target=target, basepath=basepath, blur=blur)
+                                                  target=target, basepath=basepath, blur=blur)
                                 except Exception as ex:
                                     print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                    exc_tb = sys.exc_info()[2]
+                                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
                                 print(f'dao phase done.  time elapsed={time.time()-t0}')
                                 print()
 
+
+    if options.make_refcat:
+        import make_reftable
+        make_reftable.main()
+
+    print("Done")
+
+
 if __name__ == "__main__":
     main()
-
-    import make_reftable
-    make_reftable.main()
