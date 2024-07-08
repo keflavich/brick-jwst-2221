@@ -55,6 +55,23 @@ from analysis_setup import (basepath, reg, regzoom, distance_modulus,
 from plot_tools import regzoomplot, starzoom
 
 
+def find_stars_in_same_pixel(xx, yy, max_offset=1):
+    from scipy.spatial import KDTree
+
+    coords = np.array([xx, yy]).T
+    bad = np.any(np.isnan(coords), axis=1)
+    coords = np.nan_to_num(coords)
+
+    tree = KDTree(coords)
+    dist, ind = tree.query(coords, 2)
+
+    # re-nanify these distances; we want to ignore them
+    dist[bad, :] = np.nan
+    close_neighbor = ind[:, 1][dist[:, 1] < max_offset]
+
+    return close_neighbor
+
+
 def main(basetable, ww):
 
     # empirical test: these sources are almost certainly saturated in f410m =(
@@ -394,7 +411,7 @@ def main(basetable, ww):
     c212_405 = basetable['mag_ab_f212n'] - basetable['mag_ab_f405n']
 
     # Coarse color cut eyeballed in CatalogExploration_Sep2023
-    recomb_excess_over_212 = c212_405 > c187_212 * (4/3.) + 0.35
+    recomb_excess_over_212 = c212_405 > c187_212 * (4 / 3.) + 0.35
 
     # calculate A_V from colors
     # super naive version
@@ -414,7 +431,16 @@ def main(basetable, ww):
         # CT06 doesn't work short of 2um
         av115200 = (basetable['mag_ab_f115w'] - basetable['mag_ab_f200w']) / (RRP89_MWGC()(1.15*u.um) - RRP89_MWGC()(2.00*u.um))
 
+    doubled = {filtername: find_stars_in_same_pixel(basetable[f'x_fit_{filtername}'], basetable[f'y_fit_{filtername}'])
+               for filtername in filternames}
+    two_stars_in_same_pixel = np.zeros(len(basetable), dtype='bool')
+    for _, inds in doubled:
+        two_stars_in_same_pixel[inds] = True
+
+    print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
+
     return locals()
+
 
 if __name__ == "__main__":
     from optparse import OptionParser
