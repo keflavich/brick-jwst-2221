@@ -34,6 +34,7 @@ any_saturated = result['any_saturated']
 long_good = result['long_good']
 bad = result['bad']
 exclude = result['exclude']
+two_stars_in_same_pixel = result['two_stars_in_same_pixel']
 globals().update({key+"_mr": val for key, val in result.items()})
 
 colors=[('f410m', 'f466n'),
@@ -67,7 +68,7 @@ ext = CT06_MWGC()
 extvec_scale = 100
 rasterized = True
 
-sel = all_good
+sel = all_good & (~two_stars_in_same_pixel)
 
 for ii, (color1, color2) in enumerate(combos):
     try:
