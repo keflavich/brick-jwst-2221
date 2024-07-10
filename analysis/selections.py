@@ -209,7 +209,7 @@ def main(basetable, ww):
     badspreadlong = ~goodspreadlong
     badfracfluxlong = ~goodfracfluxlong
 
-    if 'qf_212n' in basetable.colnames:
+    if 'qf_f212n' in basetable.colnames:
         goodqfshort = ((basetable['qf_f212n'] > minqf) & (basetable['qf_f182m'] > minqf) & (basetable['qf_f187n'] > minqf))
         goodspreadshort = ((basetable['spread_model_f212n'] < maxspread) & (basetable['spread_model_f182m'] < maxspread) & (basetable['spread_model_f187n'] < maxspread))
         goodfracfluxshort = ((basetable['fracflux_f212n'] > minfracflux) & (basetable['fracflux_f182m'] > minfracflux) & (basetable['fracflux_f187n'] > minfracflux))
@@ -237,7 +237,11 @@ def main(basetable, ww):
     print(f"QFs: {goodqflong.sum()} good long")
 
     # threshold = 0.1 arcsec
-    oksep = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames[1:]])
+    oksep_notwide = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'w' not in filtername])
+    print(f"Found {oksep_notwide.sum()} of {len(oksep_notwide)} sources with separations < 0.1 arcsec (excluding wide filters)")
+    oksep_noJ = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'f115w' not in filtername])
+    print(f"Found {oksep_noJ.sum()} of {len(oksep_noJ)} sources with separations < 0.1 arcsec (excluding f115w)")
+    oksep = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames])
     print(f"Found {oksep.sum()} of {len(oksep)} sources with separations < 0.1 arcsec")
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
 
@@ -359,10 +363,10 @@ def main(basetable, ww):
     all_good_phot = all_good.copy()
     all_good = all_good_phot & oksep
 
-    exclude = (any_saturated | ~oksep | magerr_gtpt1 |
+    exclude = (any_saturated | ~oksep | magerr_gtpt1_all |
                basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask |
                badqflong | badfracfluxlong | badspreadlong)
-    print(f"Excluding {exclude.sum()} of {exclude.size}")
+    print(f"Excluding {exclude.sum()} of {exclude.size} ({exclude.sum()/exclude.size*100}%)")
 
     # "bad" was totally broken; (bad & all_good) is very nonzero
     # bad = (any_saturated | ~oksep | magerr_gtpt1 | basetable['mag_ab_f212n'].mask |
@@ -431,13 +435,14 @@ def main(basetable, ww):
         # CT06 doesn't work short of 2um
         av115200 = (basetable['mag_ab_f115w'] - basetable['mag_ab_f200w']) / (RRP89_MWGC()(1.15*u.um) - RRP89_MWGC()(2.00*u.um))
 
-    doubled = {filtername: find_stars_in_same_pixel(basetable[f'x_fit_{filtername}'], basetable[f'y_fit_{filtername}'])
-               for filtername in filternames}
-    two_stars_in_same_pixel = np.zeros(len(basetable), dtype='bool')
-    for _, inds in doubled:
-        two_stars_in_same_pixel[inds] = True
+    if 'x_fit_f410m' in basetable.colnames:
+        doubled = {filtername: find_stars_in_same_pixel(basetable[f'x_fit_{filtername}'], basetable[f'y_fit_{filtername}'])
+                for filtername in filternames}
+        two_stars_in_same_pixel = np.zeros(len(basetable), dtype='bool')
+        for _, inds in doubled:
+            two_stars_in_same_pixel[inds] = True
 
-    print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
+        print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
 
     return locals()
 
