@@ -183,6 +183,7 @@ def cmds(basetable, sel=True,
 
     if exclude is None:
         include = slice(None)
+        default_sel = sel
     else:
         include = ~exclude
         default_sel = sel & include

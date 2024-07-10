@@ -452,7 +452,6 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         tbl.meta['fwhm_pix'] = fwhm_pix
 
         with np.errstate(all='ignore'):
-            # TODO: Is DAOPHOT fitting the peak or the sum?  I think it's the sum, in which case this is wrong...
             flux_jy = (flux * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
             abmag = -2.5 * np.log10(flux_jy / zeropoint)
