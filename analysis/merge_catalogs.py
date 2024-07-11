@@ -22,6 +22,7 @@ from astropy import wcs
 from astropy import table
 from astropy import units as u
 from astroquery.svo_fps import SvoFps
+from astropy.stats import sigma_clip, mad_std
 
 from tqdm.auto import tqdm
 
@@ -94,6 +95,125 @@ def sanity_check_individual_table(tbl):
     print(f"Max flux in tbl for {wl}: {tbl['flux'].max()};"
           f" in jy={flux_jy.max()}; magmin={abmag_tbl.min()}={np.nanmin(abmag_tbl)}, magmax={abmag_tbl.max()}={np.nanmax(abmag_tbl)}")
     print(f"100th brightest flux={flux_jy[-100]} abmag={abmag[-100]} abmag_tbl={abmag_tbl[-100]}")
+
+
+def nanaverage(data, weights, **kwargs):
+    weights = np.where(np.isnan(data) | np.isnan(weights), 0, weights)
+    bad = np.all(weights == 0, axis=1)
+    weights[bad, :] = 1
+    avg = np.average(np.nan_to_num(data),
+                     weights=weights,
+                     **kwargs
+                     )
+    avg[bad] = np.nan
+    return avg
+
+
+def combine_singleframe(tbls, max_offset=0.15*u.arcsec):
+
+    for ii, tbl in enumerate(tbls):
+        crds = tbl['skycoord']
+        if ii == 0:
+            basecrds = crds
+        else:
+            matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+            newcrds = crds[sep > max_offset]
+            basecrds = SkyCoord([basecrds, newcrds])
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
+
+    # do one loop of re-matching
+    for ii, tbl in enumerate(tbls):
+        crds = tbl['skycoord']
+        matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+
+        # do one iteration of bulk offset measurement
+        radiff = (crds.ra[matches]-basecrds.ra).to(u.arcsec)
+        decdiff = (crds.dec[matches]-basecrds.dec).to(u.arcsec)
+        # don't allow sep=0, since that's self-reference
+        oksep = (sep < max_offset) & (sep != 0)
+        medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
+        tbl.meta['ra_offset'] = medsep_ra
+        tbl.meta['dec_offset'] = medsep_dec
+        print(f"Exposure {tbl.meta['exposure']} was offset by {medsep_ra:13.5g}, {medsep_dec:13.5g} based on {oksep.sum()} matches")
+
+        # for tbl0, should be nan (all self-match)
+        if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
+            newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
+            tbl['skycoord'] = newcrds
+
+    # remake base coordinates after the rematching
+    for ii, tbl in enumerate(tbls):
+        crds = tbl['skycoord']
+        if ii == 0:
+            basecrds = crds
+        else:
+            matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+            newcrds = crds[sep > max_offset]
+            basecrds = SkyCoord([basecrds, newcrds])
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
+
+    arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
+             for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'sky', 'ra', 'dec')}
+    #arrays['skycoord'] = SkyCoord(ra=np.zeros([len(basecrds), len(tbls), ], dtype='float') * np.nan,
+    #                              dec=np.zeros([len(basecrds), len(tbls),], dtype='float') * np.nan,
+    #                              unit=(u.deg, u.deg),
+    #                              frame='icrs'
+    #                              )
+
+    for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
+        crds = tbl['skycoord']
+        matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+        rmatches, rsep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+
+        for key in arrays:
+            if key not in ('skycoord', 'ra', 'dec'):
+                arrays[key][rmatches, ii] = tbl[key]
+        arrays['ra'][rmatches, ii] = tbl['skycoord'].ra
+        arrays['dec'][rmatches, ii] = tbl['skycoord'].dec
+
+    arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
+    del arrays['ra']
+    del arrays['dec']
+
+    newtbl = Table(arrays)
+    newtbl.meta = tbls[0].meta
+    newtbl.meta['offsets'] = {tbl.meta['exposure']: (tbl.meta['ra_offset'], tbl.meta['dec_offset']) for tbl in tbls}
+
+    sky_mean = SkyCoord(ra=np.nanmean(newtbl['skycoord'].ra, axis=1),
+                        dec=np.nanmean(newtbl['skycoord'].dec, axis=1),
+                        frame='icrs',
+                        unit=(u.deg, u.deg))
+
+    newtbl['nmatch'] = np.isfinite(newtbl['flux']).sum(axis=1)
+
+    # note: mad_std must be in quotes b/c it's using _fast_sigma_clip
+    clip_flux = sigma_clip(newtbl['flux'], stdfunc='mad_std', axis=1)
+    clip_ra = sigma_clip(newtbl['skycoord'].ra.deg, stdfunc='mad_std', axis=1)
+    clip_dec = sigma_clip(newtbl['skycoord'].dec.deg, stdfunc='mad_std', axis=1)
+    to_mask = clip_flux.mask | clip_ra.mask | clip_dec.mask
+
+    newtbl['mask'] = to_mask
+    newtbl['nmatch_good'] = (~to_mask).sum(axis=1)
+
+    keepmask = ~newtbl['mask']
+    weights = 1 / newtbl['dflux']**2 * keepmask
+    avgpos = SkyCoord(nanaverage(newtbl['skycoord'].ra.value, axis=1, weights=weights),
+                      nanaverage(newtbl['skycoord'].dec.value, axis=1, weights=weights),
+                      unit=(u.deg, u.deg),
+                      frame='icrs')
+    newtbl['skycoord_avg'] = avgpos
+    newtbl['dra'] = nanaverage((newtbl['skycoord'].ra - avgpos.ra[:, None])**2, weights=weights, axis=1)**0.5
+    newtbl['ddec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
+
+    newtbl['flux_avg'] = nanaverage(newtbl['flux'], weights=weights, axis=1)
+    newtbl['std_flux_avg'] = nanaverage((newtbl['flux'] - newtbl['flux_avg'][:, None])**2, weights=weights, axis=1)**0.5
+    newtbl['dflux_avg'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
+
+    newtbl['sky_avg'] = nanaverage(newtbl['sky'], weights=weights, axis=1)
+    newtbl['std_sky_avg'] = nanaverage((newtbl['sky'] - newtbl['sky_avg'][:, None])**2, weights=weights, axis=1)**0.5
+
+    return newtbl
+
 
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f405n',
