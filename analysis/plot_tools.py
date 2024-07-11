@@ -1064,7 +1064,7 @@ def diagnostic_stamps_by_mag_dao(*args, **kwargs):
     return diagnostic_stamps_by_mag(*args, **kwargs, flux_kw='flux_fit', dao=True)
 
 
-def diagnostic_stamps_by_mag_crowdsource(*args, **kwargs)
+def diagnostic_stamps_by_mag_crowdsource(*args, **kwargs):
     return diagnostic_stamps_by_mag(*args, **kwargs, flux_kw='flux', dao=False)
 
 
@@ -1086,7 +1086,10 @@ def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=
             row = result[sel][int(n/2)+ind_offset]
         except IndexError:
             continue
-        x, y = map(int, (row['x_init'], row['y_init']))
+        if dao:
+            x, y = map(int, (row['x_init'], row['y_init']))
+        else:
+            x, y = map(int, (row['x'], row['y']))
 
         cutout = data[y-sz:y+sz+1, x-sz:x+sz+1]
         residual_cutout = residual[y-sz:y+sz+1, x-sz:x+sz+1]
@@ -1101,10 +1104,10 @@ def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=
             sel = (result['x_fit'] > x - sz) & (result['x_fit'] < x + sz) & (result['y_fit'] > y - sz) & (result['y_fit'] < y + sz)
             pl.scatter(result['x_fit'][sel] - x + sz, result['y_fit'][sel] - y + sz, marker='.', color='g', s=1)
         else:
-            pl.scatter(row['y'] - x + sz, row['x'] - y + sz, marker='x', color='r')
+            pl.scatter(row['x'] - x + sz, row['y'] - y + sz, marker='x', color='r')
 
-            sel = (result['y'] > x - sz) & (result['y'] < x + sz) & (result['x'] > y - sz) & (result['x'] < y + sz)
-            pl.scatter(result['y'][sel] - x + sz, result['x'][sel] - y + sz, marker='.', color='b', s=1)
+            sel = (result['x'] > x - sz) & (result['x'] < x + sz) & (result['y'] > y - sz) & (result['y'] < y + sz)
+            pl.scatter(result['x'][sel] - x + sz, result['y'][sel] - y + sz, marker='.', color='b', s=1)
 
         pl.title(f'{mag-0.5} < mag < {mag}')
         pl.subplot(2, ncol, ii+1+ncol).imshow(residual_cutout, cmap='gray')
