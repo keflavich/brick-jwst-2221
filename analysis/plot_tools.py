@@ -1059,3 +1059,39 @@ def starzoom_cals(reference_coordinates, filtername='f212n', module='nrca1',
             ax.set_yticks([])
         pl.tight_layout()
 
+
+def diagnostic_stamps_by_mag_dao(result, residual, pixel_area, filtername, data, sz=7, ind_offset=0):
+    flux_jy = (result['flux_fit'] * u.MJy/u.sr * pixel_area).to(u.Jy)
+    jfilts = SvoFps.get_filter_list('JWST')
+    jfilts.add_index('filterID')
+    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
+    abmag = -2.5 * np.log10(flux_jy / zeropoint)
+    
+    magbins = np.arange(17, 12.0, -0.5)
+    ncol = len(magbins)
+    
+    pl.figure(figsize=(20,5))
+    for ii, mag in enumerate(magbins):
+        sel = (abmag > mag-0.5) & (abmag <= mag)
+        n = sel.sum()
+        try:
+            row = result[sel][int(n/2)+ind_offset]
+        except IndexError:
+            continue
+        x, y = map(int, (row['x_init'], row['y_init']))
+
+        cutout = data[y-sz:y+sz+1, x-sz:x+sz+1]
+        residual_cutout = residual[y-sz:y+sz+1, x-sz:x+sz+1]
+        if cutout.size == 0:
+            continue
+        
+        pl.subplot(2, ncol, ii+1).imshow(cutout, cmap='gray', norm=simple_norm(cutout, stretch='log'))
+        pl.scatter(row['x_init'] - x + sz, row['y_init'] - y + sz, marker='x', color='r')
+        pl.scatter(row['x_fit'] - x + sz, row['y_fit'] - y + sz, marker='x', color='b')
+
+        sel = (result['x_fit'] > x - sz) & (result['x_fit'] < x + sz) & (result['y_fit'] > y - sz) & (result['y_fit'] < y + sz)
+        pl.scatter(result['x_fit'][sel] - x + sz, result['y_fit'][sel] - y + sz, marker='.', color='g', s=1)
+        
+        pl.title(f'{mag-0.5} < mag < {mag}')
+        pl.subplot(2, ncol, ii+1+ncol).imshow(residual_cutout, cmap='gray')
+    pl.tight_layout()

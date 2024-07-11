@@ -259,6 +259,8 @@ def save_crowdsource_results(results, ww, filename, suffix,
     stars.meta['filter'] = filtername
     stars.meta['module'] = module
     stars.meta['detector'] = detector
+    if exposure_:
+        stars.meta['exposure'] = exposure_
 
 
     tblfilename = (f"{basepath}/{filtername}/"
@@ -517,6 +519,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
     print(f"options: {options}")
 
+    # need to have incrementing _before_ test
+    index = -1
+
     for module in modules:
         detector = module # no sub-detectors for long-NIRCAM
         for filtername in filternames:
@@ -525,6 +530,13 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 print(f"Looping over filenames {filenames}")
                 # jw02221001001_07101_00024_nrcblong_destreak_o001_crf.fits
                 for filename in filenames:
+
+                    index += 1
+                    # enable array jobs
+                    if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
+                        print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
+                        continue
+
                     exposure_id = filename.split("_")[2]
                     do_photometry_step(options, filtername, module, detector,
                                        field, basepath, filename, proposal_id,
@@ -892,7 +904,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
         result['skycoord_centroid'] = coords
         detector = "" # no detector #'s for long
-        basic_daophot_catalog_fn = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits"
+        basic_daophot_catalog_fn = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits"
+        if exposure is not None:
+            result.meta['exposure'] = exposure
         result.write(basic_daophot_catalog_fn, overwrite=True)
         print(f"Completed BASIC photometry, and wrote out file {basic_daophot_catalog_fn}")
 
@@ -986,8 +1000,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                        fitter=LevMarLSQFitter(),
                                        maxiters=5,
                                        fit_shape=(5, 5),
+                                       sub_shape=(15, 15),
                                        aperture_radius=2*fwhm_pix,
-                                       progress_bar=True
+                                       progress_bar=True,
                                       )
 
         print("About to do ITERATIVE photometry....")
@@ -1000,9 +1015,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
+        if exposure is not None:
+            result2.meta['exposure'] = exposure
         print(f'len(result2) = {len(result2)}, len(coords) = {len(coords2)}', flush=True)
         result2.write(f"{basepath}/{filtername}/{filtername.lower()}"
-                      f"_{module}{detector}{desat}{bgsub}{epsf_}{blur_}{group}"
+                      f"_{module}{detector}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}"
                       f"_daophot_iterative.fits", overwrite=True)
         print("Saved iterative catalog")
         stars = result2
