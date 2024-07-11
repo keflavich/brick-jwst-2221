@@ -416,9 +416,10 @@ def get_psf_model(filtername, proposal_id, field,
         return grid, psf_model
 
 
-def get_uncertainty(err, data, wht=None):
+def get_uncertainty(err, data, dq=None, wht=None):
 
-    dq = np.zeros(data.shape, dtype='int')
+    if dq is None:
+        dq = np.zeros(data.shape, dtype='int')
 
     # crowdsource uses inverse-sigma, not inverse-variance
     weight = err**-1
@@ -429,6 +430,9 @@ def get_uncertainty(err, data, wht=None):
     #weight[(err == 0) | (wht == 0)] = np.nanmedian(weight)
     weight[np.isnan(weight)] = 0
     bad = np.isnan(weight) | (data == 0) | np.isnan(data) | (weight == 0) | (err == 0) | (data < 1e-5)
+    if dq is not None:
+        # only 0 is OK
+        bad |= (dq != 0)
     if wht is not None:
         bad |= (wht == 0)
 
@@ -669,7 +673,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     # dao_psf_model.y_0.min = -max_pixel_offset
     # dao_psf_model.y_0.max = max_pixel_offset
 
-    dq, weight, bad = get_uncertainty(err, data, wht=wht)
+    dq, weight, bad = get_uncertainty(err, data, wht=wht, dq=im1['DQ'].data if 'DQ' in im1 else None)
 
     filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
     filter_table.add_index('filterID')
