@@ -209,6 +209,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
         neg = stars['flux_fit'] < 0
     else:
         qgood = np.ones(len(stars), dtype='bool')
+        neg = np.zeros(len(stars), dtype='bool')
 
     axlims = pl.axis()
     if zoomcut[0].start:
@@ -262,7 +263,6 @@ def save_crowdsource_results(results, ww, filename, suffix,
     if exposure_:
         stars.meta['exposure'] = exposure_
 
-
     tblfilename = (f"{basepath}/{filtername}/"
                     f"{filtername.lower()}_{module}{exposure_}{desat}{bgsub}{fpsf}{blur_}"
                     f"_crowdsource_{suffix}.fits")
@@ -309,7 +309,10 @@ def load_data(filename):
     return fh, im1, data, wht, err, instrument, telescope, obsdate
 
 
-def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
+def get_psf_model(filtername, proposal_id, field,
+                  module,
+                  use_webbpsf=False,
+                  obsdate=None,
                   use_grid=False,
                   blur=False,
                   target='brick',
@@ -355,13 +358,16 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
                 print("Attempting to download WebbPSF data", flush=True)
                 nrc = webbpsf.NIRCam()
                 nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
-                nrc.filter = filt
-                print(f"Running {module}{exposure_}{desat}{bgsub}")
+                nrc.filter = filtername
                 if module in ('nrca', 'nrcb'):
-                    if 'F4' in filt.upper():
+                    if 'F4' in filtername.upper():
                         nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
                     else:
                         nrc.detector = f'{module.upper()}1' #TODO: figure out a way to use all 4?
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
+                elif 'nrc' in module:
+                    # Allow nrca1, nrca2, ...
+                    nrc.detector = module.upper()
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
                 else:
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True)
@@ -389,9 +395,9 @@ def get_psf_model(filtername, proposal_id, field, use_webbpsf=False,
             #psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
 
             # bigger PSF probably needed
-            yy, xx = np.indices([61,61], dtype=float)
+            yy, xx = np.indices([61, 61], dtype=float)
             grid.x_0 = grid.y_0 = 30
-            psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx,yy))
+            psf_model = crowdsource.psf.SimplePSF(stamp=grid(xx, yy))
 
             return grid, psf_model
     else:
@@ -526,7 +532,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
         detector = module # no sub-detectors for long-NIRCAM
         for filtername in filternames:
             if options.each_exposure:
-                filenames = get_filenames(basepath, filtername, proposal_id, field, each_suffix=options.each_suffix, pupil='clear')
+                filenames = get_filenames(basepath, filtername, proposal_id, field, each_suffix=options.each_suffix, module=module, pupil='clear')
                 print(f"Looping over filenames {filenames}")
                 # jw02221001001_07101_00024_nrcblong_destreak_o001_crf.fits
                 for filename in filenames:
@@ -541,6 +547,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     do_photometry_step(options, filtername, module, detector,
                                        field, basepath, filename, proposal_id,
                                        crowdsource_default_kwargs, exposurenumber=int(exposure_id),
+                                       use_webbpsf=True,
                                        bg_boxsizes=bg_boxsizes)
             else:
                 filename = get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear')
@@ -550,10 +557,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                    )
 
 
-def get_filenames(basepath, filtername, proposal_id, field, each_suffix, pupil='clear'):
+def get_filenames(basepath, filtername, proposal_id, field, each_suffix, module, pupil='clear'):
 
     # 001001_07101_00024
-    glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}{field}001*{each_suffix}.fits'
+    glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}{field}001*{module}*{each_suffix}.fits'
     fglob = glob.glob(glstr)
     if len(fglob) == 0:
         raise ValueError(f"No matches found to {glstr}")
@@ -597,6 +604,7 @@ def get_filename(basepath, filtername, proposal_id, field, module, options, pupi
 def do_photometry_step(options, filtername, module, detector, field, basepath,
                        filename, proposal_id, crowdsource_default_kwargs, exposurenumber=None,
                        bg_boxsizes=None,
+                       use_webbpsf=False,
                        pupil='clear'):
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
@@ -639,9 +647,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     # Load PSF model
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
-                                    use_webbpsf=False, use_grid=False,
+                                    module=module,
+                                    use_webbpsf=use_webbpsf,
+                                    # if we're doing each exposure, we want the full grid
+                                    use_grid=options.each_exposure,
                                     blur=options.blur,
                                     target=options.target,
+                                    obsdate=obsdate,
                                     basepath='/blue/adamginsburg/adamginsburg/jwst/')
     dao_psf_model = grid
 
@@ -777,7 +789,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         fig = pl.figure(0, figsize=(10,10))
         fig.clf()
         ax = fig.gca()
-        im = ax.imshow(weight, norm=simple_norm(weight, stretch='log')); pl.colorbar(mappable=im);
+        im = ax.imshow(weight, norm=simple_norm(weight, stretch='log'))
+        pl.colorbar(mappable=im)
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{exposure_}{desat}{bgsub}_weights.png',
                    bbox_inches='tight')
 
