@@ -634,7 +634,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     bgsub = '_bgsub' if options.bgsub else ''
     epsf_ = "_epsf" if options.epsf else ""
     exposure_ = f'_exp{exposurenumber:05d}' if exposurenumber is not None else ''
-    obsid_ = f'_obs{obs_id:03d}' if obs_id is not None else ''
+    obsid_ = f'_obs{int(obs_id):03d}' if obs_id is not None else ''
     blur_ = "_blur" if options.blur else ""
     group = "_group" if options.group else ""
 
