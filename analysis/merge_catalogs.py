@@ -72,11 +72,13 @@ def getmtime(x):
 
 
 def sanity_check_individual_table(tbl):
+    wl = filtername = tbl.meta['filter']
+    print(f"SANITY CHECK {wl}")
+
     tbl = tbl.copy()
     tbl.sort('flux_jy')
     #finite_fluxes = np.isfinite(np.array(tbl['flux_jy']))
     finite_fluxes = tbl['flux_jy'] > 0
-    wl = filtername = tbl.meta['filter']
 
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
@@ -89,7 +91,6 @@ def sanity_check_individual_table(tbl):
 
     # there are negative fluxes -> nan mags
     #print(f"Maximum difference between the two tables: {np.abs(abmag-abmag_tbl).max()}")
-    print("SANITY CHECK")
     print(f"Nanmax difference between the two tables: {np.nanmax(np.abs(abmag-abmag_tbl))}")
     #print("NaNs: (mag, flux) ", abmag_tbl[np.isnan(abmag_tbl)], flux_jy[np.isnan(abmag_tbl)])
 
@@ -124,7 +125,9 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
 
         # correct for missing data [should only be needed for a brief period in July 2024]
         if 'dra' not in tbl.colnames:
-            ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
             pixscale = ww.proj_plane_pixel_area().to(u.arcsec**2)**0.5
             # dy, dx are swapped if we haven't done this fix
             tbl['dra'] = tbl['dy'] * pixscale.value
@@ -139,16 +142,16 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
         # do one iteration of bulk offset measurement
         radiff = (crds.ra[matches] - basecrds.ra).to(u.arcsec)
         decdiff = (crds.dec[matches] - basecrds.dec).to(u.arcsec)
-        # don't allow sep=0, since that's self-reference
-        oksep = (sep < max_offset) & (sep != 0)
+        # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
+        oksep = (sep < max_offset) & (sep != 0) & (tbl[matches]['qf'] > 0.95) & (tbl[matches]['fracflux'] > 0.85)
         medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
-        dmedsep_ra, dmedsep_dec = np.std(radiff[oksep]), np.std(decdiff[oksep])
+        dmedsep_ra, dmedsep_dec = mad_std(radiff[oksep]), mad_std(decdiff[oksep])
         tbl.meta['ra_offset'] = medsep_ra
         tbl.meta['dec_offset'] = medsep_dec
         tbl.meta['dra_offset'] = dmedsep_ra
         tbl.meta['ddec_offset'] = dmedsep_dec
-        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):6.3f},"
-              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):6.3f} based on {oksep.sum()} matches")
+        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
+              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches")
 
         # for tbl0, should be nan (all self-match)
         if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
@@ -438,7 +441,8 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
     fitpsf = '_fitpsf' if fitpsf else ''
     blur_ = "_blur" if blur else ""
     if module == 'merged':
-        modules = ('nrca', 'nrcb')
+        modules = ['nrca', 'nrcb',]
+        modules += [f'nrc{ab}{n}' for ab in 'ab' for n in range(1, 5)]
     else:
         modules = (module, )
 
@@ -514,12 +518,17 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     print(f"Merging filters {filternames}")
     if indivexp:
         catfns = [x
-                for filn in filternames
-                for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
-                ]
+                  for filn in filternames
+                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
+                  ]
         if len(catfns) == 0:
             filn = 'f405n'
-            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had no matches")
+            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had no matches")
+        if len(catfns) != len(imgfns):
+            print("imgfns:", imgfns)
+            print("catfns:", catfns)
+            print(dict(zip(imgfns, catfns)))
+            raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
     else:
         catfns = [x
                 for filn in filternames
@@ -543,6 +552,9 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
         #wcses = [wcs.WCS(fits.getheader(fn.replace("_crowdsource", "_crowdsource_skymodel"))) for fn in catfns]
         imgs = [fits.getdata(fn, ext=('SCI', 1)) for fn in imgfns]
         wcses = [wcs.WCS(fits.getheader(fn, ext=('SCI', 1))) for fn in imgfns]
+
+    assert len(wcses) == len(tbls), imgfns
+    assert len(imgs) == len(tbls)
 
     for tbl, ww in zip(tbls, wcses):
         # Now done in the original catalog making step tbl['y'],tbl['x'] = tbl['x'],tbl['y']
@@ -582,7 +594,12 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
             print(f'flux has mask sum = {tbl["flux"].mask.sum()} masked values')
 
     for tbl in tbls:
-        sanity_check_individual_table(tbl)
+        try:
+            sanity_check_individual_table(tbl)
+        except Exception as ex:
+            print(ex)
+            print(tbl.meta)
+            raise ex
 
     merge_catalogs(tbls,
                    catalog_type=f'crowdsource{suffix}{"_desat" if desat else ""}{"_bgsub" if bgsub else ""}',
@@ -825,7 +842,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
     if 'flux_fit' in cat.colnames:
         cat.rename_column('flux_fit', 'flux')
     else:
-        print(f"Catalog did not have flux_fit.  colnames={cat.colnames}")
+        print(f"Catalog did not have flux_fit.  colnames={cat.colnames}.  (this is expected for crowdsource)")
     # DEBUG print(f"DEBUG: cat['replaced_saturated'].sum(): {cat['replaced_saturated'].sum()}")
 
 
@@ -854,6 +871,7 @@ def main():
                       help="skip_daophot", metavar="skip_daophot")
     parser.add_option("--make-refcat", dest='make_refcat', default=False,
                       action='store_true')
+    parser.add_option('--max-expnum', dest='max_expnum', default=24, type='int')
     (options, args) = parser.parse_args()
 
     modules = options.modules.split(",")
@@ -872,16 +890,16 @@ def main():
                     for fitpsf in (False, True):
                         for blur in (False, True):
 
-                            index += 1
-                            # enable array jobs
-                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
-                                print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
-                                continue
-
                             if options.merge_singlefields:
                                 for suffix in ('_nsky0', ):
                                     for progid in obs_filters[target]:
-                                        for filtername in obs_filters[target][progid]:
+                                        for index, filtername in enumerate(obs_filters[target][progid]):
+
+                                            # enable array jobs based only on filters
+                                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
+                                                print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
+                                                continue
+
                                             try:
                                                 merge_crowdsource_individual_frames(module=module,
                                                                                     desat=desat,
@@ -893,12 +911,22 @@ def main():
                                                                                     blur=blur,
                                                                                     suffix=suffix,
                                                                                     target=target,
-                                                                                    exposure_numbers=np.arange(1, 25),
+                                                                                    exposure_numbers=np.arange(1, options.max_expnum + 1),
                                                                                     basepath=basepath)
+                                                break
                                             except Exception as ex:
                                                 print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                                                 exc_type, exc_obj, exc_tb = sys.exc_info()
                                                 print(f"Exception occurred on line {exc_tb.tb_lineno}")
+
+                            else:
+                                index += 1
+
+                            # enable array jobs
+                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
+                                print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
+                                continue
+
 
                             t0 = time.time()
                             print(f"Index {index}")
