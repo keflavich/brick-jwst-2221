@@ -256,11 +256,18 @@ def save_crowdsource_results(results, ww, filename, suffix,
     coords = ww.pixel_to_world(stars['y'], stars['x'])
     stars['skycoord'] = coords
     stars['x'], stars['y'] = stars['y'], stars['x']
+    stars['dx'], stars['dy'] = stars['dy'], stars['dx']
+
+    pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
+    stars['dra'] = stars['dx'] * pixscale
+    stars['ddec'] = stars['dy'] * pixscale
 
     stars.meta['filename'] = filename
     stars.meta['filter'] = filtername
     stars.meta['module'] = module
     stars.meta['detector'] = detector
+    stars.meta['pixscale'] = pixscale.to(u.deg).value
+    stars.meta['pixscale_as'] = pixscale.value
     if exposure_:
         stars.meta['exposure'] = exposure_
 
@@ -925,6 +932,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         basic_daophot_catalog_fn = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{obsid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits"
         if options.exposure:
             result.meta['exposure'] = exposure_
+        result.meta['pixscale'] = (ww.proj_plane_pixel_area()**0.5).value
+        result.meta['pixscale_as'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec).value
         result.write(basic_daophot_catalog_fn, overwrite=True)
         print(f"Completed BASIC photometry, and wrote out file {basic_daophot_catalog_fn}")
 
