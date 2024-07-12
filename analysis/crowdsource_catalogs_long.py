@@ -930,7 +930,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         result['skycoord_centroid'] = coords
         detector = "" # no detector #'s for long
         basic_daophot_catalog_fn = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{obsid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits"
-        if options.exposure:
+        if options.each_exposure:
             result.meta['exposure'] = exposure_
         result.meta['pixscale'] = (ww.proj_plane_pixel_area()**0.5).value
         result.meta['pixscale_as'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec).value
@@ -1042,7 +1042,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
-        if options.exposure:
+        if options.each_exposure:
             result2.meta['exposure'] = exposure_
         print(f'len(result2) = {len(result2)}, len(coords) = {len(coords2)}', flush=True)
         result2.write(f"{basepath}/{filtername}/{filtername.lower()}"
