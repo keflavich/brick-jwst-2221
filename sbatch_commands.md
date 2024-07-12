@@ -113,6 +113,8 @@ sbatch --job-name=webb-cat-merge-crowdsource --output=web-cat-merge-crowdsource%
 sbatch --array=0-10 --job-name=webb-cat-merge-daophot --output=webb-cat-merge-daophot_%j_%A-%a.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=96gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --skip-crowdsource"
 
 sbatch --array=0-10 --job-name=webb-cat-merge-crowdsource --output=webb-cat-merge-crowdsource_%j_%A-%a.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=96gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --skip-daophot"
+
+sbatch --job-name=webb-cat-merge-singlefields --output=webb-cat-merge-singlefields_%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=16 --nodes=1 --mem=96gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --skip-daophot --skip-crowdsource --merge-singlefields --modules=nrca,nrcb"
 ```
 
 With extra options:
