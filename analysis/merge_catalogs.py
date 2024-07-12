@@ -134,7 +134,7 @@ def combine_singleframe(tbls, max_offset=0.15*u.arcsec):
         medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
         tbl.meta['ra_offset'] = medsep_ra
         tbl.meta['dec_offset'] = medsep_dec
-        print(f"Exposure {tbl.meta['exposure']} was offset by {medsep_ra:13.5g}, {medsep_dec:13.5g} based on {oksep.sum()} matches")
+        print(f"Exposure {tbl.meta['exposure']} was offset by {medsep_ra.to(u.marcsec):13.5g}, {medsep_dec.to(u.marcsec):13.5g} based on {oksep.sum()} matches")
 
         # for tbl0, should be nan (all self-match)
         if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
@@ -153,12 +153,12 @@ def combine_singleframe(tbls, max_offset=0.15*u.arcsec):
             print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-             for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'sky', 'ra', 'dec')}
-    #arrays['skycoord'] = SkyCoord(ra=np.zeros([len(basecrds), len(tbls), ], dtype='float') * np.nan,
-    #                              dec=np.zeros([len(basecrds), len(tbls),], dtype='float') * np.nan,
-    #                              unit=(u.deg, u.deg),
-    #                              frame='icrs'
-    #                              )
+              for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'sky', 'ra', 'dec')}
+    # arrays['skycoord'] = SkyCoord(ra=np.zeros([len(basecrds), len(tbls), ], dtype='float') * np.nan,
+    #                               dec=np.zeros([len(basecrds), len(tbls),], dtype='float') * np.nan,
+    #                               unit=(u.deg, u.deg),
+    #                               frame='icrs'
+    #                               )
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
@@ -178,11 +178,6 @@ def combine_singleframe(tbls, max_offset=0.15*u.arcsec):
     newtbl = Table(arrays)
     newtbl.meta = tbls[0].meta
     newtbl.meta['offsets'] = {tbl.meta['exposure']: (tbl.meta['ra_offset'], tbl.meta['dec_offset']) for tbl in tbls}
-
-    sky_mean = SkyCoord(ra=np.nanmean(newtbl['skycoord'].ra, axis=1),
-                        dec=np.nanmean(newtbl['skycoord'].dec, axis=1),
-                        frame='icrs',
-                        unit=(u.deg, u.deg))
 
     newtbl['nmatch'] = np.isfinite(newtbl['flux']).sum(axis=1)
 
@@ -205,12 +200,12 @@ def combine_singleframe(tbls, max_offset=0.15*u.arcsec):
     newtbl['dra'] = nanaverage((newtbl['skycoord'].ra - avgpos.ra[:, None])**2, weights=weights, axis=1)**0.5
     newtbl['ddec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
 
-    newtbl['flux_avg'] = nanaverage(newtbl['flux'], weights=weights, axis=1)
-    newtbl['std_flux_avg'] = nanaverage((newtbl['flux'] - newtbl['flux_avg'][:, None])**2, weights=weights, axis=1)**0.5
-    newtbl['dflux_avg'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
+    newtbl['dflux_prop'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
+    newtbl.meta['dflux_prop'] = 'dflux_prop is the propagated uncertainty on flux... i.e., 1/sum(weights)'
 
-    newtbl['sky_avg'] = nanaverage(newtbl['sky'], weights=weights, axis=1)
-    newtbl['std_sky_avg'] = nanaverage((newtbl['sky'] - newtbl['sky_avg'][:, None])**2, weights=weights, axis=1)**0.5
+    for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux'):
+        newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
+        newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
 
     return newtbl
 
