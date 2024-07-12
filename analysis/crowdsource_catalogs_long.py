@@ -720,7 +720,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                     slc[0].start > 0 and slc[1].start > 0
                     and slc[0].stop < data.shape[0] and slc[1].stop < data.shape[1]}
 
-
     zoomcut = slice(128, 256), slice(128, 256)
     modsky = data*0 # no model for daofind
     nullslice = (slice(None), slice(None))
@@ -798,7 +797,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{exposure_}{desat}{bgsub}_weights.png',
                    bbox_inches='tight')
 
-
         for refit_psf, fpsf in zip((False, True), ('', '_fitpsf',)):
             for nsky in (0, 1, ):
                 t0 = time.time()
@@ -825,7 +823,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
-
                 try:
                     catalog_zoom_diagnostic(data, modsky, nullslice, stars)
                     pl.suptitle(f"Catalog Diagnostics {filtername} {module}{exposure_}{desat}{bgsub}{fpsf}{blur_} nsky={nsky} weighted")
@@ -847,8 +844,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                     exc_tb = sys.exc_info()[2]
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
-
-
 
     if options.daophot:
         t0 = time.time()
@@ -922,7 +917,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         result['skycoord_centroid'] = coords
         detector = "" # no detector #'s for long
         basic_daophot_catalog_fn = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits"
-        if exposure is not None:
+        if options.exposure:
             result.meta['exposure'] = exposure
         result.write(basic_daophot_catalog_fn, overwrite=True)
         print(f"Completed BASIC photometry, and wrote out file {basic_daophot_catalog_fn}")
@@ -1032,7 +1027,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         coords2 = ww.pixel_to_world(result2['x_fit'], result2['y_fit'])
         result2['skycoord_centroid'] = coords2
-        if exposure is not None:
+        if options.exposure:
             result2.meta['exposure'] = exposure
         print(f'len(result2) = {len(result2)}, len(coords) = {len(coords2)}', flush=True)
         result2.write(f"{basepath}/{filtername}/{filtername.lower()}"
