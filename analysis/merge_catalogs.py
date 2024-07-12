@@ -120,7 +120,16 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
             matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
             newcrds = crds[sep > max_offset]
             basecrds = SkyCoord([basecrds, newcrds])
-            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}", flush=True)
+
+        # correct for missing data [should only be needed for a brief period in July 2024]
+        if 'dra' not in tbl.colnames:
+            ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
+            pixscale = ww.proj_plane_pixel_area().to(u.arcsec**2)**0.5
+            # dy, dx are swapped if we haven't done this fix
+            tbl['dra'] = tbl['dy'] * pixscale.value
+            tbl['ddec'] = tbl['dx'] * pixscale.value
+
 
     # do one loop of re-matching
     for ii, tbl in enumerate(tbls):
@@ -133,9 +142,13 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
         # don't allow sep=0, since that's self-reference
         oksep = (sep < max_offset) & (sep != 0)
         medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
+        dmedsep_ra, dmedsep_dec = np.std(radiff[oksep]), np.std(decdiff[oksep])
         tbl.meta['ra_offset'] = medsep_ra
         tbl.meta['dec_offset'] = medsep_dec
-        print(f"Exposure {tbl.meta['exposure']} was offset by {medsep_ra.to(u.marcsec):13.5g}, {medsep_dec.to(u.marcsec):13.5g} based on {oksep.sum()} matches")
+        tbl.meta['dra_offset'] = dmedsep_ra
+        tbl.meta['ddec_offset'] = dmedsep_dec
+        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):6.3f},"
+              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):6.3f} based on {oksep.sum()} matches")
 
         # for tbl0, should be nan (all self-match)
         if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
@@ -154,7 +167,7 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
             print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'sky', 'ra', 'dec')}
+              for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'sky', 'ra', 'dec', 'dra', 'ddec')}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
@@ -193,13 +206,13 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
                       unit=(u.deg, u.deg),
                       frame='icrs')
     newtbl['skycoord_avg'] = avgpos
-    newtbl['dra'] = nanaverage((newtbl['skycoord'].ra - avgpos.ra[:, None])**2, weights=weights, axis=1)**0.5
-    newtbl['ddec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
+    newtbl['std_ra'] = nanaverage((newtbl['skycoord'].ra - avgpos.ra[:, None])**2, weights=weights, axis=1)**0.5
+    newtbl['std_dec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
 
     newtbl['dflux_prop'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
     newtbl.meta['dflux_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
 
-    for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux', 'fwhm', 'rchi2', 'fluxiso'):
+    for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux', 'fwhm', 'rchi2', 'fluxiso', 'dra', 'ddec'):
         newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
         newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
 
@@ -414,7 +427,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
 
-def merge_crowdsource_individual_frames(module='nrca', suffix="", desat=False, filtername='f410m',
+def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False, filtername='f410m',
                                         progid='2221',
                                         bgsub=False, epsf=False, fitpsf=False, blur=False, target='brick',
                                         exposure_numbers=np.arange(1, 25),
@@ -424,18 +437,22 @@ def merge_crowdsource_individual_frames(module='nrca', suffix="", desat=False, f
     bgsub = '_bgsub' if bgsub else ''
     fitpsf = '_fitpsf' if fitpsf else ''
     blur_ = "_blur" if blur else ""
+    if module == 'merged':
+        modules = ('nrca', 'nrcb')
+    else:
+        modules = (module, )
 
     tblfns = [x
+              for module_ in modules
               for progid in obs_filters[target]
               for exposure in range(50)
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
-                                 f"_crowdsource_{suffix}.fits")
-              if module in x 
+                                 f"{filtername.lower()}_{module_}_obs{project_obsnum[target][progid]}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
+                                 f"_crowdsource{suffix}.fits")
               ]
 
     if len(tblfns) == 0:
-        raise ValueError(f"No tables found matching {basepath}/{filtername.upper()}/{filtername.lower()}_{module}....{desat}{bgsub}{fitpsf}{blur_}_crowdsource_{suffix}.fits")
+        raise ValueError(f"No tables found matching {basepath}/{filtername.upper()}/{filtername.lower()}_{module}....{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
 
     tables = [Table.read(fn) for fn in tblfns]
     for tb, fn in zip(tables, tblfns):
@@ -444,7 +461,7 @@ def merge_crowdsource_individual_frames(module='nrca', suffix="", desat=False, f
 
     merged_exposure_table = combine_singleframe(tables)
 
-    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}{suffix}_allcols.fits"
+    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}_allcols.fits"
     merged_exposure_table.write(outfn, overwrite=True)
 
     # make a table that is nearly equivalent to standard crowdsource tables (with no 'x' or 'y' coordinate)
@@ -455,8 +472,15 @@ def merge_crowdsource_individual_frames(module='nrca', suffix="", desat=False, f
 
     minimal_table = Table(minimal_version)
     minimal_table.meta = merged_exposure_table.meta.copy()
-    minimal_table.meta['filenames'] = tblfns
-    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}{suffix}.fits"
+    for ii, fn in enumerate(tblfns):
+        minimal_table.meta[f'fn{ii}'] = os.path.basename(fn)
+
+    reject = np.isnan(minimal_table['skycoord'].ra) | np.isnan(minimal_table['skycoord'].dec)
+    if np.any(reject):
+        print(f"Rejected {reject.sum()} sources that had nan coordinates.")
+        minimal_table = minimal_table[~reject]
+
+    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits"
     minimal_table.write(outfn, overwrite=True)
 
     return minimal_table
@@ -487,12 +511,15 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     jfilts.add_index('filterID')
 
     filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
-    print("Merging filters {filternames}")
+    print(f"Merging filters {filternames}")
     if indivexp:
         catfns = [x
                 for filn in filternames
-                for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}_obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
+                for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
                 ]
+        if len(catfns) == 0:
+            filn = 'f405n'
+            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had no matches")
     else:
         catfns = [x
                 for filn in filternames
@@ -717,10 +744,12 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         cat['flux'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
         cat['dflux'][idx_cat] = satstar_cat['flux_unc'][idx_sat]
         cat['skycoord'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
-        cat['x'][idx_cat] = satstar_cat['x_fit'][idx_sat]
-        cat['y'][idx_cat] = satstar_cat['y_fit'][idx_sat]
-        cat['dx'][idx_cat] = satstar_cat['x_0_unc'][idx_sat]
-        cat['dy'][idx_cat] = satstar_cat['y_0_unc'][idx_sat]
+        if 'x' in cat.colnames:
+            # the merged, individual field catalogs don't have these
+            cat['x'][idx_cat] = satstar_cat['x_fit'][idx_sat]
+            cat['y'][idx_cat] = satstar_cat['y_fit'][idx_sat]
+            cat['dx'][idx_cat] = satstar_cat['x_0_unc'][idx_sat]
+            cat['dy'][idx_cat] = satstar_cat['y_0_unc'][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
@@ -733,14 +762,15 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         satstar_toadd.rename_column('flux_fit', 'flux')
         satstar_toadd.rename_column('flux_unc', 'dflux')
         satstar_toadd.rename_column('skycoord_fit', 'skycoord')
-        satstar_toadd.rename_column('x_fit', 'x')
-        satstar_toadd.rename_column('y_fit', 'y')
-        satstar_toadd.rename_column('x_0_unc', 'dx')
-        satstar_toadd.rename_column('y_0_unc', 'dy')
+        if 'x' in cat.colnames:
+            satstar_toadd.rename_column('x_fit', 'x')
+            satstar_toadd.rename_column('y_fit', 'y')
+            satstar_toadd.rename_column('x_0_unc', 'dx')
+            satstar_toadd.rename_column('y_0_unc', 'dy')
 
         for colname in cat.colnames:
             if colname not in satstar_toadd.colnames:
-                satstar_toadd.add_column(np.ones(len(satstar_toadd))*np.nan, name=colname)
+                satstar_toadd.add_column(np.ones(len(satstar_toadd)) * np.nan, name=colname)
         for colname in satstar_toadd.colnames:
             if colname not in cat.colnames:
                 satstar_toadd.remove_column(colname)
