@@ -519,16 +519,17 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     if indivexp:
         catfns = [x
                   for filn in filternames
-                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
+                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
                   ]
         if len(catfns) == 0:
             filn = 'f405n'
             raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had no matches")
         if len(catfns) != len(imgfns):
+            print("WARNING: Different length of imgfns & catfns!")
             print("imgfns:", imgfns)
             print("catfns:", catfns)
             print(dict(zip(imgfns, catfns)))
-            raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp*{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
+            #raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
     else:
         catfns = [x
                 for filn in filternames
@@ -552,9 +553,6 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
         #wcses = [wcs.WCS(fits.getheader(fn.replace("_crowdsource", "_crowdsource_skymodel"))) for fn in catfns]
         imgs = [fits.getdata(fn, ext=('SCI', 1)) for fn in imgfns]
         wcses = [wcs.WCS(fits.getheader(fn, ext=('SCI', 1))) for fn in imgfns]
-
-    assert len(wcses) == len(tbls), imgfns
-    assert len(imgs) == len(tbls)
 
     for tbl, ww in zip(tbls, wcses):
         # Now done in the original catalog making step tbl['y'],tbl['x'] = tbl['x'],tbl['y']

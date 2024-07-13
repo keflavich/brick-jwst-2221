@@ -809,8 +809,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{obsid_}{exposure_}{desat}{bgsub}_weights.png',
                    bbox_inches='tight')
 
-        for refit_psf, fpsf in zip((False, True), ('', '_fitpsf',)):
-            for nsky in (0, 1, ):
+        #for refit_psf, fpsf in zip((False, True), ('', '_fitpsf',)):
+        for refit_psf, fpsf in zip((False, ), ('', )):
+            for nsky in (0, ): #1, ):
                 t0 = time.time()
                 print()
                 print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky} & fpsf={fpsf} & blur={blur_}")
