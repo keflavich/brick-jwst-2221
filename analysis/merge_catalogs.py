@@ -603,10 +603,12 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                    catalog_type=f'crowdsource{suffix}{"_desat" if desat else ""}{"_bgsub" if bgsub else ""}',
                    module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
                    blur=blur,
+                   indivexp=indivexp,
                    basepath=basepath)
 
 
 def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False, bgsub=False, epsf=False, blur=False, target='brick',
+                  indivexp=False,
                   basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
 
     desat = "_unsatstar" if desat else ""
@@ -677,7 +679,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         tbl.add_column(abmag_err, name='emag_ab')
 
     merge_catalogs(tbls, catalog_type=daophot_type, module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
-                   blur=blur,
+                   blur=blur, indivexp=indivexp,
                    basepath=basepath)
 
 
