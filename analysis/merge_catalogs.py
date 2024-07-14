@@ -170,7 +170,7 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
             print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'sky', 'ra', 'dec', 'dra', 'ddec')}
+              for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
@@ -215,7 +215,7 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
     newtbl['dflux_prop'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
     newtbl.meta['dflux_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
 
-    for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux', 'fwhm', 'rchi2', 'fluxiso', 'dra', 'ddec'):
+    for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux', 'fwhm', 'rchi2', 'fluxiso', 'dra', 'ddec', 'spread_model'):
         newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
         newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
 
@@ -227,6 +227,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    epsf=False, bgsub=False, desat=False, blur=False,
                    max_offset=0.15 * u.arcsec, target='brick',
                    indivexp=False,
+                   qfcut=None, fracfluxcut=None,
                    basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     print(f'Starting merge catalogs: catalog_type: {catalog_type} module: {module} target: {target}', flush=True)
 
@@ -429,11 +430,25 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable.write(f"{tablename}.ecsv", overwrite=True)
         print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
+        # keep any rows with at least one qf cut pass
+        if qfcut is not None:
+            qfkeep = np.logical_or.reduce([basetable[qfkey] > qfcut for qfkey in basetable.colnames if 'qf' in qfkey])
+            basetable = basetable[qfkeep]
+
+        if fracfluxcut is not None:
+            fracfluxkeep = np.logical_or.reduce([basetable[fracfluxkey] > fracfluxcut for fracfluxkey in basetable.colnames if 'fracflux' in fracfluxkey])
+            basetable = basetable[fracfluxkeep]
+
+        if qfcut is not None or fracfluxcut is not None:
+            print(f"Saving merged version with qualcuts: {tablename}_qualcuts.fits")
+            basetable.write(f"{tablename}_qualcuts.fits", overwrite=True)
+
 
 def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False, filtername='f410m',
                                         progid='2221',
                                         bgsub=False, epsf=False, fitpsf=False, blur=False, target='brick',
                                         exposure_numbers=np.arange(1, 25),
+                                        max_visitid=10,
                                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
 
     desat = "_unsatstar" if desat else ""
@@ -449,9 +464,10 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
     tblfns = [x
               for module_ in modules
               for progid in obs_filters[target]
-              for exposure in range(50)
+              for visitid in range(1, max_visitid+1)
+              for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module_}_obs{project_obsnum[target][progid]}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
+                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
                                  f"_crowdsource{suffix}.fits")
               ]
 
@@ -465,7 +481,7 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
 
     merged_exposure_table = combine_singleframe(tables)
 
-    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}_allcols.fits"
+    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}_allcols.fits"
     merged_exposure_table.write(outfn, overwrite=True)
 
     # make a table that is nearly equivalent to standard crowdsource tables (with no 'x' or 'y' coordinate)
@@ -484,7 +500,7 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
         print(f"Rejected {reject.sum()} sources that had nan coordinates.")
         minimal_table = minimal_table[~reject]
 
-    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_obs{project_obsnum[target][progid]}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits"
+    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits"
     minimal_table.write(outfn, overwrite=True)
 
     return minimal_table
@@ -604,6 +620,8 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                    module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
                    blur=blur,
                    indivexp=indivexp,
+                   qfcut=0.8,
+                   fracfluxcut=0.5,
                    basepath=basepath)
 
 
@@ -893,8 +911,9 @@ def main():
                             if options.merge_singlefields:
                                 for suffix in ('_nsky0', ):
                                     for progid in obs_filters[target]:
-                                        for index, filtername in enumerate(obs_filters[target][progid]):
-
+                                        for filtername in (obs_filters[target][progid]):
+                                            index += 1
+                                            print(index, filtername, progid, suffix)
                                             # enable array jobs based only on filters
                                             if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
                                                 print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')

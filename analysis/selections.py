@@ -128,9 +128,10 @@ def main(basetable, ww):
     magerr_gtpt05_notwide_all = np.logical_and.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames if 'w' not in filtername.lower()])
 
     # crowdsource parameters
-    minqf = 0.60
+    # 2024-07-13: made parameters more restrictive (qf 0.6->0.9, minfracflux 0.8 -> 0.75)
+    minqf = 0.90
     maxspread = 0.25
-    minfracflux = 0.8
+    minfracflux = 0.75
 
     # daophot parameters
     max_qfit = 0.4
@@ -153,8 +154,12 @@ def main(basetable, ww):
             # it's not very clear what the spread model does; Schafly points to
             # https://sextractor.readthedocs.io/en/latest/Model.html#model-based-star-galaxy-separation-spread-model
             # it may be useful for IDing extended sources
-            spok = ((np.abs(basetable[f'spread_model_{filt}']) < maxspread) &
-                    (~basetable[f'spread_model_{filt}'].mask))
+            # TEMPORARY July 13, 2024: 'spread_model' wasn't propagated
+            if f'spread_model_{filt}' in basetable.colnames:
+                spok = ((np.abs(basetable[f'spread_model_{filt}']) < maxspread) &
+                        (~basetable[f'spread_model_{filt}'].mask))
+            else:
+                spok = np.ones(len(basetable), dtype=bool)
             # fracflux is intended to be a measure of how blended the source is. It's
             # the PSF-weighted flux of the stamp after subtracting neighbors, divided
             # by the PSF-weighted flux of the full image including neighbors. So if you
@@ -187,7 +192,10 @@ def main(basetable, ww):
     # crowdsource
     if 'qf_f410m' in basetable.colnames:
         goodqflong = ((basetable['qf_f410m'] > minqf) & (basetable['qf_f405n'] > minqf) & (basetable['qf_f466n'] > minqf))
-        goodspreadlong = ((basetable['spread_model_f410m'] < maxspread) | (basetable['spread_model_f405n'] < maxspread) | (basetable['spread_model_f466n'] < maxspread))
+        if 'spread_model_f410m' in basetable.colnames:
+            goodspreadlong = ((basetable['spread_model_f410m'] < maxspread) | (basetable['spread_model_f405n'] < maxspread) | (basetable['spread_model_f466n'] < maxspread))
+        else:
+            goodspreadlong = np.ones(len(basetable), dtype=bool)
         goodfracfluxlong = ((basetable['fracflux_f410m'] > minfracflux) | (basetable['fracflux_f405n'] > minfracflux) & (basetable['fracflux_f466n'] > minfracflux))
     elif 'qfit_f410m' in basetable.colnames:
         goodqflong = ((basetable['qfit_f410m'] < max_qfit) &
@@ -201,7 +209,10 @@ def main(basetable, ww):
 
     # masked arrays don't play nice
     goodqflong = np.array(goodqflong & ~goodqflong.mask)
-    goodspreadlong = np.array(goodspreadlong & ~goodspreadlong.mask)
+    try:
+        goodspreadlong = np.array(goodspreadlong & ~goodspreadlong.mask)
+    except AttributeError:
+        pass
     goodfracfluxlong = np.array(goodfracfluxlong & (~goodfracfluxlong.mask if hasattr(goodfracfluxlong, 'mask') else True))
     allgood_long = (goodqflong & goodspreadlong & goodfracfluxlong)
 
@@ -211,21 +222,26 @@ def main(basetable, ww):
 
     if 'qf_f212n' in basetable.colnames:
         goodqfshort = ((basetable['qf_f212n'] > minqf) & (basetable['qf_f182m'] > minqf) & (basetable['qf_f187n'] > minqf))
-        goodspreadshort = ((basetable['spread_model_f212n'] < maxspread) & (basetable['spread_model_f182m'] < maxspread) & (basetable['spread_model_f187n'] < maxspread))
+        if 'spread_model_f212n' in basetable.colnames:
+            goodspreadshort = ((basetable['spread_model_f212n'] < maxspread) & (basetable['spread_model_f182m'] < maxspread) & (basetable['spread_model_f187n'] < maxspread))
+        else:
+            goodspreadshort = np.ones(len(basetable), dtype=bool)
         goodfracfluxshort = ((basetable['fracflux_f212n'] > minfracflux) & (basetable['fracflux_f182m'] > minfracflux) & (basetable['fracflux_f187n'] > minfracflux))
     else:
         goodqfshort = ((basetable['qfit_f212n'] < max_qfit) &
-                      (basetable['qfit_f187n'] < max_qfit) &
-                      (basetable['qfit_f182m'] < max_qfit))
+                       (basetable['qfit_f187n'] < max_qfit) &
+                       (basetable['qfit_f182m'] < max_qfit))
         # I'm using the same variable name to save rewriting below... this is not a great choice
         goodspreadshort = ((basetable['cfit_f212n'] < max_cfit) |
-                          (basetable['cfit_f187n'] < max_cfit) |
-                          (basetable['cfit_f182m'] < max_cfit))
+                           (basetable['cfit_f187n'] < max_cfit) |
+                           (basetable['cfit_f182m'] < max_cfit))
         goodfracfluxshort = True #((basetable['fracflux_f410m'] > minfracflux) | (basetable['fracflux_f405n'] > minfracflux) & (basetable['fracflux_f466n'] > minfracflux))
 
-
     goodqfshort = np.array(goodqfshort & ~goodqfshort.mask)
-    goodspreadshort = np.array(goodspreadshort & ~goodspreadshort.mask)
+    try:
+        goodspreadshort = np.array(goodspreadshort & ~goodspreadshort.mask)
+    except AttributeError:
+        pass
     goodfracfluxshort = np.array(goodfracfluxshort & (~goodfracfluxshort.mask if hasattr(goodfracfluxshort, 'mask') else True))
     allgood_short = (goodqfshort & goodspreadshort & goodfracfluxshort)
 
@@ -249,8 +265,8 @@ def main(basetable, ww):
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
     abconv = (1*u.Jy).to(u.ABmag)
-    filtconv410 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint'])-abconv.value
-    filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint'])-abconv.value
+    filtconv410 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint']) - abconv.value
+    filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint']) - abconv.value
     zeropoint_offset_410_466 = filtconv410-filtconv466
     print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
     # May 11, 2024: the new versions of the catalogs don't have this magnitude offset error
@@ -258,32 +274,33 @@ def main(basetable, ww):
     zeropoint_offset_410_466 = 0
 
     slightly_blue_410_466 =  (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
-                    ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < zeropoint_offset_410_466)
-                    & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+        ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
+        (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < zeropoint_offset_410_466)
+        & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
 
     veryblue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
-                    ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < (-1.75+zeropoint_offset_410_466))
-                    )
+        ((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
+        (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5 < (-1.75+zeropoint_offset_410_466))
+        )
     veryblue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
-                    ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
-                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < (-1.75+zeropoint_offset_410_466)
-                    ))
+        ((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
+        (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5 < (-1.75+zeropoint_offset_410_466)
+        ))
 
     blue_410m405_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) &
-                    (((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
-                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5) < (-0.75+zeropoint_offset_410_466))
-                    )
+        (((basetable['mag_ab_410m405'] - basetable['mag_ab_f466n']) +
+          (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2 + basetable['emag_ab_f405n']**2)**0.5) < (-0.75+zeropoint_offset_410_466))
+        )
     blue_410_466 = (oksep & (~any_saturated) & (~(basetable['mag_ab_f410m'].mask)) &
-                    (((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
-                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5) < (-0.75+zeropoint_offset_410_466))
-                    )
+        (((basetable['mag_ab_f410m'] - basetable['mag_ab_f466n']) +
+          (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f466n']**2)**0.5) < (-0.75+zeropoint_offset_410_466)))
     # this assertion is presumably because blue_410_466 was being computed from 410m405 before
     # assert (blue_410_466 & basetable['mag_ab_410m405'].mask).sum() == 0
     # now this is the correct assertion
     assert (blue_410m405_466 & basetable['mag_ab_410m405'].mask).sum() == 0
-    blue_410_405 = oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) & ((basetable['mag_ab_410m405'] - basetable['mag_ab_f405n']) + (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -2)
+    blue_410_405 = (oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) &
+                    ((basetable['mag_ab_410m405'] - basetable['mag_ab_f405n']) +
+                     (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -2))
     blue_405_410 = (oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_405m410'] - basetable['mag_ab_410m405']) +
                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1)
@@ -363,7 +380,7 @@ def main(basetable, ww):
     all_good_phot = all_good.copy()
     all_good = all_good_phot & oksep
 
-    exclude = (any_saturated | ~oksep | magerr_gtpt1_all |
+    exclude = (any_saturated | ~oksep_noJ | magerr_gtpt1_all |
                basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask |
                badqflong | badfracfluxlong | badspreadlong)
     print(f"Excluding {exclude.sum()} of {exclude.size} ({exclude.sum()/exclude.size*100}%)")
@@ -429,7 +446,10 @@ def main(basetable, ww):
     # or 187-405
     av187405 = (basetable['mag_ab_f187n'] - basetable['mag_ab_f405n']) / (CT06_MWGC()(1.87*u.um) - CT06_MWGC()(4.05*u.um))
 
-    if 'mag_ab_f444w' in basetable.colnames:
+    if (('mag_ab_f444w' in basetable.colnames and
+         'mag_ab_f356w' in basetable.colnames and
+         'mag_ab_f200w' in basetable.colnames and
+         'mag_ab_f115w' in basetable.colnames)):
         av356444 = (basetable['mag_ab_f356w'] - basetable['mag_ab_f444w']) / (CT06_MWGC()(3.56*u.um) - CT06_MWGC()(4.44*u.um))
         av200356 = (basetable['mag_ab_f200w'] - basetable['mag_ab_f356w']) / (CT06_MWGC()(2.00*u.um) - CT06_MWGC()(3.56*u.um))
         # CT06 doesn't work short of 2um
@@ -502,6 +522,13 @@ if __name__ == "__main__":
         globals().update(result)
         basetable = basetable_merged
         print("Loaded merged")
+    elif options.module == 'merged1182indivexp':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts.fits')
+        result = main(basetable_merged1182, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182
+        print("Loaded merged1182 indivexp")
     elif options.module == 'merged1182':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
