@@ -1068,19 +1068,28 @@ def diagnostic_stamps_by_mag_crowdsource(*args, **kwargs):
     return diagnostic_stamps_by_mag(*args, **kwargs, flux_kw='flux', dao=False)
 
 
-def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=7, ind_offset=0, flux_kw='flux_fit', dao=True):
+def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=7, ind_offset=0, flux_kw='flux_fit', dao=True, min_qf=None, min_fracflux=None,
+                             max_mag=17, min_mag=12, mag_decrement=-0.5):
     flux_jy = (result[flux_kw] * u.MJy/u.sr * pixel_area).to(u.Jy)
     jfilts = SvoFps.get_filter_list('JWST')
     jfilts.add_index('filterID')
     zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
-    abmag = -2.5 * np.log10(flux_jy / zeropoint)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        abmag = -2.5 * np.log10(flux_jy / zeropoint)
 
-    magbins = np.arange(17, 12.0, -0.5)
+    magbins = np.arange(max_mag, min_mag, mag_decrement)
     ncol = len(magbins)
 
-    pl.figure(figsize=(20,5))
+    pl.figure(figsize=(20, 5))
     for ii, mag in enumerate(magbins):
         sel = (abmag > mag-0.5) & (abmag <= mag)
+
+        if min_qf is not None:
+            sel &= result['qf'] > min_qf
+        if min_fracflux is not None:
+            sel &= result['fracflux'] > min_fracflux
+
         n = sel.sum()
         try:
             row = result[sel][int(n/2)+ind_offset]
