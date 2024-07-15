@@ -206,9 +206,15 @@ def cmds(basetable, sel=True,
         ax.set_ylabel(f"{f1}")
         ax.axis(axlims)
         if xlim_percentiles:
-            xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
-            xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
-            ax.set_xlim(xlow, xhigh)
+            try:
+                xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
+                xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
+                if np.isfinite(xlow) and np.isfinite(xhigh):
+                    ax.set_xlim(xlow, xhigh)
+                else:
+                    print(f"xlow={xlow} xhigh={xhigh}")
+            except Exception as ex:
+                print(ex)
 
         if ext is not None:
             w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
