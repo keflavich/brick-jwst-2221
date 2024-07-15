@@ -33,7 +33,7 @@ pl.rcParams['figure.figsize'] = (10,8)
 pl.rcParams['figure.dpi'] = 100
 
 #basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
-filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
+filternames = filternames_narrow = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
 #obs_filters = {'2221': filternames,
 #               '1182': ['f444w', 'f356w', 'f200w', 'f115w']
@@ -228,6 +228,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    max_offset=0.15 * u.arcsec, target='brick',
                    indivexp=False,
                    qfcut=None, fracfluxcut=None,
+                   min_nmatch_narrow=4,
                    basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     print(f'Starting merge catalogs: catalog_type: {catalog_type} module: {module} target: {target}', flush=True)
 
@@ -443,6 +444,11 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             print(f"Keeping {fracfluxkeep.sum()} sources of {len(basetable)} with fracflux > {fracfluxcut}")
             basetable = basetable[fracfluxkeep]
 
+        if min_nmatch_narrow is not None:
+            match_brick_narrow = np.array([basetable[f'nmatch_good_{filn}'] > min_nmatch_narrow for filn in filternames_narrow]).sum(axis=0) > 1
+            print(f"Keeping {match_brick_narrow.sum()} sources of {len(basetable)} with at least {min_nmatch_narrow} matches in two or more of the narrower bands")
+            basetable = basetable[match_brick_narrow]
+
         if qfcut is not None or fracfluxcut is not None:
             print(f"Saving merged version with qualcuts: {tablename}_qualcuts.fits with len={len(basetable)}")
             basetable.write(f"{tablename}_qualcuts.fits", overwrite=True)
@@ -507,6 +513,7 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
         print(f"Rejected {reject.sum()} sources that had nan coordinates.")
         minimal_table = minimal_table[~reject]
 
+    print(f"Final table length is {len(minimal_table)}")
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits"
     minimal_table.write(outfn, overwrite=True)
 

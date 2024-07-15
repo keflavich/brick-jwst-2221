@@ -380,9 +380,9 @@ def main(basetable, ww):
     all_good_phot = all_good.copy()
     all_good = all_good_phot & oksep
 
-    exclude = (any_saturated | ~oksep_noJ | magerr_gtpt1_all |
-               basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask |
-               badqflong | badfracfluxlong | badspreadlong)
+    exclude = (any_saturated  | magerr_gtpt1_all |
+               basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask)
+              # unknown why - badqflong is excluding too much  | badqflong | badfracfluxlong | badspreadlong) | ~oksep_noJ
     print(f"Excluding {exclude.sum()} of {exclude.size} ({exclude.sum()/exclude.size*100}%)")
 
     # "bad" was totally broken; (bad & all_good) is very nonzero
