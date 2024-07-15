@@ -525,6 +525,9 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     proposal_id = options.proposal_id
     target = options.target
 
+    nvisits = {'2221': {'brick': 1, 'cloudc': 1},
+               '1182': {'brick': 2}
+               }
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
                             '1182': {'004': 'brick'}}[proposal_id]
     reg_to_field_mapping = {v:k for k,v in field_to_reg_mapping.items()}
@@ -543,7 +546,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
         detector = module # no sub-detectors for long-NIRCAM
         for filtername in filternames:
             if options.each_exposure:
-                for visitid in range(1, 100):
+                for visitid in range(1, nvisits[proposal_id][target] + 1):
                     visitid = f'{visitid:03d}'
                     filenames = get_filenames(basepath, filtername, proposal_id,
                                               field, visitid=visitid,

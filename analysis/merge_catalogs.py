@@ -375,6 +375,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_ab_187m182')
 
 
+        """ # this adds to the file size too much
         # Add some important colors
 
         colors=[('f410m', 'f466n'),
@@ -404,6 +405,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             if f'mag_ab_{c1}' in basetable.colnames and f'mag_ab_{c2}' in basetable.colnames:
                 basetable.add_column(basetable[f'mag_ab_{c1}']-basetable[f'mag_ab_{c2}'], name=f'color_{c1}-{c2}')
                 basetable.add_column((basetable[f'emag_ab_{c1}']**2 + basetable[f'emag_ab_{c2}']**2)**0.5, name=f'ecolor_{c1}-{c2}')
+        """
 
         # DEBUG for colname in basetable.colnames:
         # DEBUG     print(f"colname {colname} has mask: {hasattr(basetable[colname], 'mask')}")
@@ -414,7 +416,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         indivexp = '_indivexp' if indivexp else ''
         tablename = f"{basepath}/catalogs/{catalog_type}_{module}{indivexp}_photometry_tables_merged{desat}{bgsub}{epsf_}{blur_}"
         t0 = time.time()
-        print(f"Writing table {tablename}", flush=True)
+        print(f"Writing table {tablename} with len={len(basetable)}", flush=True)
         # use caps b/c FITS will force it to caps anyway
         basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
         # DO NOT USE FITS in production, it drops critical metadata
@@ -430,17 +432,19 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable.write(f"{tablename}.ecsv", overwrite=True)
         print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
-        # keep any rows with at least one qf cut pass
+        # keep any rows with at least two qf cut pass
         if qfcut is not None:
-            qfkeep = np.logical_or.reduce([basetable[qfkey] > qfcut for qfkey in basetable.colnames if 'qf' in qfkey])
+            qfkeep = np.array([basetable[qfkey] > qfcut for qfkey in basetable.colnames if 'qf' in qfkey]).sum(axis=0) > 1
+            print(f"Keeping {qfkeep.sum()} sources of {len(basetable)} with qf > {qfcut}")
             basetable = basetable[qfkeep]
 
         if fracfluxcut is not None:
-            fracfluxkeep = np.logical_or.reduce([basetable[fracfluxkey] > fracfluxcut for fracfluxkey in basetable.colnames if 'fracflux' in fracfluxkey])
+            fracfluxkeep = np.array([basetable[fracfluxkey] > fracfluxcut for fracfluxkey in basetable.colnames if 'fracflux' in fracfluxkey]).sum(axis=0) > 1
+            print(f"Keeping {fracfluxkeep.sum()} sources of {len(basetable)} with fracflux > {fracfluxcut}")
             basetable = basetable[fracfluxkeep]
 
         if qfcut is not None or fracfluxcut is not None:
-            print(f"Saving merged version with qualcuts: {tablename}_qualcuts.fits")
+            print(f"Saving merged version with qualcuts: {tablename}_qualcuts.fits with len={len(basetable)}")
             basetable.write(f"{tablename}_qualcuts.fits", overwrite=True)
 
 
@@ -470,6 +474,9 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
                                  f"{filtername.lower()}_{module_}_visit{visitid:03d}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
                                  f"_crowdsource{suffix}.fits")
               ]
+    tblfns = sorted(set(tblfns))
+    print(f"Found {len(tblfns)} tables for {filtername.lower()}_*_visit*_exp*{desat}{bgsub}{fitpsf}{blur_}:")
+    print("\n".join(tblfns))
 
     if len(tblfns) == 0:
         raise ValueError(f"No tables found matching {basepath}/{filtername.upper()}/{filtername.lower()}_{module}....{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
@@ -535,11 +542,11 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     if indivexp:
         catfns = [x
                   for filn in filternames
-                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
+                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
                   ]
         if len(catfns) == 0:
             filn = 'f405n'
-            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had no matches")
+            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had no matches")
         if len(catfns) != len(imgfns):
             print("WARNING: Different length of imgfns & catfns!")
             print("imgfns:", imgfns)
@@ -620,8 +627,8 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                    module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
                    blur=blur,
                    indivexp=indivexp,
-                   qfcut=0.8,
-                   fracfluxcut=0.5,
+                   qfcut=0.9,
+                   fracfluxcut=0.75,
                    basepath=basepath)
 
 
@@ -909,9 +916,13 @@ def main():
                         for blur in (False, True):
 
                             if options.merge_singlefields:
+                                singlefield_done = False
                                 for suffix in ('_nsky0', ):
                                     for progid in obs_filters[target]:
                                         for filtername in (obs_filters[target][progid]):
+                                            if singlefield_done:
+                                                # skip ahead to merge-all-indiv step
+                                                continue
                                             index += 1
                                             print(index, filtername, progid, suffix)
                                             # enable array jobs based only on filters
@@ -932,7 +943,8 @@ def main():
                                                                                     target=target,
                                                                                     exposure_numbers=np.arange(1, options.max_expnum + 1),
                                                                                     basepath=basepath)
-                                                break
+                                                print(f"Finished merge_crowdsource_individual_frames {suffix} {progid} {filtername}")
+                                                singlefield_done = True
                                             except Exception as ex:
                                                 print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                                                 exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -945,7 +957,6 @@ def main():
                             if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
                                 print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
                                 continue
-
 
                             t0 = time.time()
                             print(f"Index {index}")
