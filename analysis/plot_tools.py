@@ -499,6 +499,7 @@ def ccds_withiso(basetable, sel=True,
 
 def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
                 maxsep=0.13*u.arcsec, obsid='001', sel=None, axlims=[-0.5, 0.5, -0.5, 0.5],
+                alpha=0.01,
                 regs=['brick_nrca.reg', 'brick_nrcb.reg']):
     statsd = {}
     fig1 = pl.figure(1)
@@ -534,14 +535,14 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
         ok = (sep < maxsep) & (sep > 0)
         print(f"For filter {filtername}, found {ok.sum()} out of {len(ok)} data points")
 
-        ax.scatter(radiff, decdiff, marker=',', s=1, alpha=0.1)
+        ax.scatter(radiff, decdiff, marker=',', s=1, alpha=alpha)
         if regs is None:
-            ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=0.1)
+            ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=alpha)
         else:
             for reg in regs:
                 reg = regions.Regions.read(f'{basepath}/regions_/{reg}')[0]
                 match = reg.contains(crds, refwcs)
-                ax.scatter(radiff[ok & match], decdiff[ok & match], marker=',', s=1, alpha=0.1)
+                ax.scatter(radiff[ok & match], decdiff[ok & match], marker=',', s=1, alpha=alpha)
 
         ax.axis(axlims)
         ax.set_title(filtername)
@@ -551,7 +552,7 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
         #ax2.set_xlabel("Separation (\")")
         ax2.set_title(filtername)
 
-        print(f"sep: {sep}, std(sep): {np.std(sep)}")
+        print(f"med sep: {np.median(sep)}, std(sep): {np.std(sep)}")
         statsd[filtername] = {
             'med': np.median(sep),
             'mad': stats.mad_std(sep.copy()),

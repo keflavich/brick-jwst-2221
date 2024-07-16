@@ -453,6 +453,9 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             print(f"Saving merged version with qualcuts: {tablename}_qualcuts.fits with len={len(basetable)}")
             basetable.write(f"{tablename}_qualcuts.fits", overwrite=True)
 
+        oksep = (np.array([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'w' not in filtername]).sum(axis=0) > 1)
+        basetable[oksep].write(f"{tablename}_qualcuts_oksep2221.fits", overwrite=True)
+
 
 def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False, filtername='f410m',
                                         progid='2221',
