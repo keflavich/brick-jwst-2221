@@ -80,7 +80,10 @@ def main(basetable, ww):
                        (basetable['mag_ab_f410m'] - basetable['mag_ab_f405n'] >
                         0))
     basetable['mag_ab_f410m'].mask[saturated_f410m] = True
-    basetable['flux_f410m'].mask[saturated_f410m] = True
+    try:
+        basetable['flux_f410m'].mask[saturated_f410m] = True
+    except Exception as ex:
+        print(f"Failed to mask flux column f410m {ex}")
 
     filternames = [basetable.meta[key] for key in basetable.meta if 'FILT' in key]
     print(f"Selecting based on filters {filternames}")
@@ -522,6 +525,13 @@ if __name__ == "__main__":
         globals().update(result)
         basetable = basetable_merged
         print("Loaded merged")
+    elif options.module == 'merged1182indivexp_cut':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts_oksep2221.fits')
+        result = main(basetable_merged1182, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182
+        print("Loaded merged1182 indivexp")
     elif options.module == 'merged1182indivexp':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts.fits')
