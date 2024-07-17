@@ -99,9 +99,9 @@ if True:
         for filtername in 'F200W,F356W,F444W,F115W'.split(","):
             for visit in ('002', '001'):
                 print(f"Working on filter {filtername}")
+                print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
                 globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
                 flist = glob.glob(globstr)
-
 
                 if len(flist) == 0:
                     raise ValueError(f"No matches to {globstr}")
@@ -133,21 +133,19 @@ if True:
 
                     # start by shifting by measured offsets
                     match = ((handmeasured_offsets['Visit'] == visitname) &
-                            (handmeasured_offsets['Exposure'] == int(expno)) &
-                            ((handmeasured_offsets['Module'] == module) | (handmeasured_offsets['Module'] == module.strip('1234'))) &
-                            (handmeasured_offsets['Filter'] == filtername)
+                             (handmeasured_offsets['Exposure'] == int(expno)) &
+                             ((handmeasured_offsets['Module'] == module) | (handmeasured_offsets['Module'] == module.strip('1234'))) &
+                             (handmeasured_offsets['Filter'] == filtername)
                             )
                     assert match.sum() == 1
                     handsel_row = handmeasured_offsets[match][0]
                     dra_hand, ddec_hand = u.Quantity([handsel_row['dra (arcsec)'], handsel_row['ddec (arcsec)']], u.arcsec)
                     ww.wcs.crval = ww.wcs.crval + [dra_hand.to(u.deg).value, ddec_hand.to(u.deg).value]
 
-                    print(fitsfn, fn)
-                    print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
+                    #print(fitsfn, fn)
+                    #print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
                     total_dra = dra_hand.to(u.arcsec)
                     total_ddec = ddec_hand.to(u.arcsec)
-
-
 
                     skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
 
@@ -171,7 +169,7 @@ if True:
 
                         ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
                         reject = np.zeros(ratio.size, dtype='bool')
-                        ii=0
+                        ii = 0
                         # rejecting based on flux may have failed?
                         if filtername == 'F200W':
                             # for the other filters, we don't expect any agreement at all
@@ -211,7 +209,6 @@ if True:
                         total_ddec = total_ddec + med_ddec.to(u.arcsec)
 
                         ww.wcs.crval = ww.wcs.crval + [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
-                        print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
 
                         iteration += 1
                         if iteration > 50:
@@ -220,7 +217,7 @@ if True:
 
 
 
-                    print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
+                    print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [dra_hand={dra_hand}, ddec_hand={ddec_hand}]")
                     if keep.sum() < 5:
                         print(fitsfn)
                         print(fn)

@@ -2,8 +2,20 @@ import glob
 from astropy.io import fits
 from scipy.ndimage import label, find_objects, center_of_mass, sum_labels
 from astropy.modeling.fitting import LevMarLSQFitter
-from photutils.psf import DAOGroup, IntegratedGaussianPRF, extract_stars, IterativelySubtractedPSFPhotometry, BasicPSFPhotometry
-from photutils.psf.utils import subtract_psf
+
+try:
+    # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
+    from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
+except:
+    # version 1.6.0, which works
+    from photutils.psf import BasicPSFPhotometry as PSFPhotometry, IterativelySubtractedPSFPhotometry as IterativePSFPhotometry, DAOGroup as SourceGrouper
+try:
+    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
+except:
+    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D
+    from photutils.background import MMMBackground as LocalBackground
+
+
 from tqdm.notebook import tqdm
 from tqdm import tqdm
 from astropy import wcs
@@ -335,8 +347,8 @@ def iteratively_remove_saturated_stars(data, header,
 
         # manually subtract off PSFs because get_residual_image seems to (never?) work
         # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
-        resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
-        #resid = phot.get_residual_image()
+        #resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
+        resid = phot.get_residual_image()
 
         # reset saturated pixels back to zero
         resid[satpix] = 0

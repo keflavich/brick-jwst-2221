@@ -93,6 +93,7 @@ fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
 #
 # Image2Pipeline.step_defs['resample'] = pre_resample(Image2Pipeline.resample)
 
+
 def main(filtername, module, Observations=None, regionname='brick', do_destreak=True,
          field='001', proposal_id='2221', skip_step1and2=False, use_average=True):
     """
@@ -125,8 +126,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
-
-
 
     # Files created in this notebook will be saved
     # in a subdirectory of the base directory called `Stage3`
@@ -225,6 +224,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     'catalog_format': 'fits',
                                     'kernel_fwhm': fwhm_pix,
                                     'nclip': 5,
+                                    'starfinder': 'dao',
                                     # expand_refcat: A boolean indicating whether or not to expand reference catalog with new sources from other input images that have been already aligned to the reference image. (Default=False)
                                     'expand_refcat': True,
                                     # based on DebugReproduceTweakregStep
@@ -238,10 +238,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
                                     })
 
-
-
         print(f'Filter {filtername} tweakreg parameters: {tweakreg_parameters}')
-
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
@@ -347,8 +344,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             reftbl.meta['name'] = 'F405N Reference Astrometric Catalog'
 
             # truncate to top 10,000 sources
-            reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv'
+            # more recent versions are already truncated to only very high quality matches
+            # reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
+            # abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv'
 
             tweakreg_parameters['abs_searchrad'] = 0.4
             # try forcing searchrad to be tighter to avoid bad crossmatches
@@ -582,7 +580,7 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
         thismodule = fn.split("_")[-2]
         visit = fn.split("_")[0]
         if use_average:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_VVV_average.csv'
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_F405ref_average.csv'
             print(f"Using average offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
             match = (

@@ -502,7 +502,7 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
 
     # make a table that is nearly equivalent to standard crowdsource tables (with no 'x' or 'y' coordinate)
     minimal_version = {colname: merged_exposure_table[f'{colname}_avg']
-                       for colname in ('flux', 'dflux', 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso',)}
+                       for colname in ('flux', 'dflux', 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'spread_model')}
     for key in ('dra', 'ddec', 'nmatch', 'nmatch_good', 'dflux_prop'):
         minimal_version[key] = merged_exposure_table[key]
 
