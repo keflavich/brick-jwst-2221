@@ -778,8 +778,8 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
     filtername = cat.meta['filter']
     zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
 
-    flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
-    eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * (2*np.pi / (8*np.log(2))) * fwhm**2).to(u.Jy)
+    flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
+    eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
     abmag = -2.5*np.log10(flux_jy / zeropoint)
     abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
     satstar_cat['mag_ab'] = abmag
