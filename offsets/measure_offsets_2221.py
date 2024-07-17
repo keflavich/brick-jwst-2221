@@ -56,6 +56,7 @@ for reftbfn, reftbname in (
         magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag212[idx]) < 0.5
 
         # ignore sources where there are multiple JWST sources close to each other (confusion)
+        # (closest_sep is crossmatched to the same catalog looking for the nearest nonself neighbor)
         not_closesel = (closest_sep > 0.5*u.arcsec)
 
         sel = (not_closesel[idx]) & magmatch
@@ -82,10 +83,12 @@ for reftbfn, reftbname in (
             cats = sorted(glob.glob(f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"))
             if len(cats) == 0:
                 raise ValueError(f"No matches to {basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits")
+
+            print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
             for fn in cats:
                 ab = 'a' if 'nrca' in fn else 'b'
                 if 'long' in fn:
-                    module = f'nrc{ab}long' 
+                    module = f'nrc{ab}long'
                 else:
                     ab += fn.split('nrc')[1][1]
                     module = f'nrc{ab}'
@@ -106,6 +109,11 @@ for reftbfn, reftbname in (
                     decoffset = header['DEOFFSET']
                     header['CRVAL1'] = header['OLCRVAL1']
                     header['CRVAL2'] = header['OLCRVAL2']
+                    total_dra = raoffset*u.arcsec
+                    total_ddec = decoffset*u.arcsec
+                else:
+                    total_dra = 0*u.arcsec
+                    total_ddec = 0*u.arcsec
 
                 ww = WCS(header)
 
@@ -122,16 +130,16 @@ for reftbfn, reftbname in (
                 threshold = 0.01*u.arcsec
                 max_offset = 0.5*u.arcsec
 
-                total_dra = 0*u.arcsec
-                total_ddec = 0*u.arcsec
-
                 iteration = 0
+                nkeeps = []
                 while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
                     skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
 
                     idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel])
                     keep = offset < max_offset
 
+                    # iteratively reject sources whose flux ratio is not similar to the mean
+                    # This is trying to enforce that they are the same star
                     ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
                     reject = np.zeros(ratio.size, dtype='bool')
                     for ii in range(4):
@@ -172,7 +180,13 @@ for reftbfn, reftbname in (
 
                     ww.wcs.crval = ww.wcs.crval + [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
 
-                print(f"{filtername:5s}, {ab}, {expno}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, nmatch={keep.sum()}, nreject={reject.sum()} (n={ii}), niter={iteration}")
+                    nkeeps.append(keep.sum())
+                    if iteration > 25:
+                        print("WARNING: Did not converge after 25 iterations")
+                        break
+                        raise ValueError(f"Iterations are not converging.  Keep iterations were {nkeeps}")
+
+                print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, {iteration:5d}")
                 if keep.sum() < 5:
                     print(fitsfn)
                     print(fn)

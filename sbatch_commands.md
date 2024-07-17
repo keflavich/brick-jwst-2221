@@ -379,3 +379,10 @@ Analyses
 ```
 sbatch --job-name=brick-ccds-cmds --output=brick_ccds_cmds%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=4 --nodes=1 --mem=16gb --time=96:00:00  --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/make_CCDsandCMDs.py"
 ```
+
+
+Offsets
+```
+sbatch --job-name=webb-brick-offsets-2221 --output=webb-brick-offsets-2221-%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=1 --nodes=1 --mem=16gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/offsets/measure_offsets_2221.py"                                                                                                                             |
+sbatch --job-name=webb-brick-offsets-1182 --output=webb-brick-offsets-1182-%j.log  --account=adamginsburg --qos=adamginsburg-b --ntasks=1 --nodes=1 --mem=16gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/offsets/measure_offsets_1182.py"
+```
