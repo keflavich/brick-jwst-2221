@@ -83,7 +83,7 @@ def main():
         if (np.abs(dra_med) < 1*u.marcsec) & (np.abs(ddec_med) < 1*u.marcsec):
             break
 
-    print(f"Shifted F405N coordinates by {total_dra}, {total_ddec} in {ii} iterations")
+    print(f"Shifted F405N coordinates by {total_dra}, {total_ddec} in {ii} iterations with stddev = {dra.std()}, {ddec.std()} ({(dra.var()+ddec.var())**0.5})")
     reftbl['skycoord'] = refcrds_updated
 
     # include two columns to make it a table, plus abmag for sorting
