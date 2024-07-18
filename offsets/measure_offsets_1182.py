@@ -47,50 +47,60 @@ else:
     reftb_vvv.write(vvvfn, overwrite=True)
     reftb_vvv.write(vvvfn.replace(".ecsv", ".fits"), overwrite=True)
 
-vvv_reference_coordinates = reference_coordinates = reftb_vvv['skycoord']
 
-f200tb = Table.read(f'{basepath}/catalogs/jw01182-o004_t001_nircam_clear-f200w-merged_cat_20240302.ecsv')
-mag200 = f200tb['aper_total_vegamag']
-skycrds_f200 = f200tb['sky_centroid']
+for reftbfn, reftbname in (
+                           (vvvfn, 'VVV'),
+                           (f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', 'F405ref'),
+                           ):
+    print()
+    print(reftbname)
+    reftb = Table.read(reftbfn)
+    reference_coordinates = reftb['skycoord']
 
-idx, sidx, sep, sep3d = vvv_reference_coordinates.search_around_sky(skycrds_f200, 0.5*u.arcsec)
-idx_sel = np.isin(np.arange(len(f200tb)), idx)
-dra = (skycrds_f200[idx].ra - vvv_reference_coordinates[sidx].ra).to(u.arcsec)
-ddec = (skycrds_f200[idx].dec - vvv_reference_coordinates[sidx].dec).to(u.arcsec)
-closeneighbors_idx, closest_sep, _ = skycrds_f200.match_to_catalog_sky(skycrds_f200, 2)
+    if reftbname == 'VVV':
+        vvv_reference_coordinates = reference_coordinates = reftb_vvv['skycoord']
 
-# select only sources close enough in magnitude
-magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag200[idx]) < 0.5
+        f200tb = Table.read(f'{basepath}/catalogs/jw01182-o004_t001_nircam_clear-f200w-merged_cat_20240302.ecsv')
+        mag200 = f200tb['aper_total_vegamag']
+        skycrds_f200 = f200tb['sky_centroid']
 
-# ignore sources where there are multiple JWST sources close to each other (confusion)
-not_closesel = (closest_sep > 0.5*u.arcsec)
+        idx, sidx, sep, sep3d = vvv_reference_coordinates.search_around_sky(skycrds_f200, 0.5*u.arcsec)
+        idx_sel = np.isin(np.arange(len(f200tb)), idx)
+        dra = (skycrds_f200[idx].ra - vvv_reference_coordinates[sidx].ra).to(u.arcsec)
+        ddec = (skycrds_f200[idx].dec - vvv_reference_coordinates[sidx].dec).to(u.arcsec)
+        closeneighbors_idx, closest_sep, _ = skycrds_f200.match_to_catalog_sky(skycrds_f200, 2)
 
-sel = (not_closesel[idx]) & magmatch
-print(f"Selected {sel.sum()} reference source matching between VVV & F200W")
+        # select only sources close enough in magnitude
+        magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag200[idx]) < 0.5
 
-# downselect to only the coordinates we expect to have good matches
-reference_coordinates = vvv_reference_coordinates[sidx][sel]
-print(f"There are {len(reference_coordinates)} reference coordinates out of {len(reftb_vvv)} in the reference catalog.")
+        # ignore sources where there are multiple JWST sources close to each other (confusion)
+        not_closesel = (closest_sep > 0.5*u.arcsec)
 
-# write out downselected version so we can overplot it in CARTA
-reftb_vvv[sidx][sel].write('/orange/adamginsburg/jwst/brick/catalogs/jw01182-o004_t001_nircam_clear-f200w-merged_cat_20240302_downsel.fits',
-                       overwrite=True)
+        sel = (not_closesel[idx]) & magmatch
+        print(f"Selected {sel.sum()} reference source matching between VVV & F200W")
 
-# set 'flux' so we can compute ratio below.  Is arbitrary, but let's use VISTA values anyway
-# http://svo2.cab.inta-csic.es/theory/fps/index.php?id=Paranal/VISTA.Ks&&mode=browse&gname=Paranal&gname2=VISTA#filter
-reftb_vvv['flux'] = (10**(reftb_vvv['Ksmag3'] / 2.5) + 659.10)*u.Jy
+        # downselect to only the coordinates we expect to have good matches
+        reference_coordinates = vvv_reference_coordinates[sidx][sel]
+        print(f"There are {len(reference_coordinates)} reference coordinates out of {len(reftb_vvv)} in the reference catalog.")
 
-# for use below, needs to match reference_coordinates
-reftb = reftb_vvv[sidx][sel]
-print(f"reftb has length {len(reftb)}")
+        # write out downselected version so we can overplot it in CARTA
+        reftb_vvv[sidx][sel].write('/orange/adamginsburg/jwst/brick/catalogs/jw01182-o004_t001_nircam_clear-f200w-merged_cat_20240302_downsel.fits',
+                            overwrite=True)
 
-# undo all that work above: just accept _all_ VVV sources (and handle rejection below?)
-reftb = reftb_vvv
-reference_coordinates = vvv_reference_coordinates
-print(f"reftb has length {len(reftb)}")
+        # set 'flux' so we can compute ratio below.  Is arbitrary, but let's use VISTA values anyway
+        # http://svo2.cab.inta-csic.es/theory/fps/index.php?id=Paranal/VISTA.Ks&&mode=browse&gname=Paranal&gname2=VISTA#filter
+        reftb_vvv['flux'] = (10**(reftb_vvv['Ksmag3'] / 2.5) + 659.10)*u.Jy
+
+        # for use below, needs to match reference_coordinates
+        reftb = reftb_vvv[sidx][sel]
+        print(f"reftb has length {len(reftb)}")
+
+        # undo all that work above: just accept _all_ VVV sources (and handle rejection below?)
+        reftb = reftb_vvv
+        reference_coordinates = vvv_reference_coordinates
+        print(f"reftb has length {len(reftb)}")
 
 
-if True:
 
     rows = []
 
@@ -106,8 +116,14 @@ if True:
                 if len(flist) == 0:
                     raise ValueError(f"No matches to {globstr}")
                 for fn in sorted(flist):
+
                     ab = 'a' if 'nrca' in fn else 'b'
-                    module = f'nrc{ab}long' if 'long' in fn else f'nrc{ab}' + fn.split('nrc')[1][1]
+                    if 'long' in fn:
+                        module = f'nrc{ab}long'
+                    else:
+                        ab += fn.split('nrc')[1][1]
+                        module = f'nrc{ab}'
+
                     expno = fn.split("_")[2]
                     visitname = os.path.basename(fn).split("_")[0]
 
@@ -120,14 +136,6 @@ if True:
                         ffh = fits.open(fitsfn)
 
                     header = ffh['SCI'].header
-
-                    if 'RAOFFSET' in header:
-                        raoffset = header['RAOFFSET']
-                        decoffset = header['DEOFFSET']
-                        print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
-                        header['CRVAL1'] = header['OLCRVAL1']
-                        header['CRVAL2'] = header['OLCRVAL2']
-
 
                     ww = WCS(header)
 
@@ -142,10 +150,20 @@ if True:
                     dra_hand, ddec_hand = u.Quantity([handsel_row['dra (arcsec)'], handsel_row['ddec (arcsec)']], u.arcsec)
                     ww.wcs.crval = ww.wcs.crval + [dra_hand.to(u.deg).value, ddec_hand.to(u.deg).value]
 
-                    #print(fitsfn, fn)
-                    #print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
-                    total_dra = dra_hand.to(u.arcsec)
-                    total_ddec = ddec_hand.to(u.arcsec)
+
+                    if 'RAOFFSET' in header:
+                        raoffset = header['RAOFFSET']
+                        decoffset = header['DEOFFSET']
+                        print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
+                        header['CRVAL1'] = header['OLCRVAL1']
+                        header['CRVAL2'] = header['OLCRVAL2']
+                        total_dra = raoffset*u.arcsec
+                        total_ddec = decoffset*u.arcsec
+                    else:
+                        #print(fitsfn, fn)
+                        #print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
+                        total_dra = dra_hand.to(u.arcsec)
+                        total_ddec = ddec_hand.to(u.arcsec)
 
                     skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
 
@@ -244,7 +262,7 @@ if True:
 
     tbl = Table(rows)
     # don't necessarily want to write this: if the manual alignment has been run already, the offsets will all be zero
-    tbl.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_VVV.csv", format='ascii.csv', overwrite=True)
+    tbl.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}.csv", format='ascii.csv', overwrite=True)
 
     # TODO: aggregate with weighted mean
 
@@ -257,5 +275,5 @@ if True:
     agg['ddec_rms'] = aggstd['ddec']
     agg['dra_med'] = aggmed['dra']
     agg['ddec_med'] = aggmed['ddec']
-    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_VVV_average.csv", format='ascii.csv', overwrite=True)
+    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average.csv", format='ascii.csv', overwrite=True)
 

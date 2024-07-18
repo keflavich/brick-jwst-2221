@@ -18,7 +18,7 @@ basepath = '/blue/adamginsburg/adamginsburg/jwst/brick'
 
 for reftbfn, reftbname in (
                            (f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-merged_vvvcat.ecsv', 'VVV'),
-                           (f'{basepath}/catalogs/f405n_merged_indivexp_merged_crowdsource_nsky0.fits', 'F405ref'),
+                           (f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', 'F405ref'),
                            ):
     print()
     print(reftbname)
