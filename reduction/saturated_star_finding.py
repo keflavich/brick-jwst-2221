@@ -275,7 +275,7 @@ def iteratively_remove_saturated_stars(data, header,
     #big_grid.fixed['x_0'] = True
     #big_grid.fixed['y_0'] = True
 
-    daogroup = DAOGroup(crit_separation=8)
+    daogroup = SourceGrouper(min_separation=8)
 
     resid = data
 
@@ -317,14 +317,15 @@ def iteratively_remove_saturated_stars(data, header,
         if verbose:
             print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}")
 
-        phot = BasicPSFPhotometry(finder=finder,
-                                  group_maker=daogroup,
-                                  bkg_estimator=None, # must be none or it un-saturates pixels
-                                  #psf_model=epsf_model,
-                                  psf_model=big_grid,
-                                  fitter=lmfitter,
-                                  fitshape=fitsz,
-                                  aperture_radius=apsz*fwhm_pix)
+        phot = PSFPhotometry(finder=finder,
+                             grouper=daogroup,
+                             localbkg_estimator=None, # must be none or it un-saturates pixels
+                             #psf_model=epsf_model,
+                             psf_model=big_grid,
+                             fitter=lmfitter,
+                             fitshape=fitsz,
+                             aperture_radius=apsz*fwhm_pix,
+                             )
 
         # Mask out the inner portion of the PSF when fitting it
         if diliter > 0:
@@ -360,6 +361,7 @@ def iteratively_remove_saturated_stars(data, header,
 
     return final_table, resid
 
+
 def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh = fits.open(filename)
     data = fh['SCI'].data
@@ -378,6 +380,7 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh['SCI'].data = satstar_resid
     fh.writeto(filename.replace(".fits", save_suffix+".fits"), overwrite=True)
 
+
 def main():
 
     with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
@@ -389,6 +392,7 @@ def main():
     for module in ('nrca', 'nrcb', 'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
             remove_saturated_stars(fn)
+
 
 if __name__ == "__main__":
     main()
