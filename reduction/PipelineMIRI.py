@@ -245,6 +245,7 @@ def main(filtername, Observations=None, regionname='brick',
                 Image2Pipeline.call(member['expname'].replace("_cal.fits",
                                                               "_rate.fits"),
                                     save_results=True, output_dir=output_dir,
+                                    #steps={'background': {'run': False}},
                                    )
         else:
             print("Skipped step 1 and step2")
@@ -281,10 +282,6 @@ def main(filtername, Observations=None, regionname='brick',
             reftblversion = reftbl.meta['VERSION']
             reftbl.meta['name'] = 'F405N Reference Astrometric Catalog'
 
-            # truncate to top 10,000 sources
-            reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv'
-
             tweakreg_parameters['abs_searchrad'] = 0.4
             # try forcing searchrad to be tighter to avoid bad crossmatches
             # (the raw data are very well-aligned to begin with, though CARTA
@@ -299,8 +296,11 @@ def main(filtername, Observations=None, regionname='brick',
             asn_file_each,
             steps={'tweakreg': tweakreg_parameters,
                    # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
-                   #'skymatch': {'save_results': True, 'skip': True,
-                   #             'skymethod': 'match', 'match_down': False},
+                   'skymatch': {'save_results': True, #'skip': True,
+                                'subtract': False,
+                                'skymethod': 'match', 'match_down': False},
+                   # try disabling outlier detection to see if it restores the zeros
+                   'outlier_detection': {'run': False},
             },
             output_dir=output_dir,
             save_results=True)
@@ -311,45 +311,6 @@ def main(filtername, Observations=None, regionname='brick',
             check_wcs(member['expname'])
             check_wcs(member['expname'].replace('cal', 'i2d').replace('destreak', 'i2d'))
         check_wcs(asn_data['products'][0]['name'] + "_i2d.fits")
-
-        print(f"Realigning to VVV (filter={filtername})")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-vvv.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_i2d.fits',
-                    realigned_vvv_filename)
-        catfile = f'{basepath}/{filtername.upper()}/pipeline/jw02221-o002_t001_miri_f2550w_cat.ecsv'
-        print(f"Realigned to VVV filename: {realigned_vvv_filename}")
-        realigned = realign_to_vvv(filtername=filtername.lower(),
-                                   fov_regname=fov_regname[regionname],
-                                   module='miri',
-                                   basepath=basepath,
-                                   catfile=catfile,
-                                   fieldnumber=field, proposal_id=proposal_id,
-                                   imfile=realigned_vvv_filename,
-                                   ksmag_limit=11,
-                                   mag_limit=15,
-                                   max_offset=0.4*u.arcsec,
-                                   #raoffset=raoffset,
-                                   #decoffset=decoffset
-                                   )
-        print(f"Done realigning to VVV (filtername={filtername})")
-
-        print(f"Realigning to refcat (filtername={filtername})")
-        realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_realigned-to-refcat.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_miri_{filtername.lower()}_i2d.fits',
-                    realigned_refcat_filename)
-        print(f"Realigned refcat filename: {realigned_refcat_filename}")
-        realigned = realign_to_catalog(reftbl['skycoord'],
-                                       filtername=filtername.lower(),
-                                       basepath=basepath,
-                                       fieldnumber=field,
-                                       catfile=catfile,
-                                       mag_limit=20, proposal_id=proposal_id,
-                                       max_offset=0.4*u.arcsec,
-                                       imfile=realigned_refcat_filename,
-                                       #raoffset=raoffset, decoffset=decoffset
-                                       )
-        print(f"Done realigning to refcat (filtername={filtername})")
-
 
     globals().update(locals())
     return locals()
@@ -380,51 +341,9 @@ def fix_alignment(fn, proposal_id=None, field=None, basepath=None, filtername=No
     if basepath is None:
         basepath = f'/orange/adamginsburg/jwst/{field_name}'
 
-    if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
-        exposure = int(fn.split("_")[-3])
-        thismodule = fn.split("_")[-2]
-        visit = fn.split("_")[0]
-        if use_average:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_VVV_average.csv'
-            print(f"Using average offset table {tblfn}")
-            offsets_tbl = Table.read(tblfn)
-            match = (
-                    ((offsets_tbl['Module'] == thismodule) |
-                     (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-                    (offsets_tbl['Filter'] == filtername)
-                    )
-            row = offsets_tbl[match]
-            print(f'Running manual align for merged for {filtername} {row["Module"][0]}.')
-        else:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv'
-            print(f"Using offset table {tblfn}")
-            offsets_tbl = Table.read(tblfn)
-            match = ((offsets_tbl['Visit'] == visit) &
-                    (offsets_tbl['Exposure'] == exposure) &
-                    ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-                    (offsets_tbl['Filter'] == filtername)
-                    )
-            row = offsets_tbl[match]
-            print(f'Running manual align for merged for {filtername} {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
-        if match.sum() != 1:
-            raise ValueError(f"too many or too few matches for {fn} (match.sum() = {match.sum()}).  exposure={exposure}, thismodule={thismodule}, filtername={filtername}")
-        rashift = float(row['dra (arcsec)'][0])*u.arcsec
-        decshift = float(row['ddec (arcsec)'][0])*u.arcsec
-    elif (field == '002' and proposal_id == '2221'):
-        visit = fn.split('_')[0][-3:]
-        thismodule = fn.split("_")[-2].strip('1234')
-        if visit == '001':
-            decshift = 7.95*u.arcsec
-            rashift = 0.6*u.arcsec
-        elif visit == '002':
-            decshift = 3.85*u.arcsec
-            rashift = 1.57*u.arcsec
-        else:
-            decshift = 0*u.arcsec
-            rashift = 0*u.arcsec
-    else:
-        rashift = 0*u.arsec
-        decshift = 0*u.arsec
+    print("TODO: calculate MIRI offsets and implement them")
+    rashift = 0*u.arcsec
+    decshift = 0*u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:
@@ -468,7 +387,6 @@ def check_wcs(fn):
             print(f"old pixel_to_world(1024,1024) = {old_1024}, sep from new GWCS={old_1024.separation(new_1024).to(u.arcsec)}")
         fa.close()
 
-
         # FITS header
         fh = fits.open(fn)
         print(f"CRVAL1={fh[1].header['CRVAL1']}, CRVAL2={fh[1].header['CRVAL2']}")
@@ -482,6 +400,7 @@ def check_wcs(fn):
         fh.close()
     else:
         print(f"COULD NOT CHECK WCS FOR {fn}: does not exist")
+
 
 if __name__ == "__main__":
     from optparse import OptionParser
