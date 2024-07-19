@@ -323,7 +323,7 @@ def iteratively_remove_saturated_stars(data, header,
                              #psf_model=epsf_model,
                              psf_model=big_grid,
                              fitter=lmfitter,
-                             fitshape=fitsz,
+                             fit_shape=fitsz,
                              aperture_radius=apsz*fwhm_pix,
                              )
 
@@ -349,7 +349,7 @@ def iteratively_remove_saturated_stars(data, header,
         # manually subtract off PSFs because get_residual_image seems to (never?) work
         # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
         #resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
-        resid = phot.get_residual_image()
+        resid = phot.make_residual_image(resid, (fitsz, fitsz), include_localbkg=False)
 
         # reset saturated pixels back to zero
         resid[satpix] = 0
