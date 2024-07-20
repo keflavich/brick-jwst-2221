@@ -751,6 +751,7 @@ def flag_near_saturated(cat, filtername, radius=None, target='brick',
 def replace_saturated(cat, filtername, radius=None, target='brick',
                       basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
+    print(f"Saturated star catalogs is {satstar_cat_fn}")
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
@@ -779,14 +780,16 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
     zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
 
     flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
+    try:
+        eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
+    except KeyError:
+        eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
     abmag = -2.5*np.log10(flux_jy / zeropoint)
     abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
     satstar_cat['mag_ab'] = abmag
     satstar_cat['emag_ab'] = abmag_err
 
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
-
 
     replaced_sat = np.zeros(len(cat), dtype='bool')
     replaced_sat[idx_cat] = True

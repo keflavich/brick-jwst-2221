@@ -300,7 +300,7 @@ def main(filtername, Observations=None, regionname='brick',
                                 'subtract': False,
                                 'skymethod': 'match', 'match_down': False},
                    # try disabling outlier detection to see if it restores the zeros
-                   'outlier_detection': {'run': False},
+                   #'outlier_detection': {'run': False},
             },
             output_dir=output_dir,
             save_results=True)
