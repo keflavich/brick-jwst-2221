@@ -215,7 +215,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         tweakreg_asdf_filename = filter_match[0][4]
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
-        tweakreg_parameters.update({'fitgeometry': 'general',
+        tweakreg_parameters.update({'skip': True,
+                                    'fitgeometry': 'general',
                                     # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
                                     'brightest': 5000,
                                     'snr_threshold': 20, # was 5, but that produced too many stars
@@ -355,7 +356,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
 
-        tweakreg_parameters.update({'abs_refcat': abs_refcat,})
+        tweakreg_parameters.update({'abs_refcat': abs_refcat})
+        tweakreg_parameters.update({'skip': True})
 
         print(f"Running tweakreg ({module})")
         calwebb_image3.Image3Pipeline.call(
@@ -546,6 +548,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     globals().update(locals())
     return locals()
 
+
 def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, filtername=None,
                   use_average=True):
     if os.path.exists(fn):
@@ -570,10 +573,9 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
     if field is None:
         field = mod.meta.observation.observation_number
     if basepath is None:
-        basepath = f'/orange/adamginsburg/jwst/{field_name}'
+        basepath = f'/orange/adamginsburg/jwst/{field}'
     if module is None:
         module = 'nrc' + mod.meta.instrument.module.lower()
-
 
     if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
         exposure = int(fn.split("_")[-3])
@@ -583,11 +585,10 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
             tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_F405ref_average.csv'
             print(f"Using average offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
-            match = (
-                    ((offsets_tbl['Module'] == thismodule) |
-                     (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-                    (offsets_tbl['Filter'] == filtername)
-                    )
+            match = (((offsets_tbl['Module'] == thismodule) |
+                      (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                     (offsets_tbl['Filter'] == filtername)
+                     )
             if 'Visit' in offsets_tbl.colnames:
                 match &= (offsets_tbl['Visit'] == visit)
             row = offsets_tbl[match]
@@ -597,10 +598,10 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
             print(f"Using offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
             match = ((offsets_tbl['Visit'] == visit) &
-                    (offsets_tbl['Exposure'] == exposure) &
-                    ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
-                    (offsets_tbl['Filter'] == filtername)
-                    )
+                     (offsets_tbl['Exposure'] == exposure) &
+                     ((offsets_tbl['Module'] == thismodule) | (offsets_tbl['Module'] == thismodule.strip('1234'))) &
+                     (offsets_tbl['Filter'] == filtername)
+                     )
             row = offsets_tbl[match]
             print(f'Running manual align for merged for {filtername} {row["Group"][0]} {row["Module"][0]} {row["Exposure"][0]}.')
         if match.sum() != 1:
