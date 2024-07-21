@@ -75,7 +75,7 @@ def main():
         total_dra += dra_med
         total_ddec += ddec_med
 
-        refcrds_updated = SkyCoord(refcrds.ra - dra_med,  refcrds.dec - ddec_med, frame=refcrds.frame)
+        refcrds_updated = SkyCoord(refcrds.ra - dra_med, refcrds.dec - ddec_med, frame=refcrds.frame)
         refcrds = refcrds_updated
 
         reftbl['VVV_matched'] = keep
@@ -101,7 +101,6 @@ def main():
     reftbl.write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', overwrite=True)
 
     return reftbl
-
 
 
 def main_old():

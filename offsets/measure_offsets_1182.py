@@ -48,8 +48,7 @@ else:
     reftb_vvv.write(vvvfn.replace(".ecsv", ".fits"), overwrite=True)
 
 
-for reftbfn, reftbname in (
-                           (vvvfn, 'VVV'),
+for reftbfn, reftbname in ((vvvfn, 'VVV'),
                            (f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', 'F405ref'),
                            ):
     print()
@@ -100,8 +99,6 @@ for reftbfn, reftbname in (
         reference_coordinates = vvv_reference_coordinates
         print(f"reftb has length {len(reftb)}")
 
-
-
     rows = []
 
     with warnings.catch_warnings():
@@ -110,7 +107,8 @@ for reftbfn, reftbname in (
             for visit in ('002', '001'):
                 print(f"Working on filter {filtername}")
                 print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
-                globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
+                # pipeline/tweakreg version globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
+                globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit*_exp*_crowdsource_nsky0*.fits"
                 flist = glob.glob(globstr)
 
                 if len(flist) == 0:
@@ -127,13 +125,16 @@ for reftbfn, reftbname in (
                     expno = fn.split("_")[2]
                     visitname = os.path.basename(fn).split("_")[0]
 
-                    cat = ftb = Table.read(fn)
-                    try:
-                        fitsfn = fn.replace("_cat.fits", ".fits")
-                        ffh = fits.open(fitsfn)
-                    except FileNotFoundError:
-                        fitsfn = fn.replace("destreak_cat.fits", "cal.fits")
-                        ffh = fits.open(fitsfn)
+                    cat = Table.read(fn)
+                    fitsfn = cat.meta['FILENAME']
+                    ffh = fits.open(fitsfn)
+
+                    # try:
+                    #     fitsfn = fn.replace("_cat.fits", ".fits")
+                    #     ffh = fits.open(fitsfn)
+                    # except FileNotFoundError:
+                    #     fitsfn = fn.replace("destreak_cat.fits", "cal.fits")
+                    #     ffh = fits.open(fitsfn)
 
                     header = ffh['SCI'].header
 
@@ -202,9 +203,9 @@ for reftbfn, reftbname in (
                                 ratio = 1 / ratio
 
 
-                        #idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-                        #dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
-                        #ddec = (skycrds_cat[sel][idx[keep]].dec - reference_coordinates[keep].dec).to(u.arcsec)
+                        # idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
+                        # dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
+                        # ddec = (skycrds_cat[sel][idx[keep]].dec - reference_coordinates[keep].dec).to(u.arcsec)
 
                         # dra and ddec should be the vector added to CRVAL to put the image in the right place
                         dra = -(skycrds_cat[sel][idx[keep][~reject]].ra - reference_coordinates[keep][~reject].ra).to(u.arcsec)
@@ -233,8 +234,6 @@ for reftbfn, reftbname in (
                             break # there is at least one case in which we converged to an oscillator
                             raise ValueError("Iteration is not converging")
 
-
-
                     print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [dra_hand={dra_hand}, ddec_hand={ddec_hand}]")
                     if keep.sum() < 5:
                         print(fitsfn)
@@ -243,8 +242,8 @@ for reftbfn, reftbname in (
 
                     rows.append({
                         'Filename': fn,
-                        #'Test': os.path.basename(fn),
-                        #'Filename_1': os.path.basename(fn),
+                        # 'Test': os.path.basename(fn),
+                        # 'Filename_1': os.path.basename(fn),
                         'dra': total_dra,
                         'ddec': total_ddec,
                         'dra (arcsec)': total_dra,
@@ -261,10 +260,9 @@ for reftbfn, reftbname in (
                     })
 
     tbl = Table(rows)
-    # don't necessarily want to write this: if the manual alignment has been run already, the offsets will all be zero
     tbl.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}.csv", format='ascii.csv', overwrite=True)
 
-    # TODO: aggregate with weighted mean
+    # TODO: aggregate with weighted mean (or maybe we don't wnat that...)
 
     gr = tbl.group_by(['Filter', 'Module', 'Visit'])
     agg = gr.groups.aggregate(np.mean)
