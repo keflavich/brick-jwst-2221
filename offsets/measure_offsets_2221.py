@@ -80,9 +80,11 @@ for reftbfn, reftbname in (
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         for filtername in 'F466N,F405N,F410M,F212N,F182M,F187N'.split(","):
-            cats = sorted(glob.glob(f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"))
+            # old version cats = sorted(glob.glob(f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"))
+            globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit*_exp*_crowdsource_nsky0*.fits"
+            cats = sorted(glob.glob(globstr))
             if len(cats) == 0:
-                raise ValueError(f"No matches to {basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits")
+                raise ValueError(f"No matches to {globstr}")
 
             print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
             for fn in cats:
@@ -94,13 +96,15 @@ for reftbfn, reftbname in (
                     module = f'nrc{ab}'
 
                 expno = fn.split("_")[2]
-                cat = ftb = Table.read(fn)
-                try:
-                    fitsfn = fn.replace("_cat.fits", ".fits")
-                    ffh = fits.open(fitsfn)
-                except FileNotFoundError:
-                    fitsfn = fn.replace("destreak_cat.fits", "cal.fits")
-                    ffh = fits.open(fitsfn)
+                cat = Table.read(fn)
+                fitsfn = cat.meta['FILENAME']
+                ffh = fits.open(fitsfn)
+                # try:
+                #     fitsfn = fn.replace("_cat.fits", ".fits")
+                #     ffh = fits.open(fitsfn)
+                # except FileNotFoundError:
+                #     fitsfn = fn.replace("destreak_cat.fits", "cal.fits")
+                #     ffh = fits.open(fitsfn)
 
                 header = ffh['SCI'].header
 
@@ -109,11 +113,11 @@ for reftbfn, reftbname in (
                     decoffset = header['DEOFFSET']
                     header['CRVAL1'] = header['OLCRVAL1']
                     header['CRVAL2'] = header['OLCRVAL2']
-                    total_dra = raoffset*u.arcsec
-                    total_ddec = decoffset*u.arcsec
+                    total_dra = raoffset * u.arcsec
+                    total_ddec = decoffset * u.arcsec
                 else:
-                    total_dra = 0*u.arcsec
-                    total_ddec = 0*u.arcsec
+                    total_dra = 0 * u.arcsec
+                    total_ddec = 0 * u.arcsec
 
                 ww = WCS(header)
 
@@ -125,10 +129,10 @@ for reftbfn, reftbname in (
                 dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
                 ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
 
-                med_dra = 100*u.arcsec
-                med_ddec = 100*u.arcsec
-                threshold = 0.01*u.arcsec
-                max_offset = 0.5*u.arcsec
+                med_dra = 100 * u.arcsec
+                med_ddec = 100 * u.arcsec
+                threshold = 0.01 * u.arcsec
+                max_offset = 0.5 * u.arcsec
 
                 iteration = 0
                 nkeeps = []
@@ -194,8 +198,8 @@ for reftbfn, reftbname in (
 
                 rows.append({
                     'Filename': fn,
-                    #'Test': os.path.basename(fn),
-                    #'Filename_1': os.path.basename(fn),
+                    # 'Test': os.path.basename(fn),
+                    # 'Filename_1': os.path.basename(fn),
                     'dra': total_dra,
                     'ddec': total_ddec,
                     'dra (arcsec)': total_dra,
@@ -211,7 +215,6 @@ for reftbfn, reftbname in (
                 })
 
     tbl = Table(rows)
-    # don't necessarily want to write this: if the manual alignment has been run already, the offsets will all be zero
     tbl.write(f"{basepath}/offsets/Offsets_JWST_Brick2221_{reftbname}.csv", format='ascii.csv', overwrite=True)
 
     gr = tbl.group_by(['Filter', 'Module'])
