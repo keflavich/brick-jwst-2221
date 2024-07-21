@@ -517,12 +517,12 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     print()
     print(f'Starting merge crowdsource module: {module} suffix: {suffix} target: {target}')
     imgfns = [x
-          for obsid in obs_filters[target]
-          for filn in obs_filters[target][obsid]
-          for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/"
-                             f"jw0{obsid}-o{project_obsnum[target][obsid]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
-          if f'{module}_' in x or f'{module}1_' in x
-         ]
+              for obsid in obs_filters[target]
+              for filn in obs_filters[target][obsid]
+              for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/"
+                                 f"jw0{obsid}-o{project_obsnum[target][obsid]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+              if f'{module}_' in x or f'{module}1_' in x
+             ]
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
@@ -985,7 +985,7 @@ def main():
                                     print(f"Exception for unweighted crowdsource: {ex}, {type(ex)}, {str(ex)}")
                                     #raise ex
                                 try:
-                                    for suffix in ("_nsky0", "_nsky1", ):#"_nsky15"):
+                                    for suffix in ("_nsky0", ):#"_nsky15"): "_nsky1", 
                                         print(f'crowdsource {suffix} {module}')
                                         merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
                                                           fitpsf=fitpsf, target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)

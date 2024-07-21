@@ -774,7 +774,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         results_unweighted  = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
                                         #psfderiv=np.gradient(-psf_initial[0].data),
                                         dq=dq,
-                                        nskyx=1, nskyy=1, refit_psf=False, verbose=True,
+                                        nskyx=0, nskyy=0, refit_psf=False, verbose=True,
                                         **crowdsource_default_kwargs,
                                         )
         print(f"Done with unweighted crowdsource. dt={time.time() - t0}")
@@ -793,17 +793,17 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         try:
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-            pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics zoomed {filtername} {module}{visitid_}{exposure_}{desat}{bgsub}{blur_}")
+            pl.suptitle(f"Crowdsource nsky=0 unweighted Catalog Diagnostics zoomed {filtername} {module}{visitid_}{exposure_}{desat}{bgsub}{blur_}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{exposure_}{desat}{bgsub}{blur_}_catalog_diagnostics_unweighted.png',
                     bbox_inches='tight')
 
             catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-            pl.suptitle(f"Crowdsource nsky=1 unweighted Catalog Diagnostics {filtername} {module}{visitid_}{exposure_}{desat}{bgsub}{blur_}")
+            pl.suptitle(f"Crowdsource nsky=0 unweighted Catalog Diagnostics {filtername} {module}{visitid_}{exposure_}{desat}{bgsub}{blur_}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{exposure_}{desat}{bgsub}{blur_}_catalog_diagnostics_zoom_unweighted.png',
                     bbox_inches='tight')
             for name, zoomcut in zoomcut_list.items():
                 catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                pl.suptitle(f"Crowdsource nsky=1 Catalog Diagnostics {filtername} {module}{visitid_}{exposure_}{desat}{bgsub}{blur_} zoom {name}")
+                pl.suptitle(f"Crowdsource nsky=0 Catalog Diagnostics {filtername} {module}{visitid_}{exposure_}{desat}{bgsub}{blur_} zoom {name}")
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{exposure_}{desat}{bgsub}{blur_}_catalog_diagnostics_zoom{name.replace(" ","_")}_unweighted.png',
                         bbox_inches='tight')
         except Exception as ex:

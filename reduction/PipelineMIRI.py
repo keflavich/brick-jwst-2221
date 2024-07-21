@@ -173,7 +173,6 @@ def main(filtername, Observations=None, regionname='brick',
             except Exception as ex:
                 print(f"Failed to move file with error {ex}")
 
-
     if True: # just to preserve indendation
         print(f"Working on MIRI: running initial pipeline setup steps (skip_step1and2={skip_step1and2})")
         print(f"Searching for {os.path.join(output_dir, f'jw0{proposal_id}-o{field}*_image3_*0[0-9][0-9]_asn.json')}")
@@ -194,6 +193,7 @@ def main(filtername, Observations=None, regionname='brick',
         tweakreg_asdf_filename = filter_match[0][3]
         tweakreg_asdf = asdf.open(f'https://jwst-crds.stsci.edu/unchecked_get/references/jwst/{tweakreg_asdf_filename}')
         tweakreg_parameters = tweakreg_asdf.tree['parameters']
+        """
         # may not be needed for MIRI
         #tweakreg_parameters.update({'fitgeometry': 'general',
         #                            # brightest = 5000 was causing problems- maybe the cross-alignment was getting caught on PSF artifacts?
@@ -216,11 +216,9 @@ def main(filtername, Observations=None, regionname='brick',
         #                            'save_results': True,
         #                            # 'clip_accum': True, # https://github.com/spacetelescope/tweakwcs/pull/169/files
         #                            })
-
-
+        """
 
         print(f'Filter {filtername} tweakreg parameters: {tweakreg_parameters}')
-
 
         with open(asn_file) as f_obj:
             asn_data = json.load(f_obj)
@@ -249,7 +247,6 @@ def main(filtername, Observations=None, regionname='brick',
                                    )
         else:
             print("Skipped step 1 and step2")
-
 
     if True:
         print(f"Filter {filtername}: doing tweakreg.  ")
@@ -296,11 +293,15 @@ def main(filtername, Observations=None, regionname='brick',
             asn_file_each,
             steps={'tweakreg': tweakreg_parameters,
                    # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
-                   'skymatch': {'save_results': True, #'skip': True,
+                   'skymatch': {'save_results': True,
                                 'subtract': False,
                                 'skymethod': 'match', 'match_down': False},
-                   # try disabling outlier detection to see if it restores the zeros
-                   #'outlier_detection': {'run': False},
+                   # MIRI ticket https://stsci.service-now.com/jwst?id=ticket&table=incident&sys_id=aa4172264715b510ec5b9448436d43ae recommends modifying snr & good_bits
+                   # https://jwst-pipeline.readthedocs.io/en/latest/jwst/outlier_detection/arguments.html
+                   'outlier_detection': {'snr': (7.0, 5.0),
+                                         # https://jwst-pipeline.readthedocs.io/en/stable/jwst/references_general/references_general.html#data-quality-flags
+                                         'good_bits': "SATURATED, JUMP_DET",
+                                         },
             },
             output_dir=output_dir,
             save_results=True)
@@ -314,6 +315,7 @@ def main(filtername, Observations=None, regionname='brick',
 
     globals().update(locals())
     return locals()
+
 
 def fix_alignment(fn, proposal_id=None, field=None, basepath=None, filtername=None,
                   use_average=True):
