@@ -164,13 +164,11 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
                         header['CRVAL1'] = header['OLCRVAL1']
                         header['CRVAL2'] = header['OLCRVAL2']
-                        total_dra = raoffset*u.arcsec
-                        total_ddec = decoffset*u.arcsec
-                    else:
-                        #print(fitsfn, fn)
-                        #print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
-                        total_dra = dra_hand.to(u.arcsec)
-                        total_ddec = ddec_hand.to(u.arcsec)
+
+                    # print(fitsfn, fn)
+                    # print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
+                    total_dra = dra_hand.to(u.arcsec)
+                    total_ddec = ddec_hand.to(u.arcsec)
 
                     skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
 
@@ -207,7 +205,6 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                                 med = np.median(ratio[~reject])
                                 reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
                                 ratio = 1 / ratio
-
 
                         # idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
                         # dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
@@ -262,7 +259,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         # "Group": os.path.basename(fn).split("_")[1],
                         "Exposure": int(expno),
                         "Filter": filtername,
-                        "Module": module
+                        "Module": module,
                     })
 
     tbl = Table(rows)
@@ -280,4 +277,3 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
     agg['dra_med'] = aggmed['dra']
     agg['ddec_med'] = aggmed['ddec']
     agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average.csv", format='ascii.csv', overwrite=True)
-
