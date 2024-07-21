@@ -16,8 +16,7 @@ visit = '001'
 
 basepath = '/blue/adamginsburg/adamginsburg/jwst/brick'
 
-for reftbfn, reftbname in (
-                           (f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-merged_vvvcat.ecsv', 'VVV'),
+for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-merged_vvvcat.ecsv', 'VVV'),
                            (f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', 'F405ref'),
                            ):
     print()
@@ -103,6 +102,7 @@ for reftbfn, reftbname in (
                 cat = Table.read(fn)
                 fitsfn = cat.meta['FILENAME']
                 ffh = fits.open(fitsfn)
+                header = ffh['SCI'].header
                 # try:
                 #     fitsfn = fn.replace("_cat.fits", ".fits")
                 #     ffh = fits.open(fitsfn)
@@ -115,18 +115,14 @@ for reftbfn, reftbname in (
                     sel &= cat['fracflux'] > 0.8
                     cat = cat[sel]
 
-                header = ffh['SCI'].header
-
                 if 'RAOFFSET' in header:
                     raoffset = header['RAOFFSET']
                     decoffset = header['DEOFFSET']
                     header['CRVAL1'] = header['OLCRVAL1']
                     header['CRVAL2'] = header['OLCRVAL2']
-                    total_dra = raoffset * u.arcsec
-                    total_ddec = decoffset * u.arcsec
-                else:
-                    total_dra = 0 * u.arcsec
-                    total_ddec = 0 * u.arcsec
+
+                total_dra = 0 * u.arcsec
+                total_ddec = 0 * u.arcsec
 
                 ww = WCS(header)
 
@@ -220,7 +216,7 @@ for reftbfn, reftbname in (
                     # "Group": os.path.basename(fn).split("_")[1],
                     "Exposure": int(expno),
                     "Filter": filtername,
-                    "Module": module
+                    "Module": module,
                 })
 
     tbl = Table(rows)
