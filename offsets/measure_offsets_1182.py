@@ -108,26 +108,33 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                 print(f"Working on filter {filtername}")
                 print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
                 # pipeline/tweakreg version globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
-                globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit*_exp*_crowdsource_nsky0*.fits"
-                flist = glob.glob(globstr)
+                # F405N/f405n_nrcb_visit001_exp00008_crowdsource_nsky0.fits
+                globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit{visit}*_exp*_crowdsource_nsky0.fits"
+                flist = sorted([x for x in glob.glob(globstr) if 'fitpsf' not in x])
 
                 if len(flist) == 0:
                     raise ValueError(f"No matches to {globstr}")
                 for fn in sorted(flist):
 
                     ab = 'a' if 'nrca' in fn else 'b'
-                    if 'long' in fn:
+                    if filtername in ('F444W', 'F356W'):
                         module = f'nrc{ab}long'
                     else:
                         ab += fn.split('nrc')[1][1]
                         module = f'nrc{ab}'
 
-                    expno = fn.split("_")[2]
-                    visitname = os.path.basename(fn).split("_")[0]
+                    expno = fn.split("_")[3][-5:]
+                    # old version visitname = os.path.basename(fn).split("_")[2][-3:]
+                    visitname = f'jw01182004{visit}'
 
                     cat = Table.read(fn)
                     fitsfn = cat.meta['FILENAME']
                     ffh = fits.open(fitsfn)
+
+                    if 'qf' in cat.colnames:
+                        sel = cat['qf'] > 0.95
+                        sel &= cat['fracflux'] > 0.8
+                        cat = cat[sel]
 
                     # try:
                     #     fitsfn = fn.replace("_cat.fits", ".fits")
@@ -150,7 +157,6 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                     handsel_row = handmeasured_offsets[match][0]
                     dra_hand, ddec_hand = u.Quantity([handsel_row['dra (arcsec)'], handsel_row['ddec (arcsec)']], u.arcsec)
                     ww.wcs.crval = ww.wcs.crval + [dra_hand.to(u.deg).value, ddec_hand.to(u.deg).value]
-
 
                     if 'RAOFFSET' in header:
                         raoffset = header['RAOFFSET']
@@ -253,7 +259,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         'Visit': visitname,
                         'visitnumber': visit,
                         'obsid': obsid,
-                        "Group": os.path.basename(fn).split("_")[1],
+                        # "Group": os.path.basename(fn).split("_")[1],
                         "Exposure": int(expno),
                         "Filter": filtername,
                         "Module": module
