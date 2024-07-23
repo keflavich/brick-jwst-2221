@@ -106,9 +106,16 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
             basecrds = crds
         else:
             matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-            newcrds = crds[sep > max_offset]
+            reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+
+            # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
+            mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
+            keep = (sep > max_offset) | (~mutual_matches)
+
+            newcrds = crds[(sep > max_offset) | (~mutual_matches)]
             basecrds = SkyCoord([basecrds, newcrds])
-            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}", flush=True)
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}"
+                  f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
         # correct for missing data [should only be needed for a brief period in July 2024]
         if 'dra' not in tbl.colnames:
@@ -120,36 +127,42 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
             tbl['dra'] = tbl['dy'] * pixscale.value
             tbl['ddec'] = tbl['dx'] * pixscale.value
 
+    # do one loop of re-matching
+    for ii, tbl in enumerate(tbls):
+        crds = tbl['skycoord']
+
+        match_inds, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+        reverse_match_inds, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+        mutual_reverse_matches = (match_inds[reverse_match_inds] == np.arange(len(reverse_match_inds)))
+        mutual_matches = (reverse_match_inds[match_inds] == np.arange(len(match_inds)))
+
+        # do one iteration of bulk offset measurement
+        radiff = (crds.ra[reverse_match_inds[mutual_reverse_matches]] - basecrds[mutual_reverse_matches].ra).to(u.arcsec)
+        decdiff = (crds.dec[reverse_match_inds[mutual_reverse_matches]] - basecrds[mutual_reverse_matches].dec).to(u.arcsec)
+
+        # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
+        # print(f"len(crds) = {len(crds)} len(basecrds) = {len(basecrds)} len(match_inds)={len(match_inds)} match_inds.max={match_inds.max()} len(reverse_match_inds)={len(reverse_match_inds)} reverse_match_inds.max={reverse_match_inds.max()} len(mutual_matches)={len(mutual_matches)}")
+        oksep = (reverse_sep[mutual_reverse_matches] < max_offset) & (reverse_sep[mutual_reverse_matches] != 0) & (tbl[reverse_match_inds[mutual_reverse_matches]]['qf'] > 0.95) & (tbl[reverse_match_inds[mutual_reverse_matches]]['fracflux'] > 0.85)
+        medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
+        dmedsep_ra, dmedsep_dec = mad_std(radiff[oksep]), mad_std(decdiff[oksep])
+        tbl.meta['ra_offset'] = medsep_ra
+        tbl.meta['dec_offset'] = medsep_dec
+        tbl.meta['dra_offset'] = dmedsep_ra
+        tbl.meta['ddec_offset'] = dmedsep_dec
+
+        with fits.open(tbl.meta['FILENAME']) as fh:
+            dra_header = fh['SCI'].header['RAOFFSET']
+            ddec_header = fh['SCI'].header['DEOFFSET']
+
+        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
+              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.3g} ddec={ddec_header:7.3g}")
+
+        # for tbl0, should be nan (all self-match)
+        if realign and not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
+            newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
+            tbl['skycoord'] = newcrds
+
     if realign:
-        # do one loop of re-matching
-        for ii, tbl in enumerate(tbls):
-            crds = tbl['skycoord']
-            matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-
-            # do one iteration of bulk offset measurement
-            radiff = (crds.ra[matches] - basecrds.ra).to(u.arcsec)
-            decdiff = (crds.dec[matches] - basecrds.dec).to(u.arcsec)
-            # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
-            oksep = (sep < max_offset) & (sep != 0) & (tbl[matches]['qf'] > 0.95) & (tbl[matches]['fracflux'] > 0.85)
-            medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
-            dmedsep_ra, dmedsep_dec = mad_std(radiff[oksep]), mad_std(decdiff[oksep])
-            tbl.meta['ra_offset'] = medsep_ra
-            tbl.meta['dec_offset'] = medsep_dec
-            tbl.meta['dra_offset'] = dmedsep_ra
-            tbl.meta['ddec_offset'] = dmedsep_dec
-
-            with fits.open(tbl.meta['FILENAME']) as fh:
-                dra_header = fh['SCI'].header['RAOFFSET']
-                ddec_header = fh['SCI'].header['DEOFFSET']
-
-            print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
-                f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.3g} ddec={ddec_header:7.3g}")
-
-            # for tbl0, should be nan (all self-match)
-            if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
-                newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
-                tbl['skycoord'] = newcrds
-
         # remake base coordinates after the rematching
         for ii, tbl in enumerate(tbls):
             crds = tbl['skycoord']
@@ -157,16 +170,23 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
                 basecrds = crds
             else:
                 matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-                newcrds = crds[sep > max_offset]
+                reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+
+                # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
+                mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
+                keep = (sep > max_offset) | (~mutual_matches)
+
+                newcrds = crds[(sep > max_offset) | (~mutual_matches)]
                 basecrds = SkyCoord([basecrds, newcrds])
-                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
+                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}"
+                      f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
               for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
-        matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+        # not needed matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
         rmatches, rsep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
 
         for key in arrays:
@@ -204,10 +224,12 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
     newtbl['std_ra'] = nanaverage((newtbl['skycoord'].ra - avgpos.ra[:, None])**2, weights=weights, axis=1)**0.5
     newtbl['std_dec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
 
+    print("Propagating flux error")
     newtbl['dflux_prop'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
     newtbl.meta['dflux_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
 
     for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux', 'fwhm', 'rchi2', 'fluxiso', 'dra', 'ddec', 'spread_model'):
+        print(f"Propagating {key}")
         newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
         newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
 
