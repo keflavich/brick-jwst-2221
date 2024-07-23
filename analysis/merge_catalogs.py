@@ -22,6 +22,7 @@ from astropy import table
 from astropy import units as u
 from astroquery.svo_fps import SvoFps
 from astropy.stats import sigma_clip, mad_std
+import dask
 
 from tqdm.auto import tqdm
 
@@ -87,6 +88,7 @@ def sanity_check_individual_table(tbl):
 
 
 def nanaverage(data, weights, **kwargs):
+    print(data.shape, weights.shape)
     weights = np.where(np.isnan(data) | np.isnan(weights), 0, weights)
     bad = np.all(weights == 0, axis=1)
     weights[bad, :] = 1
@@ -96,6 +98,17 @@ def nanaverage(data, weights, **kwargs):
                      )
     avg[bad] = np.nan
     return avg
+
+
+def nanaverage_dask(data, weights, **kwargs):
+    weights = dask.array.from_array(weights)
+    data = dask.array.from_array(data)
+    weights = dask.array.where(dask.array.isnan(data) | dask.array.isnan(weights), 0, weights)
+    bad = dask.array.all(weights == 0, axis=1)
+    weights[bad, :] = 1
+    avg = dask.array.average(np.nan_to_num(data), weights=weights, **kwargs)
+    avg[bad] = np.nan
+    return avg.compute()
 
 
 def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
@@ -186,14 +199,20 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
-        # not needed matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-        rmatches, rsep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+
+        match_inds, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+        reverse_match_inds, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+        mutual_matches = (reverse_match_inds[match_inds] == np.arange(len(match_inds)))
+
+        # only add sources to a row in basecrd if it is the closest star to that row
+        keep = (sep < max_offset) & (mutual_matches)
 
         for key in arrays:
             if key not in ('skycoord', 'ra', 'dec'):
-                arrays[key][rmatches, ii] = tbl[key]
-        arrays['ra'][rmatches, ii] = tbl['skycoord'].ra
-        arrays['dec'][rmatches, ii] = tbl['skycoord'].dec
+                arrays[key][match_inds[keep], ii] = tbl[key][keep]
+        arrays['ra'][match_inds[keep], ii] = tbl['skycoord'].ra[keep]
+        arrays['dec'][match_inds[keep], ii] = tbl['skycoord'].dec[keep]
+        print(f"Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}")
 
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
