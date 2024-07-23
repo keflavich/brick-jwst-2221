@@ -76,7 +76,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
         not_closesel = (closest_sep > 0.5*u.arcsec)
 
         sel = (not_closesel[idx]) & magmatch
-        print(f"Selected {sel.sum()} reference source matching between VVV & F200W")
+        print(f"Selected {sel.sum()} reference source matching between VVV & F200W", flush=True)
 
         # downselect to only the coordinates we expect to have good matches
         reference_coordinates = vvv_reference_coordinates[sidx][sel]
@@ -237,7 +237,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                             break # there is at least one case in which we converged to an oscillator
                             raise ValueError("Iteration is not converging")
 
-                    print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [dra_hand={dra_hand}, ddec_hand={ddec_hand}]")
+                    print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [dra_hand={dra_hand}, ddec_hand={ddec_hand}]", flush=True)
                     if keep.sum() < 5:
                         print(fitsfn)
                         print(fn)

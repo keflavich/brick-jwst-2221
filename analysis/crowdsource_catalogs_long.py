@@ -476,9 +476,6 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     parser.add_option("-m", "--modules", dest="modules",
                     default='nrca,nrcb,merged,merged-reproject',
                     help="module list", metavar="modules")
-    parser.add_option("-i", "--field", dest="field",
-                    default='001',
-                    help="target field", metavar="field")
     parser.add_option("-d", "--desaturated", dest="desaturated",
                     default=False,
                     action='store_true',
@@ -721,7 +718,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     # don't need to record fpsf or blur; they don't apply
     finstars.write(f"{basepath}/{filtername}/"
                    f"{filtername.lower()}_{module}{visitid_}{exposure_}{desat}{bgsub}"
-                   f"_daofind_{suffix}.fits")
+                   f"_daofind.fits", overwrite=True)
     stars = finstars # because I'm copy-pasting code...
 
     # Set up visualization
