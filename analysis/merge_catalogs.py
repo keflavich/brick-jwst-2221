@@ -98,7 +98,7 @@ def nanaverage(data, weights, **kwargs):
     return avg
 
 
-def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
+def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
 
     for ii, tbl in enumerate(tbls):
         crds = tbl['skycoord']
@@ -120,40 +120,46 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec):
             tbl['dra'] = tbl['dy'] * pixscale.value
             tbl['ddec'] = tbl['dx'] * pixscale.value
 
-    # do one loop of re-matching
-    for ii, tbl in enumerate(tbls):
-        crds = tbl['skycoord']
-        matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+    if realign:
+        # do one loop of re-matching
+        for ii, tbl in enumerate(tbls):
+            crds = tbl['skycoord']
+            matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
-        # do one iteration of bulk offset measurement
-        radiff = (crds.ra[matches] - basecrds.ra).to(u.arcsec)
-        decdiff = (crds.dec[matches] - basecrds.dec).to(u.arcsec)
-        # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
-        oksep = (sep < max_offset) & (sep != 0) & (tbl[matches]['qf'] > 0.95) & (tbl[matches]['fracflux'] > 0.85)
-        medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
-        dmedsep_ra, dmedsep_dec = mad_std(radiff[oksep]), mad_std(decdiff[oksep])
-        tbl.meta['ra_offset'] = medsep_ra
-        tbl.meta['dec_offset'] = medsep_dec
-        tbl.meta['dra_offset'] = dmedsep_ra
-        tbl.meta['ddec_offset'] = dmedsep_dec
-        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
-              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches")
+            # do one iteration of bulk offset measurement
+            radiff = (crds.ra[matches] - basecrds.ra).to(u.arcsec)
+            decdiff = (crds.dec[matches] - basecrds.dec).to(u.arcsec)
+            # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
+            oksep = (sep < max_offset) & (sep != 0) & (tbl[matches]['qf'] > 0.95) & (tbl[matches]['fracflux'] > 0.85)
+            medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
+            dmedsep_ra, dmedsep_dec = mad_std(radiff[oksep]), mad_std(decdiff[oksep])
+            tbl.meta['ra_offset'] = medsep_ra
+            tbl.meta['dec_offset'] = medsep_dec
+            tbl.meta['dra_offset'] = dmedsep_ra
+            tbl.meta['ddec_offset'] = dmedsep_dec
 
-        # for tbl0, should be nan (all self-match)
-        if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
-            newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
-            tbl['skycoord'] = newcrds
+            with fits.open(tbl.meta['FILENAME']) as fh:
+                dra_header = fh['SCI'].header['RAOFFSET']
+                ddec_header = fh['SCI'].header['DEOFFSET']
 
-    # remake base coordinates after the rematching
-    for ii, tbl in enumerate(tbls):
-        crds = tbl['skycoord']
-        if ii == 0:
-            basecrds = crds
-        else:
-            matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-            newcrds = crds[sep > max_offset]
-            basecrds = SkyCoord([basecrds, newcrds])
-            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
+            print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
+                f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.3g} ddec={ddec_header:7.3g}")
+
+            # for tbl0, should be nan (all self-match)
+            if not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
+                newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
+                tbl['skycoord'] = newcrds
+
+        # remake base coordinates after the rematching
+        for ii, tbl in enumerate(tbls):
+            crds = tbl['skycoord']
+            if ii == 0:
+                basecrds = crds
+            else:
+                matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
+                newcrds = crds[sep > max_offset]
+                basecrds = SkyCoord([basecrds, newcrds])
+                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']}", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
               for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')}
