@@ -127,7 +127,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         ffcn = 'cfit'
         flux_error = 'flux_err'
         flux_colname = 'flux_fit'
-        column_names = (flux_colname, flux_error, 'qfit', 'cfit', 'flags', 'ra', 'dec', 'dra', 'ddec')
+        column_names = (flux_colname, flux_error, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec')
 
     for ii, tbl in enumerate(tbls):
         crds = tbl['skycoord']
@@ -218,7 +218,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                       f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in column_names}
+              for key in column_names if key in tbls[0].colnames}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
@@ -525,11 +525,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable[oksep].write(f"{tablename}_qualcuts_oksep2221.fits", overwrite=True)
 
 
-def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False, filtername='f410m',
+def merge_individual_frames(module='merged', suffix="", desat=False, filtername='f410m',
                                         progid='2221',
                                         bgsub=False, epsf=False, fitpsf=False, blur=False, target='brick',
                                         exposure_numbers=np.arange(1, 25),
                                         max_visitid=10,
+                                        method='crowdsource',
                                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
 
     desat = "_unsatstar" if desat else ""
@@ -542,6 +543,17 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
     else:
         modules = (module, )
 
+    if method == 'crowdsource':
+        column_names = ('flux', 'dflux', 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'spread_model')
+        flux_error = 'flux_err'
+        # flux_colname = 'flux_fit'
+    elif method == 'dao':
+        column_names = ('flux_fit', 'flux_err', 'skycoord', 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size')
+        flux_error = 'flux_err'
+        # flux_colname = 'flux'
+    else:
+        raise ValueError(f"Method must be dao or crowdsource but was {method}")
+
     tblfns = [x
               for module_ in modules
               for progid in obs_filters[target]
@@ -549,14 +561,14 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
               for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
                                  f"{filtername.lower()}_{module_}_visit{visitid:03d}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
-                                 f"_crowdsource{suffix}.fits")
+                                 f"_{method}{suffix}.fits")
               ]
     tblfns = sorted(set(tblfns))
     print(f"Found {len(tblfns)} tables for {filtername.lower()}_*_visit*_exp*{desat}{bgsub}{fitpsf}{blur_}:")
     print("\n".join(tblfns))
 
     if len(tblfns) == 0:
-        raise ValueError(f"No tables found matching {basepath}/{filtername.upper()}/{filtername.lower()}_{module}....{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
+        raise ValueError(f"No tables found matching {basepath}/{filtername.upper()}/{filtername.lower()}_{module}....{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}.fits")
 
     tables = [Table.read(fn) for fn in tblfns]
     for tb, fn in zip(tables, tblfns):
@@ -565,13 +577,13 @@ def merge_crowdsource_individual_frames(module='merged', suffix="", desat=False,
 
     merged_exposure_table = combine_singleframe(tables)
 
-    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}_allcols.fits"
+    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}_allcols.fits"
     merged_exposure_table.write(outfn, overwrite=True)
 
-    # make a table that is nearly equivalent to standard crowdsource tables (with no 'x' or 'y' coordinate)
+    # make a table that is nearly equivalent to standard tables (with no 'x' or 'y' coordinate)
     minimal_version = {colname: merged_exposure_table[f'{colname}_avg']
-                       for colname in ('flux', 'dflux', 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'spread_model')}
-    for key in ('dra', 'ddec', 'nmatch', 'nmatch_good', 'dflux_prop'):
+                       for colname in column_names if f'{colname}_avg' in merged_exposure_table.colnames}
+    for key in ('dra', 'ddec', 'nmatch', 'nmatch_good', f'{flux_error}_prop'):
         minimal_version[key] = merged_exposure_table[key]
 
     minimal_table = Table(minimal_version)
@@ -1021,25 +1033,28 @@ def main():
                                                 print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
                                                 continue
 
-                                            try:
-                                                merge_crowdsource_individual_frames(module=module,
-                                                                                    desat=desat,
-                                                                                    filtername=filtername,
-                                                                                    progid=progid,
-                                                                                    bgsub=bgsub,
-                                                                                    epsf=epsf,
-                                                                                    fitpsf=fitpsf,
-                                                                                    blur=blur,
-                                                                                    suffix=suffix,
-                                                                                    target=target,
-                                                                                    exposure_numbers=np.arange(1, options.max_expnum + 1),
-                                                                                    basepath=basepath)
-                                                print(f"Finished merge_crowdsource_individual_frames {suffix} {progid} {filtername}")
-                                                singlefield_done = True
-                                            except Exception as ex:
-                                                print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
-                                                exc_type, exc_obj, exc_tb = sys.exc_info()
-                                                print(f"Exception occurred on line {exc_tb.tb_lineno}")
+                                            for method in ('crowdsource', 'dao'):
+                                                print(method)
+                                                try:
+                                                    merge_individual_frames(module=module,
+                                                                            desat=desat,
+                                                                            filtername=filtername,
+                                                                            progid=progid,
+                                                                            bgsub=bgsub,
+                                                                            epsf=epsf,
+                                                                            fitpsf=fitpsf,
+                                                                            blur=blur,
+                                                                            suffix=suffix,
+                                                                            target=target,
+                                                                            exposure_numbers=np.arange(1, options.max_expnum + 1),
+                                                                            method=method,
+                                                                            basepath=basepath)
+                                                    print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")
+                                                    singlefield_done = True
+                                                except Exception as ex:
+                                                    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                                                    print(f"Exception occurred on line {exc_tb.tb_lineno}")
 
                             else:
                                 index += 1
