@@ -113,6 +113,22 @@ def nanaverage_dask(data, weights, **kwargs):
 
 def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask):
 
+    # set up DAO vs crowd column names
+    if 'qf' in tbls[0].colnames:
+        qfcn = 'qf'
+        ffcn = 'fracflux'
+        flux_error = 'flux_err'
+        flux_colname = 'flux'
+        column_names = (flux_colname, flux_error, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')
+        dao = False
+    else:
+        dao = True
+        qfcn = 'qfit'
+        ffcn = 'cfit'
+        flux_error = 'flux_err'
+        flux_colname = 'flux_fit'
+        column_names = (flux_colname, flux_error, 'qfit', 'cfit', 'flags', 'ra', 'dec', 'dra', 'ddec')
+
     for ii, tbl in enumerate(tbls):
         crds = tbl['skycoord']
         if ii == 0:
@@ -131,14 +147,18 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                   f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
         # correct for missing data [should only be needed for a brief period in July 2024]
-        if 'dra' not in tbl.colnames:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
-            pixscale = ww.proj_plane_pixel_area().to(u.arcsec**2)**0.5
-            # dy, dx are swapped if we haven't done this fix
-            tbl['dra'] = tbl['dy'] * pixscale.value
-            tbl['ddec'] = tbl['dx'] * pixscale.value
+        # if 'dra' not in tbl.colnames:
+        #     with warnings.catch_warnings():
+        #         warnings.simplefilter('ignore')
+        #         ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
+        #     pixscale = ww.proj_plane_pixel_area().to(u.arcsec**2)**0.5
+        #     if dao:
+        #         tbl['dra'] = tbl['x_err'] * pixscale.value
+        #         tbl['ddec'] = tbl['y_err'] * pixscale.value
+        #     else:
+        #         # in crowdsource, dy, dx are swapped if we haven't done this fix
+        #         tbl['dra'] = tbl['dy'] * pixscale.value
+        #         tbl['ddec'] = tbl['dx'] * pixscale.value
 
     # do one loop of re-matching
     for ii, tbl in enumerate(tbls):
@@ -155,7 +175,10 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
 
         # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
         # print(f"len(crds) = {len(crds)} len(basecrds) = {len(basecrds)} len(match_inds)={len(match_inds)} match_inds.max={match_inds.max()} len(reverse_match_inds)={len(reverse_match_inds)} reverse_match_inds.max={reverse_match_inds.max()} len(mutual_matches)={len(mutual_matches)}")
-        oksep = (reverse_sep[mutual_reverse_matches] < max_offset) & (reverse_sep[mutual_reverse_matches] != 0) & (tbl[reverse_match_inds[mutual_reverse_matches]]['qf'] > 0.95) & (tbl[reverse_match_inds[mutual_reverse_matches]]['fracflux'] > 0.85)
+        if dao:
+            oksep = (reverse_sep[mutual_reverse_matches] < max_offset) & (reverse_sep[mutual_reverse_matches] != 0) & (tbl[reverse_match_inds[mutual_reverse_matches]][qfcn] < 0.40) & (tbl[reverse_match_inds[mutual_reverse_matches]][ffcn] < 0.40)
+        else:
+            oksep = (reverse_sep[mutual_reverse_matches] < max_offset) & (reverse_sep[mutual_reverse_matches] != 0) & (tbl[reverse_match_inds[mutual_reverse_matches]][qfcn] > 0.95) & (tbl[reverse_match_inds[mutual_reverse_matches]][ffcn] > 0.85)
         medsep_ra, medsep_dec = np.median(radiff[oksep]), np.median(decdiff[oksep])
         dmedsep_ra, dmedsep_dec = mad_std(radiff[oksep]), mad_std(decdiff[oksep])
         tbl.meta['ra_offset'] = medsep_ra
@@ -195,7 +218,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                       f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in ('flux', 'dflux', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')}
+              for key in column_names}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
@@ -222,10 +245,10 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     newtbl.meta = tbls[0].meta
     newtbl.meta['offsets'] = {tbl.meta['exposure']: (tbl.meta['ra_offset'], tbl.meta['dec_offset']) for tbl in tbls}
 
-    newtbl['nmatch'] = np.isfinite(newtbl['flux']).sum(axis=1)
+    newtbl['nmatch'] = np.isfinite(newtbl[flux_colname]).sum(axis=1)
 
     # note: mad_std must be in quotes b/c it's using _fast_sigma_clip
-    clip_flux = sigma_clip(newtbl['flux'], stdfunc='mad_std', axis=1)
+    clip_flux = sigma_clip(newtbl[flux_colname], stdfunc='mad_std', axis=1)
     clip_ra = sigma_clip(newtbl['skycoord'].ra.deg, stdfunc='mad_std', axis=1)
     clip_dec = sigma_clip(newtbl['skycoord'].dec.deg, stdfunc='mad_std', axis=1)
     to_mask = clip_flux.mask | clip_ra.mask | clip_dec.mask
@@ -234,7 +257,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     newtbl['nmatch_good'] = (~to_mask).sum(axis=1)
 
     keepmask = ~newtbl['mask']
-    weights = 1 / newtbl['dflux']**2 * keepmask
+    weights = 1 / newtbl[flux_error]**2 * keepmask
     avgpos = SkyCoord(nanaverage(newtbl['skycoord'].ra.value, axis=1, weights=weights),
                       nanaverage(newtbl['skycoord'].dec.value, axis=1, weights=weights),
                       unit=(u.deg, u.deg),
@@ -244,10 +267,10 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     newtbl['std_dec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
 
     print("Propagating flux error")
-    newtbl['dflux_prop'] = (np.nansum(newtbl['dflux']**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
-    newtbl.meta['dflux_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
+    newtbl[f'{flux_error}_prop'] = (np.nansum(newtbl[flux_error]**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
+    newtbl.meta[f'{flux_error}_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
 
-    for key in ('flux', 'dflux', 'sky', 'qf', 'fracflux', 'fwhm', 'rchi2', 'fluxiso', 'dra', 'ddec', 'spread_model'):
+    for key in column_names:
         print(f"Propagating {key}")
         newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
         newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
@@ -620,8 +643,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
 
     for catfn in catfns:
         print(catfn, getmtime(catfn))
-    print("Reading tables", flush=True)
-    tbls = [Table.read(catfn) for catfn in catfns]
+    tbls = [Table.read(catfn) for catfn in tqdm(catfns, desc='Reading Tables')]
 
     for catfn, tbl in zip(catfns, tbls):
         tbl.meta['filename'] = catfn
