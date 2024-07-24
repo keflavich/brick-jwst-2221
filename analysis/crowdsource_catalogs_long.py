@@ -178,6 +178,8 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 
     resid = (data[zoomcut] - modsky[zoomcut])
     rms = stats.mad_std(resid, ignore_nan=True)
+    if np.isnan(rms):
+        raise ValueError("RMS is nan, this shouldn't happen")
 
     norm = (simple_norm(resid, stretch='asinh', max_percent=99.95, min_percent=0.5)
             if np.nanmin(resid) > 0 else
