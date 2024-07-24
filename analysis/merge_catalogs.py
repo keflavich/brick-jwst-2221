@@ -87,7 +87,7 @@ def sanity_check_individual_table(tbl):
     print(f"100th brightest flux={flux_jy[-100]} abmag={abmag[-100]} abmag_tbl={abmag_tbl[-100]}")
 
 
-def nanaverage(data, weights, **kwargs):
+def nanaverage_numpy(data, weights, **kwargs):
     print(data.shape, weights.shape)
     weights = np.where(np.isnan(data) | np.isnan(weights), 0, weights)
     bad = np.all(weights == 0, axis=1)
@@ -111,7 +111,7 @@ def nanaverage_dask(data, weights, **kwargs):
     return avg.compute()
 
 
-def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
+def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask):
 
     for ii, tbl in enumerate(tbls):
         crds = tbl['skycoord']
@@ -258,7 +258,7 @@ def combine_singleframe(tbls, max_offset=0.15 * u.arcsec, realign=False):
 def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                    ref_filter='f405n',
                    epsf=False, bgsub=False, desat=False, blur=False,
-                   max_offset=0.15 * u.arcsec, target='brick',
+                   max_offset=0.10 * u.arcsec, target='brick',
                    indivexp=False,
                    qfcut=None, fracfluxcut=None,
                    min_nmatch_narrow=4,
@@ -286,9 +286,15 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         if tb.meta['filter'] == ref_filter:
             continue
         crds = tb['skycoord']
+
         matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-        newcrds = crds[sep > max_offset]
+        reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+
+        mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
+
+        newcrds = crds[(sep > max_offset) | (~mutual_matches)]
         basecrds = SkyCoord([basecrds, newcrds])
+
         reffiltercol += [tb.meta['filter']] * len(newcrds)
         print(f"Added {len(newcrds)} new sources in filter {tb.meta['filter']}", flush=True)
     print(f"Base coordinate length = {len(basecrds)}", flush=True)
@@ -319,7 +325,14 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
             crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-            print(f"filter {wl} has {len(tbl)} rows.  Matching took {time.time()-t0:0.1f} seconds", flush=True)
+            reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+
+            mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
+            # limit to one-to-one nearest neighbor matches
+            matches = matches[mutual_matches]
+            sep = sep[mutual_matches]
+
+            print(f"filter {wl} has {len(tbl)} rows.  {mutual_matches.sum()} of {len(tbl)} are mutual.  Matching took {time.time()-t0:0.1f} seconds", flush=True)
 
             # removed Jan 21, 2023 because this *should* be handled by the pipeline now
             # # do one iteration of bulk offset measurement
@@ -562,7 +575,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     if epsf:
         raise NotImplementedError
     print()
-    print(f'Starting merge crowdsource module: {module} suffix: {suffix} target: {target}')
+    print(f'Starting merge crowdsource module: {module} suffix: {suffix} target: {target}', flush=True)
     imgfns = [x
               for obsid in obs_filters[target]
               for filn in obs_filters[target][obsid]
@@ -580,7 +593,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
     jfilts.add_index('filterID')
 
     filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
-    print(f"Merging filters {filternames}")
+    print(f"Merging filters {filternames}", flush=True)
     if indivexp:
         catfns = [x
                   for filn in filternames
@@ -607,6 +620,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
 
     for catfn in catfns:
         print(catfn, getmtime(catfn))
+    print("Reading tables", flush=True)
     tbls = [Table.read(catfn) for catfn in catfns]
 
     for catfn, tbl in zip(catfns, tbls):
@@ -1023,15 +1037,6 @@ def main():
                                 except Exception as ex:
                                     print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
                                 try:
-                                    print(f'crowdsource unweighted {module}', flush=True)
-                                    merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf,
-                                                      fitpsf=fitpsf, target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
-                                except NotImplementedError:
-                                    continue
-                                except Exception as ex:
-                                    print(f"Exception for unweighted crowdsource: {ex}, {type(ex)}, {str(ex)}")
-                                    #raise ex
-                                try:
                                     for suffix in ("_nsky0", ):#"_nsky15"): "_nsky1", 
                                         print(f'crowdsource {suffix} {module}')
                                         merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
@@ -1041,6 +1046,16 @@ def main():
                                     exc_type, exc_obj, exc_tb = sys.exc_info()
                                     print(f"Exception occurred on line {exc_tb.tb_lineno}")
                                     raise ex
+
+                                try:
+                                    print(f'crowdsource unweighted {module}', flush=True)
+                                    merge_crowdsource(module=module, suffix='_unweighted', desat=desat, bgsub=bgsub, epsf=epsf,
+                                                      fitpsf=fitpsf, target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
+                                except NotImplementedError:
+                                    continue
+                                except Exception as ex:
+                                    print(f"Exception for unweighted crowdsource: {ex}, {type(ex)}, {str(ex)}")
+                                    #raise ex
 
                                 print(f'crowdsource phase done.  time elapsed={time.time()-t0}')
 
