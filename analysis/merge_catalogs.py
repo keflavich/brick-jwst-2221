@@ -161,6 +161,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         #         tbl['ddec'] = tbl['dx'] * pixscale.value
 
     # do one loop of re-matching
+    print("Starting re-matching")
     for ii, tbl in enumerate(tbls):
         crds = tbl['skycoord']
 
@@ -199,6 +200,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             tbl['skycoord'] = newcrds
 
     if realign:
+        print("Realigning")
         # remake base coordinates after the rematching
         for ii, tbl in enumerate(tbls):
             crds = tbl['skycoord']
@@ -237,6 +239,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         arrays['dec'][match_inds[keep], ii] = tbl['skycoord'].dec[keep]
         print(f"Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}")
 
+    print("Compiling arrays into table")
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
     del arrays['dec']
@@ -522,6 +525,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             basetable.write(f"{tablename}_qualcuts.fits", overwrite=True)
 
         oksep = (np.array([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'w' not in filtername]).sum(axis=0) > 1)
+        print(f"Writing {tablename}_qualcuts_oksep2221.fits")
         basetable[oksep].write(f"{tablename}_qualcuts_oksep2221.fits", overwrite=True)
 
 
@@ -578,6 +582,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     merged_exposure_table = combine_singleframe(tables)
 
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}_allcols.fits"
+    print(f"Writing {outfn} with length {len(merged_exposure_table)}")
     merged_exposure_table.write(outfn, overwrite=True)
 
     # make a table that is nearly equivalent to standard tables (with no 'x' or 'y' coordinate)
@@ -596,8 +601,8 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
         print(f"Rejected {reject.sum()} sources that had nan coordinates.")
         minimal_table = minimal_table[~reject]
 
-    print(f"Final table length is {len(minimal_table)}")
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits"
+    print(f"Final table length is {len(minimal_table)}.  Writing {outfn}")
     minimal_table.write(outfn, overwrite=True)
 
     return minimal_table
