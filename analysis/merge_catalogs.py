@@ -368,8 +368,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
             mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
             # limit to one-to-one nearest neighbor matches
-            matches = matches[mutual_matches]
-            sep = sep[mutual_matches]
+            # matches = matches[mutual_matches]
+            # sep = sep[mutual_matches]
 
             print(f"filter {wl} has {len(tbl)} rows.  {mutual_matches.sum()} of {len(tbl)} are mutual.  Matching took {time.time()-t0:0.1f} seconds", flush=True)
 
@@ -396,6 +396,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                 else:
                     matchtb[f'{cn}_{wl}'] = MaskedColumn(data=matchtb[cn], name=f'{cn}_{wl}')
                     matchtb[f'{cn}_{wl}'].mask[badsep] = True
+                    # mask non-mutual matches
+                    matchtb[f'{cn}_{wl}'].mask[~mutual_matches] = True
                     if hasattr(matchtb[cn], 'meta'):
                         matchtb[f'{cn}_{wl}'].meta = matchtb[cn].meta
                     matchtb.remove_column(cn)
@@ -662,12 +664,12 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
             print("imgfns:", imgfns)
             print("catfns:", catfns)
             print(dict(zip(imgfns, catfns)))
-            #raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
+            # raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
     else:
         catfns = [x
-                for filn in filternames
-                for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
-                ]
+                  for filn in filternames
+                  for x in glob.glob(f"{basepath}/{filn.upper()}/{filn.lower()}*{module}{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits")
+                  ]
         if target == 'brick' and len(catfns) != 10:
             raise ValueError(f"len(catfns) = {len(catfns)}.  catfns: {catfns}")
         elif target == 'cloudc' and len(catfns) != 6:
@@ -683,8 +685,8 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        #wcses = [wcs.WCS(fits.getheader(fn.replace("_crowdsource", "_crowdsource_skymodel"))) for fn in catfns]
-        imgs = [fits.getdata(fn, ext=('SCI', 1)) for fn in imgfns]
+        # wcses = [wcs.WCS(fits.getheader(fn.replace("_crowdsource", "_crowdsource_skymodel"))) for fn in catfns]
+        # imgs = [fits.getdata(fn, ext=('SCI', 1)) for fn in imgfns]
         wcses = [wcs.WCS(fits.getheader(fn, ext=('SCI', 1))) for fn in imgfns]
 
     for tbl, ww in zip(tbls, wcses):
