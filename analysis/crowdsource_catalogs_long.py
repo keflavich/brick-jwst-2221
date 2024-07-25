@@ -524,7 +524,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     proposal_id = options.proposal_id
     target = options.target
 
-    nvisits = {'2221': {'brick': 1, 'cloudc': 1},
+    nvisits = {'2221': {'brick': 1, 'cloudc': 2},
                '1182': {'brick': 2}
                }
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
