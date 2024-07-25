@@ -146,9 +146,9 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
 
             newcrds = crds[(sep > max_offset) | (~mutual_matches)]
             basecrds = SkyCoord([basecrds, newcrds])
-            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}"
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''}"
                   f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
-        print(f"There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
+        print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
 
         # correct for missing data [should only be needed for a brief period in July 2024]
         # if 'dra' not in tbl.colnames:
@@ -165,7 +165,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         #         tbl['ddec'] = tbl['dx'] * pixscale.value
 
     # do one loop of re-matching
-    print("Starting re-matching")
+    print("Starting re-matching", flush=True)
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
 
@@ -195,7 +195,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             dra_header = fh['SCI'].header['RAOFFSET']
             ddec_header = fh['SCI'].header['DEOFFSET']
 
-        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
+        print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
               f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.3g} ddec={ddec_header:7.3g}")
 
         # for tbl0, should be nan (all self-match)
@@ -220,7 +220,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
 
                 newcrds = crds[(sep > max_offset) | (~mutual_matches)]
                 basecrds = SkyCoord([basecrds, newcrds])
-                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}"
+                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']}"
                       f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     print(f"There are a total of {len(basecrds)} sources in the base coordinate list after rematching")
@@ -246,10 +246,10 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 arrays[key][match_inds[keep], ii] = tbl[key][keep]
         arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
         arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
-        print(f"Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}")
+        print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''}", flush=True)
 
-    print("Compiling arrays into table")
-    print(f"Column names are {arrays.keys()} and should be {column_names}")
+    print("Compiling arrays into table", flush=True)
+    print(f"Column names are {arrays.keys()} and should be {column_names}", flush=True)
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
     del arrays['dec']
@@ -1052,7 +1052,7 @@ def main():
                                             print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
                                             continue
 
-                                        for method in ('crowdsource', 'dao'):
+                                        for method in ('crowdsource', ):#'dao'):
                                             print(method)
                                             # could loop & also do _iterative...
                                             suffix = {'crowdsource': '_nsky0',
