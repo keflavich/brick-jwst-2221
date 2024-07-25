@@ -117,17 +117,17 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     if 'qf' in tbls[0].colnames:
         qfcn = 'qf'
         ffcn = 'fracflux'
-        flux_error = 'flux_err'
+        flux_error_colname = 'dflux'
         flux_colname = 'flux'
-        column_names = (flux_colname, flux_error, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')
+        column_names = (flux_colname, flux_error_colname, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')
         dao = False
     else:
         dao = True
         qfcn = 'qfit'
         ffcn = 'cfit'
-        flux_error = 'flux_err'
+        flux_error_colname = 'flux_err'
         flux_colname = 'flux_fit'
-        column_names = (flux_colname, flux_error, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec')
+        column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec')
 
     for ii, tbl in enumerate(tbls):
         crds = tbl['skycoord']
@@ -145,6 +145,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             basecrds = SkyCoord([basecrds, newcrds])
             print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}"
                   f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
+        print(f"There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
 
         # correct for missing data [should only be needed for a brief period in July 2024]
         # if 'dra' not in tbl.colnames:
@@ -219,8 +220,13 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}"
                       f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
+    print(f"There are a total of {len(basecrds)} sources in the base coordinate list after rematching")
+
+    assert flux_error_colname in tbls[0].colnames
+    assert flux_error_colname in column_names
+
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in column_names if key in tbls[0].colnames}
+              for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec')}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl['skycoord']
@@ -240,6 +246,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         print(f"Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}")
 
     print("Compiling arrays into table")
+    print(f"Column names are {arrays.keys()} and should be {column_names}")
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
     del arrays['dec']
@@ -260,7 +267,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     newtbl['nmatch_good'] = (~to_mask).sum(axis=1)
 
     keepmask = ~newtbl['mask']
-    weights = 1 / newtbl[flux_error]**2 * keepmask
+    weights = 1 / newtbl[flux_error_colname]**2 * keepmask
     avgpos = SkyCoord(nanaverage(newtbl['skycoord'].ra.value, axis=1, weights=weights),
                       nanaverage(newtbl['skycoord'].dec.value, axis=1, weights=weights),
                       unit=(u.deg, u.deg),
@@ -270,13 +277,16 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     newtbl['std_dec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
 
     print("Propagating flux error")
-    newtbl[f'{flux_error}_prop'] = (np.nansum(newtbl[flux_error]**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
-    newtbl.meta[f'{flux_error}_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
+    newtbl[f'{flux_error_colname}_prop'] = (np.nansum(newtbl[flux_error_colname]**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
+    newtbl.meta[f'{flux_error_colname}_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
 
     for key in column_names:
-        print(f"Propagating {key}")
-        newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
-        newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
+        if key in newtbl.colnames:
+            print(f"Propagating {key}")
+            newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
+            newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
+        else:
+            print(f"Skipping {key}")
 
     return newtbl
 
@@ -351,7 +361,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
             crds = tbl['skycoord']
             matches, sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-            reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+            reverse_matches, reverse_sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
 
             mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
             # limit to one-to-one nearest neighbor matches
@@ -548,13 +558,15 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
         modules = (module, )
 
     if method == 'crowdsource':
-        column_names = ('flux', 'dflux', 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'spread_model')
-        flux_error = 'flux_err'
+        flux_error_colname = 'dflux'
+        column_names = ('flux', flux_error_colname, 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'spread_model')
+        method_suffix = 'crowdsource'
         # flux_colname = 'flux_fit'
     elif method == 'dao':
-        column_names = ('flux_fit', 'flux_err', 'skycoord', 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size')
-        flux_error = 'flux_err'
+        flux_error_colname = 'flux_err'
+        column_names = ('flux_fit', flux_error_colname, 'skycoord', 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size')
         # flux_colname = 'flux'
+        method_suffix = 'daophot'
     else:
         raise ValueError(f"Method must be dao or crowdsource but was {method}")
 
@@ -565,7 +577,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
               for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
                                  f"{filtername.lower()}_{module_}_visit{visitid:03d}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
-                                 f"_{method}{suffix}.fits")
+                                 f"_{method_suffix}{suffix}.fits")
               ]
     tblfns = sorted(set(tblfns))
     print(f"Found {len(tblfns)} tables for {filtername.lower()}_*_visit*_exp*{desat}{bgsub}{fitpsf}{blur_}:")
@@ -588,7 +600,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     # make a table that is nearly equivalent to standard tables (with no 'x' or 'y' coordinate)
     minimal_version = {colname: merged_exposure_table[f'{colname}_avg']
                        for colname in column_names if f'{colname}_avg' in merged_exposure_table.colnames}
-    for key in ('dra', 'ddec', 'nmatch', 'nmatch_good', f'{flux_error}_prop'):
+    for key in ('dra', 'ddec', 'nmatch', 'nmatch_good', f'{flux_error_colname}_prop'):
         minimal_version[key] = merged_exposure_table[key]
 
     minimal_table = Table(minimal_version)
@@ -1025,41 +1037,42 @@ def main():
 
                             if options.merge_singlefields:
                                 singlefield_done = False
-                                for suffix in ('_nsky0', ):
-                                    for progid in obs_filters[target]:
-                                        for filtername in (obs_filters[target][progid]):
-                                            if singlefield_done:
-                                                # skip ahead to merge-all-indiv step
-                                                continue
-                                            index += 1
-                                            print(index, filtername, progid, suffix)
-                                            # enable array jobs based only on filters
-                                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
-                                                print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
-                                                continue
+                                for progid in obs_filters[target]:
+                                    for filtername in (obs_filters[target][progid]):
+                                        if singlefield_done:
+                                            # skip ahead to merge-all-indiv step
+                                            continue
+                                        index += 1
+                                        print(index, filtername, progid, suffix)
+                                        # enable array jobs based only on filters
+                                        if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
+                                            print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
+                                            continue
 
-                                            for method in ('crowdsource', 'dao'):
-                                                print(method)
-                                                try:
-                                                    merge_individual_frames(module=module,
-                                                                            desat=desat,
-                                                                            filtername=filtername,
-                                                                            progid=progid,
-                                                                            bgsub=bgsub,
-                                                                            epsf=epsf,
-                                                                            fitpsf=fitpsf,
-                                                                            blur=blur,
-                                                                            suffix=suffix,
-                                                                            target=target,
-                                                                            exposure_numbers=np.arange(1, options.max_expnum + 1),
-                                                                            method=method,
-                                                                            basepath=basepath)
-                                                    print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")
-                                                    singlefield_done = True
-                                                except Exception as ex:
-                                                    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
-                                                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                                                    print(f"Exception occurred on line {exc_tb.tb_lineno}")
+                                        for method in ('crowdsource', 'dao'):
+                                            print(method)
+                                            # could loop & also do _iterative...
+                                            suffix = {'crowdsource': '_nsky0',
+                                                      'dao': '_basic'}[method]
+                                            merge_individual_frames(module=module,
+                                                                    desat=desat,
+                                                                    filtername=filtername,
+                                                                    progid=progid,
+                                                                    bgsub=bgsub,
+                                                                    epsf=epsf,
+                                                                    fitpsf=fitpsf,
+                                                                    blur=blur,
+                                                                    suffix=suffix,
+                                                                    target=target,
+                                                                    exposure_numbers=np.arange(1, options.max_expnum + 1),
+                                                                    method=method,
+                                                                    basepath=basepath)
+                                            print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")
+                                            singlefield_done = True
+                                            #except Exception as ex:
+                                            #    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                            #    exc_type, exc_obj, exc_tb = sys.exc_info()
+                                            #    print(f"Exception occurred on line {exc_tb.tb_lineno}")
 
                             else:
                                 index += 1
