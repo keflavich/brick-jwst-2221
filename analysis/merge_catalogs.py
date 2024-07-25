@@ -119,7 +119,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         ffcn = 'fracflux'
         flux_error_colname = 'dflux'
         flux_colname = 'flux'
-        column_names = (flux_colname, flux_error_colname, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec')
+        skycoord_colname = 'skycoord'
+        column_names = (flux_colname, flux_error_colname, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec', 'skycoord')
         dao = False
     else:
         dao = True
@@ -127,10 +128,11 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         ffcn = 'cfit'
         flux_error_colname = 'flux_err'
         flux_colname = 'flux_fit'
-        column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec')
+        skycoord_colname = 'skycoord_centroid'
+        column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec', 'skycoord')
 
     for ii, tbl in enumerate(tbls):
-        crds = tbl['skycoord']
+        crds = tbl[skycoord_colname]
         if ii == 0:
             basecrds = crds
         else:
@@ -164,7 +166,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     # do one loop of re-matching
     print("Starting re-matching")
     for ii, tbl in enumerate(tbls):
-        crds = tbl['skycoord']
+        crds = tbl[skycoord_colname]
 
         match_inds, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
         reverse_match_inds, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
@@ -198,13 +200,13 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         # for tbl0, should be nan (all self-match)
         if realign and not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
             newcrds = SkyCoord(crds.ra - medsep_ra, crds.dec - medsep_dec, frame=crds.frame)
-            tbl['skycoord'] = newcrds
+            tbl[skycoord_colname] = newcrds
 
     if realign:
         print("Realigning")
         # remake base coordinates after the rematching
         for ii, tbl in enumerate(tbls):
-            crds = tbl['skycoord']
+            crds = tbl[skycoord_colname]
             if ii == 0:
                 basecrds = crds
             else:
@@ -229,7 +231,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
               for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec')}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
-        crds = tbl['skycoord']
+        crds = tbl[skycoord_colname]
 
         match_inds, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
         reverse_match_inds, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
@@ -239,10 +241,10 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         keep = (sep < max_offset) & (mutual_matches)
 
         for key in arrays:
-            if key not in ('skycoord', 'ra', 'dec'):
+            if key not in ('skycoord', skycoord_colname, 'ra', 'dec'):
                 arrays[key][match_inds[keep], ii] = tbl[key][keep]
-        arrays['ra'][match_inds[keep], ii] = tbl['skycoord'].ra[keep]
-        arrays['dec'][match_inds[keep], ii] = tbl['skycoord'].dec[keep]
+        arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
+        arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
         print(f"Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE']}")
 
     print("Compiling arrays into table")
@@ -1043,7 +1045,7 @@ def main():
                                             # skip ahead to merge-all-indiv step
                                             continue
                                         index += 1
-                                        print(index, filtername, progid, suffix)
+                                        print(index, filtername, progid)
                                         # enable array jobs based only on filters
                                         if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
                                             print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
