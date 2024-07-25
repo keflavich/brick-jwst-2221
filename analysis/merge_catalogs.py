@@ -120,7 +120,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         flux_error_colname = 'dflux'
         flux_colname = 'flux'
         skycoord_colname = 'skycoord'
-        column_names = (flux_colname, flux_error_colname, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec', 'skycoord')
+        column_names = (flux_colname, flux_error_colname, 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'flags', 'spread_model', 'sky', 'ra', 'dec', 'dra', 'ddec', )
         dao = False
     else:
         dao = True
@@ -128,8 +128,9 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         ffcn = 'cfit'
         flux_error_colname = 'flux_err'
         flux_colname = 'flux_fit'
+        # skycoord comes in as skycoord_centroid but we want it to leave as skycoord
         skycoord_colname = 'skycoord_centroid'
-        column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec', 'skycoord')
+        column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec', )
 
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
