@@ -570,6 +570,13 @@ if __name__ == "__main__":
         basetable = basetable_merged1182_daophot_blur
         print("Loaded merged1182_daophot_iterative_blur")
 
+    elif options.module == 'merged1182_daophot_basic_indivexp':
+        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+        result = main(basetable_merged1182_daophot, ww=ww)
+        globals().update(result)
+        basetable = basetable_merged1182_daophot
+        print("Loaded merged1182_daophot_basic_indivexp")
     elif options.module == 'merged1182_daophot_basic':
         from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged.fits')

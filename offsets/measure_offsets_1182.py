@@ -109,7 +109,9 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                 print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
                 # pipeline/tweakreg version globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
                 # F405N/f405n_nrcb_visit001_exp00008_crowdsource_nsky0.fits
-                globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit{visit}*_exp*_crowdsource_nsky0.fits"
+                # globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit{visit}*_exp*_crowdsource_nsky0.fits"
+                globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit{visit}_exp*_daophot_basic.fits"
+
                 flist = sorted([x for x in glob.glob(globstr) if 'fitpsf' not in x])
 
                 if len(flist) == 0:
@@ -134,6 +136,10 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                     if 'qf' in cat.colnames:
                         sel = cat['qf'] > 0.95
                         sel &= cat['fracflux'] > 0.8
+                        cat = cat[sel]
+                    elif 'qfit' in cat.colnames:
+                        sel = cat['qfit'] < 0.4
+                        sel &= cat['cfit'] < 0.4
                         cat = cat[sel]
 
                     # try:
@@ -170,7 +176,12 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                     total_dra = dra_hand.to(u.arcsec)
                     total_ddec = ddec_hand.to(u.arcsec)
 
-                    skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
+                    if 'x' in cat.colnames:
+                        skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
+                    elif 'xcentroid' in cat.colnames:
+                        skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+                    elif 'x_fit' in cat.colnames:
+                        skycrds_cat = ww.pixel_to_world(cat['x_fit'], cat['y_fit'])
 
                     max_offset = 0.2*u.arcsec
                     med_dra = 100*u.arcsec
@@ -185,12 +196,21 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
                     iteration = 0
                     while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
-                        skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
+                        if 'x' in cat.colnames:
+                            skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
+                        elif 'xcentroid' in cat.colnames:
+                            skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+                        elif 'x_fit' in cat.colnames:
+                            skycrds_cat = ww.pixel_to_world(cat['x_fit'], cat['y_fit'])
+
 
                         idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel])
                         keep = offset < max_offset
 
-                        ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
+                        if 'flux' in cat.colnames:
+                            ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
+                        else:
+                            ratio = cat['flux_fit'][idx[keep]] / reftb['flux'][keep]
                         reject = np.zeros(ratio.size, dtype='bool')
                         ii = 0
                         # rejecting based on flux may have failed?

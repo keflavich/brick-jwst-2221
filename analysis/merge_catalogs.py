@@ -111,8 +111,14 @@ def nanaverage_dask(data, weights, **kwargs):
     return avg.compute()
 
 
-def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask):
+def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask,
+                        min_offset=0.01*u.arcsec,
+                        ):
+    """
 
+    min_offset : 
+        The minimum allowed offset to declare a 'new' star.  Anything below this is assumed same star.
+    """
     # set up DAO vs crowd column names
     if 'qf' in tbls[0].colnames:
         qfcn = 'qf'
@@ -141,13 +147,15 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
             # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-            mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-            keep = (sep > max_offset) | (~mutual_matches)
+            # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
+            # even if the match is not mutual, consider it the same star as an existing one because it's too close.
+            # keep = (sep > max_offset) | ((~mutual_matches) & (sep  > min_offset))
+            keep = sep > max_offset
 
-            newcrds = crds[(sep > max_offset) | (~mutual_matches)]
+            newcrds = crds[keep]
             basecrds = SkyCoord([basecrds, newcrds])
-            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''}"
-                  f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''}")
+            # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
         print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
 
         # correct for missing data [should only be needed for a brief period in July 2024]
@@ -212,16 +220,17 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 basecrds = crds
             else:
                 matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-                reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+                # reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
                 # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-                mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-                keep = (sep > max_offset) | (~mutual_matches)
+                # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
+                # keep = (sep > max_offset) | (~mutual_matches)
+                keep = (sep > max_offset)
 
-                newcrds = crds[(sep > max_offset) | (~mutual_matches)]
+                newcrds = crds[keep]
                 basecrds = SkyCoord([basecrds, newcrds])
-                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']}"
-                      f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
+                print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']}")
+                # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     print(f"There are a total of {len(basecrds)} sources in the base coordinate list after rematching")
 
@@ -236,6 +245,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl[skycoord_colname]
 
+        # match_inds & mutual_matches have the shape of basecrds, i.e., they are set by the crossmatching above
         match_inds, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
         reverse_match_inds, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
         mutual_matches = (reverse_match_inds[match_inds] == np.arange(len(match_inds)))
@@ -1046,10 +1056,12 @@ def main():
     parser.add_option("--make-refcat", dest='make_refcat', default=False,
                       action='store_true')
     parser.add_option('--max-expnum', dest='max_expnum', default=24, type='int')
+    parser.add_option('--indiv-merge_methods', dest='indiv_merge_methods', default='dao,crowdsource,daoiterative')
     (options, args) = parser.parse_args()
 
     modules = options.modules.split(",")
     target = options.target
+    indiv_merge_methods = options.indiv_merge_methods.split(",")
     print("Options:", options)
 
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
@@ -1078,11 +1090,13 @@ def main():
                                             print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
                                             continue
 
-                                        for method in ('dao',):#('crowdsource', 'dao'):
+                                        for method in indiv_merge_methods:
                                             print(method)
                                             # could loop & also do _iterative...
                                             suffix = {'crowdsource': '_nsky0',
-                                                      'dao': '_basic'}[method]
+                                                      'dao': '_basic',
+                                                      'daoiterative': '_iterative',
+                                                      }[method]
                                             merge_individual_frames(module=module,
                                                                     desat=desat,
                                                                     filtername=filtername,
@@ -1097,7 +1111,8 @@ def main():
                                                                     method=method,
                                                                     basepath=basepath)
                                             print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")
-                                            singlefield_done = True
+                                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None:
+                                                singlefield_done = True
                                             #except Exception as ex:
                                             #    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                                             #    exc_type, exc_obj, exc_tb = sys.exc_info()
