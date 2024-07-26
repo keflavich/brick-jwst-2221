@@ -785,12 +785,12 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
             print(dict(zip(imgfns, catfns)))
             # raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
     else:
-        catfns = daocatfns = [
+        catfns = [
             f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf_}{blur_}_daophot_{daophot_type}.fits"
             for filtername in filternames
         ]
 
-    tbls = [Table.read(catfn) for catfn in daocatfns]
+    tbls = [Table.read(catfn) for catfn in catfns]
 
     for catfn, tbl, filtername in zip(catfns, tbls, filternames):
         tbl.meta['filename'] = catfn
@@ -807,8 +807,10 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
     for tbl, ww in zip(tbls, wcses):
         if 'x_fit' in tbl.colnames:
             crds = ww.pixel_to_world(tbl['x_fit'], tbl['y_fit'])
-        else:
+        elif 'x_0' in tbl.colnames:
             crds = ww.pixel_to_world(tbl['x_0'], tbl['y_0'])
+        else:
+            crds = tbl['skycoord']
         if 'skycoord' not in tbl.colnames:
             tbl.add_column(crds, name='skycoord')
         tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
@@ -973,10 +975,11 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         cat['flux_fit'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
         cat['flux_err'][idx_cat] = satstar_cat[flux_err_colname][idx_sat]
         cat['skycoord'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
-        cat['x_fit'][idx_cat] = satstar_cat['x_fit'][idx_sat]
-        cat['y_fit'][idx_cat] = satstar_cat['y_fit'][idx_sat]
-        cat['x_err'][idx_cat] = satstar_cat[xerr_colname][idx_sat]
-        cat['y_err'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
+        if 'x_fit' in satstar_cat.colnames and 'x_fit' in cat.colnames:
+            cat['x_fit'][idx_cat] = satstar_cat['x_fit'][idx_sat]
+            cat['y_fit'][idx_cat] = satstar_cat['y_fit'][idx_sat]
+            cat['x_err'][idx_cat] = satstar_cat[xerr_colname][idx_sat]
+            cat['y_err'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
