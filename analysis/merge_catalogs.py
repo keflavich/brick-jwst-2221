@@ -228,6 +228,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     assert flux_error_colname in tbls[0].colnames
     assert flux_error_colname in column_names
 
+    # this segment, from arrays = down to the end, uses a lot of memory
+
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
               for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec')}
 
@@ -404,6 +406,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
             print(f"Max flux in tbl for {wl}: {tbl['flux'].max()}; in jy={np.nanmax(np.array(tbl['flux_jy']))}; mag={np.nanmin(np.array(tbl['mag_ab']))}")
             print(f"merging tables step: max flux for {wl} is {matchtb['flux_'+wl].max()} {matchtb['flux_jy_'+wl].max()} {matchtb['mag_ab_'+wl].min()}")
+            print(f"Basetable has length {len(basetable)} and ncols={len(basetable.colnames)} before stack")
 
             basetable = table.hstack([basetable, matchtb], join_type='exact')
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
@@ -411,6 +414,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             for key in tbl.meta:
                 meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
 
+            print(f"Basetable has length {len(basetable)} and ncols={len(basetable.colnames)} after stack")
             print(f"merging tables step: max flux for {wl} in merged table is {basetable['flux_'+wl].max()}"
                   f" {np.nanmax(np.array(basetable['flux_jy_'+wl]))} {np.nanmin(np.array(basetable['mag_ab_'+wl]))}")
             # DEBUG
@@ -605,8 +609,9 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     # make a table that is nearly equivalent to standard tables (with no 'x' or 'y' coordinate)
     minimal_version = {colname: merged_exposure_table[f'{colname}_avg']
                        for colname in column_names if f'{colname}_avg' in merged_exposure_table.colnames}
-    for key in ('dra', 'ddec', 'nmatch', 'nmatch_good', f'{flux_error_colname}_prop'):
-        minimal_version[key] = merged_exposure_table[key]
+    for key in ('dra', 'ddec', 'std_ra', 'std_dec', 'nmatch', 'nmatch_good', f'{flux_error_colname}_prop'):
+        if key in merged_exposure_table.colnames:
+            minimal_version[key] = merged_exposure_table[key]
 
     minimal_table = Table(minimal_version)
     minimal_table.meta = merged_exposure_table.meta.copy()
@@ -618,7 +623,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
         print(f"Rejected {reject.sum()} sources that had nan coordinates.")
         minimal_table = minimal_table[~reject]
 
-    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits"
+    outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}.fits"
     print(f"Final table length is {len(minimal_table)}.  Writing {outfn}")
     minimal_table.write(outfn, overwrite=True)
 
@@ -759,15 +764,31 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
     filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
     print(f"Merging daophot {daophot_type}, {detector}, {module}, {desat}, {bgsub}, {epsf_}, {blur_}. filters {filternames}")
 
-    catfns = daocatfns = [
-        f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf_}{blur_}_daophot_{daophot_type}.fits"
-        for filtername in filternames
-    ]
     imgfns = [x
-          for filn in filternames
-          for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw0{filter_to_project[filn.lower()]}-o{project_obsnum[target][filter_to_project[filn.lower()]]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
-          if f'{module}_' in x or f'{module}1_' in x
-         ]
+              for filn in filternames
+              for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw0{filter_to_project[filn.lower()]}-o{project_obsnum[target][filter_to_project[filn.lower()]]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+              if f'{module}_' in x or f'{module}1_' in x
+             ]
+
+    if indivexp:
+        catfns = [x
+                  for filn in filternames
+                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{blur_}_dao_{daophot_type}.fits")
+                  ]
+        if len(catfns) == 0:
+            filn = 'f405n'
+            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{blur_}_dao_{daophot_type}.fits had no matches")
+        if len(catfns) != len(imgfns):
+            print("WARNING: Different length of imgfns & catfns!")
+            print("imgfns:", imgfns)
+            print("catfns:", catfns)
+            print(dict(zip(imgfns, catfns)))
+            # raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
+    else:
+        catfns = daocatfns = [
+            f"{basepath}/{filtername.upper()}/{filtername.lower()}_{module}{detector}{desat}{bgsub}{epsf_}{blur_}_daophot_{daophot_type}.fits"
+            for filtername in filternames
+        ]
 
     tbls = [Table.read(catfn) for catfn in daocatfns]
 
@@ -777,8 +798,8 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        #wcses = [wcs.WCS(fits.getheader(fn.replace("_crowdsource", "_crowdsource_skymodel"))) for fn in catfns]
-        imgs = [fits.getdata(fn, ext=('SCI', 1)) for fn in imgfns]
+        # wcses = [wcs.WCS(fits.getheader(fn.replace("_crowdsource", "_crowdsource_skymodel"))) for fn in catfns]
+        # imgs = [fits.getdata(fn, ext=('SCI', 1)) for fn in imgfns]
         wcses = [wcs.WCS(fits.getheader(fn, ext=('SCI', 1))) for fn in imgfns]
 
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
@@ -796,7 +817,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         filtername = tbl.meta['filter']
 
         row = fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]
-        fwhm = fwhm_arcsec = u.Quantity(float(row['PSF FWHM (arcsec)'][0]), u.arcsec)
+        fwhm = u.Quantity(float(row['PSF FWHM (arcsec)'][0]), u.arcsec)
         fwhm_pix = float(row['PSF FWHM (pixel)'][0])
         tbl.meta['fwhm_arcsec'] = fwhm
         tbl.meta['fwhm_pix'] = fwhm_pix
@@ -1054,7 +1075,7 @@ def main():
                                             print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
                                             continue
 
-                                        for method in ('crowdsource', ):#'dao'):
+                                        for method in ('dao',):#('crowdsource', 'dao'):
                                             print(method)
                                             # could loop & also do _iterative...
                                             suffix = {'crowdsource': '_nsky0',
@@ -1125,7 +1146,7 @@ def main():
                                 try:
                                     print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                     merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                  target=target, basepath=basepath, blur=blur)
+                                                  target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
                                     print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                                     exc_tb = sys.exc_info()[2]
@@ -1134,7 +1155,7 @@ def main():
                                 try:
                                     print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
                                     merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                  target=target, basepath=basepath, blur=blur)
+                                                  target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
                                     print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
                                     exc_tb = sys.exc_info()[2]
