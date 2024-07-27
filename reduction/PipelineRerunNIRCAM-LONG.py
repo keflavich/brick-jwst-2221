@@ -594,7 +594,7 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
             row = offsets_tbl[match]
             print(f'Running manual align for merged for {filtername} {row["Module"][0]}.')
         else:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}.csv'
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_F405ref.csv'
             print(f"Using offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
             match = ((offsets_tbl['Visit'] == visit) &

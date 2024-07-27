@@ -204,7 +204,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             ddec_header = fh['SCI'].header['DEOFFSET']
 
         print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
-              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.3g} ddec={ddec_header:7.3g}")
+              f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.5g} ddec={ddec_header:7.5g}")
 
         # for tbl0, should be nan (all self-match)
         if realign and not np.isnan(medsep_ra) and not np.isnan(medsep_dec):
@@ -1059,7 +1059,7 @@ def main():
     parser.add_option("--make-refcat", dest='make_refcat', default=False,
                       action='store_true')
     parser.add_option('--max-expnum', dest='max_expnum', default=24, type='int')
-    parser.add_option('--indiv-merge_methods', dest='indiv_merge_methods', default='dao,crowdsource,daoiterative')
+    parser.add_option('--indiv-merge-methods', dest='indiv_merge_methods', default='dao,crowdsource,daoiterative')
     (options, args) = parser.parse_args()
 
     modules = options.modules.split(",")

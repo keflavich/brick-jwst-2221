@@ -1037,16 +1037,16 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         # iterative takes for-ev-er
         phot_iter = IterativePSFPhotometry(finder=daofind_tuned,
-                                       localbkg_estimator=LocalBackground(5, 15),
-                                       grouper=grouper if options.group else None,
-                                       psf_model=dao_psf_model,
-                                       fitter=LevMarLSQFitter(),
-                                       maxiters=5,
-                                       fit_shape=(5, 5),
-                                       sub_shape=(15, 15),
-                                       aperture_radius=2*fwhm_pix,
-                                       progress_bar=True,
-                                      )
+                                           localbkg_estimator=LocalBackground(5, 15),
+                                           grouper=grouper if options.group else None,
+                                           psf_model=dao_psf_model,
+                                           fitter=LevMarLSQFitter(),
+                                           maxiters=5,
+                                           fit_shape=(5, 5),
+                                           sub_shape=(15, 15),
+                                           aperture_radius=2*fwhm_pix,
+                                           progress_bar=True,
+                                          )
 
         print("About to do ITERATIVE photometry....")
         result2 = phot_iter(data)
@@ -1060,14 +1060,14 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         result2['skycoord_centroid'] = coords2
         if options.each_exposure:
             result2.meta['exposure'] = exposure_
-        result.meta['pixscale'] = (ww.proj_plane_pixel_area()**0.5).value
-        result.meta['pixscale_as'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec).value
-        result.meta['filename'] = filename
-        result.meta['filter'] = filtername
-        result.meta['module'] = module
-        result.meta['detector'] = detector
-        result.meta['pixscale'] = pixscale.to(u.deg).value
-        result.meta['pixscale_as'] = pixscale.value
+        result2.meta['pixscale'] = (ww.proj_plane_pixel_area()**0.5).value
+        result2.meta['pixscale_as'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec).value
+        result2.meta['filename'] = filename
+        result2.meta['filter'] = filtername
+        result2.meta['module'] = module
+        result2.meta['detector'] = detector
+        result2.meta['pixscale'] = pixscale.to(u.deg).value
+        result2.meta['pixscale_as'] = pixscale.value
 
         print(f'len(result2) = {len(result2)}, len(coords) = {len(coords2)}', flush=True)
         result2.write(f"{basepath}/{filtername}/{filtername.lower()}"

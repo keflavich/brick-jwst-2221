@@ -105,7 +105,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
         warnings.simplefilter('ignore')
         for filtername in 'F200W,F356W,F444W,F115W'.split(","):
             for visit in ('002', '001'):
-                print(f"Working on filter {filtername}")
+                print(f"Working on filter {filtername} visit {visit}")
                 print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
                 # pipeline/tweakreg version globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
                 # F405N/f405n_nrcb_visit001_exp00008_crowdsource_nsky0.fits
@@ -170,6 +170,9 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
                         header['CRVAL1'] = header['OLCRVAL1']
                         header['CRVAL2'] = header['OLCRVAL2']
+                    else:
+                        raoffset = None
+                        decoffset = None
 
                     # print(fitsfn, fn)
                     # print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
@@ -190,9 +193,14 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
                     sel = slice(None)
 
-                    idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-                    dra = -(skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
-                    ddec = -(skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
+                    idx, sep, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel], nthneighbor=1)
+                    reverse_idx, reverse_sep, _ = skycrds_cat[sel].match_to_catalog_sky(reference_coordinates, nthneighbor=1)
+                    reverse_mutual_matches = (idx[reverse_idx] == np.arange(len(reverse_idx))) & (reverse_sep < max_offset)
+                    mutual_matches = (reverse_idx[idx] == np.arange(len(idx))) & (sep < max_offset)
+                    print(f"Matched {mutual_matches.sum()} mutually of {(sep < max_offset).sum()} total")
+
+                    dra = -(skycrds_cat[sel][idx[mutual_matches]].ra - reference_coordinates[reverse_idx[reverse_mutual_matches]].ra).to(u.arcsec)
+                    ddec = -(skycrds_cat[sel][idx[mutual_matches]].dec - reference_coordinates[reverse_idx[reverse_mutual_matches]].dec).to(u.arcsec)
 
                     iteration = 0
                     while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
@@ -203,9 +211,12 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         elif 'x_fit' in cat.colnames:
                             skycrds_cat = ww.pixel_to_world(cat['x_fit'], cat['y_fit'])
 
+                        idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel], nthneighbor=1)
+                        reverse_idx, reverse_sep, _ = skycrds_cat[sel].match_to_catalog_sky(reference_coordinates, nthneighbor=1)
 
-                        idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel])
-                        keep = offset < max_offset
+                        mutual_matches = (reverse_idx[idx] == np.arange(len(idx)))
+
+                        keep = (offset < max_offset) & mutual_matches
 
                         if 'flux' in cat.colnames:
                             ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
@@ -243,8 +254,8 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                             print(f'len(refcoords) = {len(reference_coordinates)}')
                             print(f'len(cat) = {len(cat)}')
                             print(f'len(idx) = {len(idx)}')
-                            print(f'len(sidx) = {len(sidx)}')
-                            print(cat, sel, idx, sidx, sep)
+                            # print(f'len(sidx) = {len(sidx)}')
+                            print(cat, sel, idx, sep)
                             raise ValueError(f"median(dra) = {med_dra}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
 
                         total_dra = total_dra + med_dra.to(u.arcsec)
@@ -257,7 +268,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                             break # there is at least one case in which we converged to an oscillator
                             raise ValueError("Iteration is not converging")
 
-                    print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [dra_hand={dra_hand}, ddec_hand={ddec_hand}]", flush=True)
+                    print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra.value:8.3f}, {total_ddec.value:8.3f}, {med_dra.value:8.3f}, {med_ddec.value:8.3f}, {std_dra.value:8.3f}, {std_ddec.value:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [hdra={dra_hand}, hddec={ddec_hand}]", flush=True)
                     if keep.sum() < 5:
                         print(fitsfn)
                         print(fn)
@@ -280,6 +291,9 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         "Exposure": int(expno),
                         "Filter": filtername,
                         "Module": module,
+                        "nmatch": keep.sum(),
+                        'RAOFF_hdr': raoffset,
+                        'DECOFF_hdr': decoffset,
                     })
 
     tbl = Table(rows)
@@ -292,8 +306,10 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
     del agg['Exposure']
     aggstd = gr.groups.aggregate(np.std)
     aggmed = gr.groups.aggregate(np.median)
+    aggsum = gr.groups.aggregate(np.sum)
     agg['dra_rms'] = aggstd['dra']
     agg['ddec_rms'] = aggstd['ddec']
     agg['dra_med'] = aggmed['dra']
     agg['ddec_med'] = aggmed['ddec']
+    agg['nmatch_sum'] = aggsum['nmatch']
     agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average.csv", format='ascii.csv', overwrite=True)
