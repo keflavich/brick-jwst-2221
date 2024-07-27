@@ -581,7 +581,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
         column_names = ('flux', flux_error_colname, 'skycoord', 'qf', 'rchi2', 'fracflux', 'fwhm', 'fluxiso', 'spread_model')
         method_suffix = 'crowdsource'
         # flux_colname = 'flux_fit'
-    elif method == 'dao':
+    elif method in ('dao', 'daophot', 'basic', 'daobasic', 'iterative', 'daoiterative'):
         flux_error_colname = 'flux_err'
         column_names = ('flux_fit', flux_error_colname, 'skycoord', 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size')
         # flux_colname = 'flux'
@@ -609,6 +609,9 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     for tb, fn in zip(tables, tblfns):
         if 'exposure' not in tb.meta:
             tb.meta['exposure'] = fn.split("_exp")[-1][:5]
+        if 'FILENAME' not in tb.meta:
+            print('tb.meta:', tb.meta)
+            raise ValueError(f"Table file {fn} is not correctly formatted; it is missing FILENAME metadata")
 
     merged_exposure_table = combine_singleframe(tables)
 
