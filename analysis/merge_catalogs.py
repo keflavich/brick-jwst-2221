@@ -517,7 +517,7 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         indivexp = '_indivexp' if indivexp else ''
         tablename = f"{basepath}/catalogs/{catalog_type}_{module}{indivexp}_photometry_tables_merged{desat}{bgsub}{epsf_}{blur_}"
         t0 = time.time()
-        print(f"Writing table {tablename} with len={len(basetable)}", flush=True)
+        print(f"Writing table {tablename} with len={len(basetable)} and ncols={len(basetable.colnames)}", flush=True)
         # use caps b/c FITS will force it to caps anyway
         basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
         # DO NOT USE FITS in production, it drops critical metadata
@@ -1099,6 +1099,7 @@ def main():
                                             suffix = {'crowdsource': '_nsky0',
                                                       'dao': '_basic',
                                                       'daoiterative': '_iterative',
+                                                      'iterative': '_iterative',
                                                       }[method]
                                             merge_individual_frames(module=module,
                                                                     desat=desat,
