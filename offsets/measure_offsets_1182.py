@@ -184,7 +184,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
                     flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
 
-                    total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, reject, iteration = measure_offsets(reference_coordinates,
+                    total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration = measure_offsets(reference_coordinates,
                                                                                                                            skycrds_cat,
                                                                                                                            refflux=reftb['flux'],
                                                                                                                            skyflux=cat[flux_colname],

@@ -8,8 +8,15 @@ from astroquery.svo_fps import SvoFps
 from astropy import wcs
 from astropy.io import fits
 import numpy as np
+import sys
 
 from astropy import stats
+
+try:
+    from measure_offsets import measure_offsets
+except ImportError:
+    sys.path.append('/blue/adamginsburg/adamginsburg/jwst/brick/offsets')
+    from measure_offsets import measure_offsets
 
 
 def main(return_method=None):
@@ -51,61 +58,19 @@ def main(return_method=None):
         flux_jy = (reftbl[flux_colname] * u.MJy/u.sr * (reftbl.meta['pixscale_as']*u.arcsec)**2).to(u.Jy)
         mag405 = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
 
-        total_dra, total_ddec = 0*u.arcsec, 0*u.arcsec
+        total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration = measure_offsets(reference_coordinates=vvvcrds,
+                                                                                                               skycrds_cat=refcrds,
+                                                                                                               refflux=10**vvvtb['Ksmag3'],
+                                                                                                               skyflux=10**mag405.value,
+                                                                                                               sel=slice(None),
+                                                                                                               verbose=True,
+                                                                                                               )
 
-        for ii in range(8):
-            keep = np.zeros(len(reftbl), dtype='bool')
+        refcrds_updated = SkyCoord(refcrds.ra + total_dra, refcrds.dec + total_ddec, frame=refcrds.frame)
 
-            matches, sep, _ = refcrds.match_to_catalog_sky(vvvcrds, nthneighbor=1)
-            reverse_matches, reverse_sep, _ = vvvcrds.match_to_catalog_sky(refcrds, nthneighbor=1)
+        reftbl['VVV_matched'] = skykeep
 
-            mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-            mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-
-            idx = np.where(mutual_reverse_matches)[0]
-            sidx = reverse_matches[mutual_reverse_matches]
-            sepkeep = sep[sidx] < 0.2 * u.arcsec
-            idx = idx[sepkeep]
-            sidx = sidx[sepkeep]
-            print(f"Iteration {ii}: {(mutual_matches & (sep < 0.2 * u.arcsec)).sum()} mutual matches. keep.sum = {keep.sum()} (from previous iteration)")
-
-            # old way
-            # idx, sidx, sep, _ = refcrds.search_around_sky(vvvcrds, 0.2 * u.arcsec)
-            # is_closest = np.array([(ii == idx).sum() == 1 or (sp == sep[idx == ii].min()) for ii, sp in zip(idx, sep)])
-            # idx = idx[is_closest]
-            # sidx = sidx[is_closest]
-            # print(f"Iteration {ii}: {(is_closest).sum()} mutual matches. keep.sum = {keep.sum()} (from previous iteration)")
-
-            # magnitude difference = ratio
-            ratio = vvvtb['Ksmag3'][idx] - mag405[sidx]
-            reject = np.zeros(ratio.size, dtype='bool')
-            for jj in range(12):
-                madstd = stats.mad_std(ratio[~reject])
-                med = np.median(ratio[~reject])
-                reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
-
-            keep[sidx[~reject]] = True
-            dra = (refcrds[sidx].ra - vvvcrds[idx].ra).to(u.arcsec)
-            ddec = (refcrds[sidx].dec - vvvcrds[idx].dec).to(u.arcsec)
-            assert np.all(np.abs(dra < 0.2*u.arcsec))
-            assert np.all(np.abs(ddec < 0.2*u.arcsec))
-            dra_med, ddec_med = np.median(dra[~reject]), np.median(ddec[~reject])
-            print(f"{len(idx)} VVV matches in f405n catalog.  ", end='')
-            assert np.isfinite(dra_med)
-            assert np.isfinite(ddec_med)
-            print(f'ratio = {med} +/- {madstd}   nkeep={(~reject).sum()}.  dra, ddec median = {dra_med}, {ddec_med}')
-            total_dra += dra_med
-            total_ddec += ddec_med
-
-            refcrds_updated = SkyCoord(refcrds.ra - dra_med, refcrds.dec - ddec_med, frame=refcrds.frame)
-            refcrds = refcrds_updated
-
-            reftbl['VVV_matched'] = keep
-
-            if (np.abs(dra_med) < 1*u.marcsec) & (np.abs(ddec_med) < 1*u.marcsec):
-                break
-
-        print(f"Shifted F405N coordinates by {total_dra}, {total_ddec} in {ii} iterations with stddev = {dra.std()}, {ddec.std()} ({(dra.var()+ddec.var())**0.5})")
+        print(f"Shifted F405N coordinates by {total_dra}, {total_ddec} in {iteration} iterations with stddev = {std_dra}, {std_ddec} ({(std_dra**2+std_ddec**2)**0.5})")
         print(f"Total of {keep.sum()} stars were used.")
         reftbl['skycoord'] = refcrds_updated
 

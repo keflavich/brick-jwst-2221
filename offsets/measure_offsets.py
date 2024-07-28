@@ -37,9 +37,11 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
         idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel], nthneighbor=1)
         reverse_idx, reverse_sep, _ = skycrds_cat[sel].match_to_catalog_sky(reference_coordinates, nthneighbor=1)
 
+        reverse_mutual_matches = (idx[reverse_idx] == np.arange(len(reverse_idx))) & (reverse_sep < max_offset)
         mutual_matches = (reverse_idx[idx] == np.arange(len(idx)))
 
         keep = (offset < max_offset) & mutual_matches
+        skykeep = (reverse_sep < max_offset) & reverse_mutual_matches
 
         ratio = skyflux[idx[keep]] / refflux[keep]
 
@@ -84,4 +86,4 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
     if verbose:
         print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra.value:8.3f}, {total_ddec.value:8.3f}, {med_dra.value:8.3f}, {med_ddec.value:8.3f}, {std_dra.value:8.3f}, {std_ddec.value:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d}", flush=True)
 
-    return total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, reject, iteration
+    return total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration

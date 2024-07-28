@@ -127,7 +127,7 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
 
                 skycrd_cat = cat['skycoord'] if 'skycoord' in cat.colnames else cat['sky_centroid']
 
-                total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, reject, iteration = measure_offsets(reference_coordinates,
+                total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration = measure_offsets(reference_coordinates,
                                                                                                                        skycrd_cat,
                                                                                                                        max_offset=0.2*u.arcsec,
                                                                                                                        refflux=reftb['flux'],
