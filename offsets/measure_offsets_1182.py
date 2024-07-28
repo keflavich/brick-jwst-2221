@@ -10,6 +10,7 @@ from astroquery.vizier import Vizier
 from astropy.coordinates import SkyCoord
 import glob
 import os
+from measure_offsets import measure_offsets
 
 project_id = '01182'
 field = '004'
@@ -174,11 +175,6 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         raoffset = None
                         decoffset = None
 
-                    # print(fitsfn, fn)
-                    # print(f"Shifted original WCS by {dra_hand}, {ddec_hand}")
-                    total_dra = dra_hand.to(u.arcsec)
-                    total_ddec = ddec_hand.to(u.arcsec)
-
                     if 'x' in cat.colnames:
                         skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
                     elif 'xcentroid' in cat.colnames:
@@ -186,89 +182,19 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                     elif 'x_fit' in cat.colnames:
                         skycrds_cat = ww.pixel_to_world(cat['x_fit'], cat['y_fit'])
 
-                    max_offset = 0.2*u.arcsec
-                    med_dra = 100*u.arcsec
-                    med_ddec = 100*u.arcsec
-                    threshold = 0.01*u.arcsec
+                    flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
 
-                    sel = slice(None)
+                    total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, reject, iteration = measure_offsets(reference_coordinates,
+                                                                                                                           skycrds_cat,
+                                                                                                                           refflux=reftb['flux'],
+                                                                                                                           skyflux=cat[flux_colname],
+                                                                                                                           sel=slice(None),
+                                                                                                                           verbose=True,
+                                                                                                                           filtername=filtername,
+                                                                                                                           ab=ab,
+                                                                                                                           expno=expno,
+                                                                                                                           )
 
-                    idx, sep, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel], nthneighbor=1)
-                    reverse_idx, reverse_sep, _ = skycrds_cat[sel].match_to_catalog_sky(reference_coordinates, nthneighbor=1)
-                    reverse_mutual_matches = (idx[reverse_idx] == np.arange(len(reverse_idx))) & (reverse_sep < max_offset)
-                    mutual_matches = (reverse_idx[idx] == np.arange(len(idx))) & (sep < max_offset)
-                    print(f"Matched {mutual_matches.sum()} mutually of {(sep < max_offset).sum()} total")
-
-                    dra = -(skycrds_cat[sel][idx[mutual_matches]].ra - reference_coordinates[reverse_idx[reverse_mutual_matches]].ra).to(u.arcsec)
-                    ddec = -(skycrds_cat[sel][idx[mutual_matches]].dec - reference_coordinates[reverse_idx[reverse_mutual_matches]].dec).to(u.arcsec)
-
-                    iteration = 0
-                    while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
-                        if 'x' in cat.colnames:
-                            skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
-                        elif 'xcentroid' in cat.colnames:
-                            skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
-                        elif 'x_fit' in cat.colnames:
-                            skycrds_cat = ww.pixel_to_world(cat['x_fit'], cat['y_fit'])
-
-                        idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel], nthneighbor=1)
-                        reverse_idx, reverse_sep, _ = skycrds_cat[sel].match_to_catalog_sky(reference_coordinates, nthneighbor=1)
-
-                        mutual_matches = (reverse_idx[idx] == np.arange(len(idx)))
-
-                        keep = (offset < max_offset) & mutual_matches
-
-                        if 'flux' in cat.colnames:
-                            ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
-                        else:
-                            ratio = cat['flux_fit'][idx[keep]] / reftb['flux'][keep]
-                        reject = np.zeros(ratio.size, dtype='bool')
-                        ii = 0
-                        # rejecting based on flux may have failed?
-                        if filtername == 'F200W':
-                            # for the other filters, we don't expect any agreement at all
-                            for ii in range(4):
-                                madstd = stats.mad_std(ratio[~reject])
-                                med = np.median(ratio[~reject])
-                                reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
-                                ratio = 1 / ratio
-                                madstd = stats.mad_std(ratio[~reject])
-                                med = np.median(ratio[~reject])
-                                reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
-                                ratio = 1 / ratio
-
-                        # idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-                        # dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
-                        # ddec = (skycrds_cat[sel][idx[keep]].dec - reference_coordinates[keep].dec).to(u.arcsec)
-
-                        # dra and ddec should be the vector added to CRVAL to put the image in the right place
-                        dra = -(skycrds_cat[sel][idx[keep][~reject]].ra - reference_coordinates[keep][~reject].ra).to(u.arcsec)
-                        ddec = -(skycrds_cat[sel][idx[keep][~reject]].dec - reference_coordinates[keep][~reject].dec).to(u.arcsec)
-
-                        med_dra = np.median(dra)
-                        med_ddec = np.median(ddec)
-                        std_dra = stats.mad_std(dra)
-                        std_ddec = stats.mad_std(ddec)
-
-                        if np.isnan(med_dra):
-                            print(f'len(refcoords) = {len(reference_coordinates)}')
-                            print(f'len(cat) = {len(cat)}')
-                            print(f'len(idx) = {len(idx)}')
-                            # print(f'len(sidx) = {len(sidx)}')
-                            print(cat, sel, idx, sep)
-                            raise ValueError(f"median(dra) = {med_dra}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
-
-                        total_dra = total_dra + med_dra.to(u.arcsec)
-                        total_ddec = total_ddec + med_ddec.to(u.arcsec)
-
-                        ww.wcs.crval = ww.wcs.crval + [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
-
-                        iteration += 1
-                        if iteration > 50:
-                            break # there is at least one case in which we converged to an oscillator
-                            raise ValueError("Iteration is not converging")
-
-                    print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra.value:8.3f}, {total_ddec.value:8.3f}, {med_dra.value:8.3f}, {med_ddec.value:8.3f}, {std_dra.value:8.3f}, {std_ddec.value:8.3f}, {keep.sum():6d}, {reject.sum():7d}, niter={iteration:5d} [hdra={dra_hand}, hddec={ddec_hand}]", flush=True)
                     if keep.sum() < 5:
                         print(fitsfn)
                         print(fn)

@@ -9,6 +9,8 @@ import glob
 import os
 from astroquery.svo_fps import SvoFps
 
+from measure_offsets import measure_offsets
+
 project_id = '02221'
 field = '001'
 obsid = '001'
@@ -121,81 +123,21 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
                     header['CRVAL1'] = header['OLCRVAL1']
                     header['CRVAL2'] = header['OLCRVAL2']
 
-                total_dra = 0 * u.arcsec
-                total_ddec = 0 * u.arcsec
+                flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
 
-                ww = WCS(header)
+                skycrd_cat = cat['skycoord'] if 'skycoord' in cat.colnames else cat['sky_centroid']
 
-                skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
-
-                sel = slice(None)
-                max_offset = 0.2*u.arcsec
-                idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-                dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
-                ddec = (skycrds_cat[sel][idx].dec - reference_coordinates[sidx].dec).to(u.arcsec)
-
-                med_dra = 100 * u.arcsec
-                med_ddec = 100 * u.arcsec
-                threshold = 0.01 * u.arcsec
-                max_offset = 0.5 * u.arcsec
-
-                iteration = 0
-                nkeeps = []
-                while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
-                    skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
-
-                    idx, offset, _ = reference_coordinates.match_to_catalog_sky(skycrds_cat[sel])
-                    keep = offset < max_offset
-
-                    # iteratively reject sources whose flux ratio is not similar to the mean
-                    # This is trying to enforce that they are the same star
-                    ratio = cat['flux'][idx[keep]] / reftb['flux'][keep]
-                    reject = np.zeros(ratio.size, dtype='bool')
-                    for ii in range(4):
-                        madstd = stats.mad_std(ratio[~reject])
-                        med = np.median(ratio[~reject])
-                        reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
-                        ratio = 1 / ratio
-                        madstd = stats.mad_std(ratio[~reject])
-                        med = np.median(ratio[~reject])
-                        reject = (ratio < med - 3 * madstd) | (ratio > med + 3 * madstd) | reject
-                        ratio = 1 / ratio
-
-                    # idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
-                    # dra = (skycrds_cat[sel][idx[keep]].ra - reference_coordinates[keep].ra).to(u.arcsec)
-                    # ddec = (skycrds_cat[sel][idx[keep]].dec - reference_coordinates[keep].dec).to(u.arcsec)
-
-                    # dra and ddec should be the vector added to CRVAL to put the image in the right place
-                    dra = -(skycrds_cat[sel][idx[keep][~reject]].ra - reference_coordinates[keep][~reject].ra).to(u.arcsec)
-                    ddec = -(skycrds_cat[sel][idx[keep][~reject]].dec - reference_coordinates[keep][~reject].dec).to(u.arcsec)
-
-                    med_dra = np.median(dra)
-                    med_ddec = np.median(ddec)
-                    std_dra = stats.mad_std(dra)
-                    std_ddec = stats.mad_std(ddec)
-
-                    iteration += 1
-
-                    if np.isnan(med_dra):
-                        print(f'len(refcoords) = {len(reference_coordinates)}')
-                        print(f'len(cat) = {len(cat)}')
-                        print(f'len(idx) = {len(idx)}')
-                        print(f'len(sidx) = {len(sidx)}')
-                        print(cat, sel, idx, sidx, sep)
-                        raise ValueError(f"median(dra) = {med_dra}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
-
-                    total_dra = total_dra + med_dra.to(u.arcsec)
-                    total_ddec = total_ddec + med_ddec.to(u.arcsec)
-
-                    ww.wcs.crval = ww.wcs.crval + [med_dra.to(u.deg).value, med_ddec.to(u.deg).value]
-
-                    nkeeps.append(keep.sum())
-                    if iteration > 25:
-                        print("WARNING: Did not converge after 25 iterations")
-                        break
-                        raise ValueError(f"Iterations are not converging.  Keep iterations were {nkeeps}")
-
-                print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra:8.3f}, {total_ddec:8.3f}, {med_dra:8.3f}, {med_ddec:8.3f}, {std_dra:8.3f}, {std_ddec:8.3f}, {keep.sum():6d}, {reject.sum():7d}, {iteration:5d}", flush=True)
+                total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, reject, iteration = measure_offsets(reference_coordinates,
+                                                                                                                       skycrd_cat,
+                                                                                                                       max_offset=0.2*u.arcsec,
+                                                                                                                       refflux=reftb['flux'],
+                                                                                                                       skyflux=cat[flux_colname],
+                                                                                                                       sel=slice(None),
+                                                                                                                       verbose=True,
+                                                                                                                       filtername=filtername,
+                                                                                                                       ab=ab,
+                                                                                                                       expno=expno,
+                                                                                                                       )
                 if keep.sum() < 5:
                     print(fitsfn)
                     print(fn)
