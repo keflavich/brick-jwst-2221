@@ -89,7 +89,7 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
                 raise ValueError(f"No matches to {globstr}")
             cats = sorted([x for x in glob.glob(globstr) if 'fitpsf' not in x])
 
-            print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
+            print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':8s}, {'ttl_ddec':8s}, {'med_dra':8s}, {'med_ddec':8s}, {'std_dra':8s}, {'std_dec':8s}, nmatch, nreject, niter")
             for fn in cats:
                 ab = 'a' if 'nrca' in fn else 'b'
                 if filtername in ('F466N', 'F405N', 'F410M'):
@@ -118,10 +118,12 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
                     cat = cat[sel]
 
                 if 'RAOFFSET' in header:
-                    raoffset = header['RAOFFSET']
-                    decoffset = header['DEOFFSET']
+                    raoffset = u.Quantity(header['RAOFFSET'], u.arcsec)
+                    decoffset = u.Quantity(header['DEOFFSET'], u.arcsec)
                     header['CRVAL1'] = header['OLCRVAL1']
                     header['CRVAL2'] = header['OLCRVAL2']
+                else:
+                    raoffset, decoffset = 0*u.arcsec, 0*u.arcsec
 
                 flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
 
@@ -137,6 +139,8 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
                                                                                                                        filtername=filtername,
                                                                                                                        ab=ab,
                                                                                                                        expno=expno,
+                                                                                                                       total_dra=raoffset,
+                                                                                                                       total_ddec=decoffset,
                                                                                                                        )
                 if keep.sum() < 5:
                     print(fitsfn)

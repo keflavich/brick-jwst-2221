@@ -107,7 +107,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
         for filtername in 'F200W,F356W,F444W,F115W'.split(","):
             for visit in ('002', '001'):
                 print(f"Working on filter {filtername} visit {visit}")
-                print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':15s}, {'ttl_ddec':15s}, {'med_dra':15s}, {'med_ddec':15s}, {'std_dra':15s}, {'std_dec':15s}, nmatch, nreject, niter")
+                print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':8s}, {'ttl_ddec':8s}, {'med_dra':8s}, {'med_ddec':8s}, {'std_dra':8s}, {'std_dec':8s}, nmatch, nreject, niter")
                 # pipeline/tweakreg version globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
                 # F405N/f405n_nrcb_visit001_exp00008_crowdsource_nsky0.fits
                 # globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit{visit}*_exp*_crowdsource_nsky0.fits"
@@ -143,13 +143,6 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         sel &= cat['cfit'] < 0.4
                         cat = cat[sel]
 
-                    # try:
-                    #     fitsfn = fn.replace("_cat.fits", ".fits")
-                    #     ffh = fits.open(fitsfn)
-                    # except FileNotFoundError:
-                    #     fitsfn = fn.replace("destreak_cat.fits", "cal.fits")
-                    #     ffh = fits.open(fitsfn)
-
                     header = ffh['SCI'].header
 
                     ww = WCS(header)
@@ -166,14 +159,14 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                     ww.wcs.crval = ww.wcs.crval + [dra_hand.to(u.deg).value, ddec_hand.to(u.deg).value]
 
                     if 'RAOFFSET' in header:
-                        raoffset = header['RAOFFSET']
-                        decoffset = header['DEOFFSET']
-                        print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
+                        raoffset = u.Quantity(header['RAOFFSET'], u.arcsec)
+                        decoffset = u.Quantity(header['DEOFFSET'], u.arcsec)
+                        # print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
                         header['CRVAL1'] = header['OLCRVAL1']
                         header['CRVAL2'] = header['OLCRVAL2']
                     else:
-                        raoffset = None
-                        decoffset = None
+                        raoffset = 0*u.arcsec
+                        decoffset = 0*u.arcsec
 
                     if 'x' in cat.colnames:
                         skycrds_cat = ww.pixel_to_world(cat['x'], cat['y'])
@@ -193,6 +186,8 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                                                                                                                            filtername=filtername,
                                                                                                                            ab=ab,
                                                                                                                            expno=expno,
+                                                                                                                           total_dra=raoffset,
+                                                                                                                           total_ddec=decoffset,
                                                                                                                            )
 
                     if keep.sum() < 5:
