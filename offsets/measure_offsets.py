@@ -18,6 +18,8 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
                     sel=slice(None),
                     verbose=False,
                     ratio_match=True,
+                    nsigma_reject=5,
+                    reject_niter=7,
                     filtername='', ab='', expno=''):
     med_dra = 100*u.arcsec
     med_ddec = 100*u.arcsec
@@ -43,20 +45,22 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
         keep = (offset < max_offset) & mutual_matches
         skykeep = (reverse_sep < max_offset) & reverse_mutual_matches
 
-        ratio = skyflux[idx[keep]] / refflux[keep]
+        # ratio = skyflux[idx[keep]] / refflux[keep]
+        # magnitude-style
+        ratio = np.log(skyflux[idx[keep]]) - np.log(refflux[keep])
 
         reject = np.zeros(ratio.size, dtype='bool')
-        ii = 0
         if ratio_match:
-            for ii in range(4):
-                madstd = stats.mad_std(ratio[~reject])
-                med = np.median(ratio[~reject])
-                reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
-                ratio = 1 / ratio
-                madstd = stats.mad_std(ratio[~reject])
-                med = np.median(ratio[~reject])
-                reject = (ratio < med - 5 * madstd) | (ratio > med + 5 * madstd) | reject
-                ratio = 1 / ratio
+            rejection_data = []
+            for ii in range(reject_niter):
+                madstd = stats.mad_std(ratio[~reject], ignore_nan=True)
+                med = np.nanmedian(ratio[~reject])
+                reject = (ratio < (med - nsigma_reject * madstd)) | (ratio > (med + nsigma_reject * madstd)) | reject
+                rejection_data.append([med, madstd, reject.sum()])
+            if np.all(reject):
+                print("ALL SOURCES WERE REJECTED - this isn't really possible so it indicates an error")
+                print(f"Iterations were: {rejection_data}")
+                reject = np.zeros(ratio.size, dtype='bool')
 
         # dra and ddec should be the vector added to CRVAL to put the image in the right place
         dra = -(skycrds_cat[sel][idx[keep][~reject]].ra - reference_coordinates[keep][~reject].ra).to(u.arcsec)
@@ -70,6 +74,10 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
         if np.isnan(med_dra):
             print(f'len(refcoords) = {len(reference_coordinates)}')
             print(f'len(idx) = {len(idx)}')
+            print(f'keep.sum() = {keep.sum()}')
+            print(f'reject.size: {reject.size}')
+            print(f'reject.sum() = {reject.sum()}')
+            print(f'~reject.sum() = {(~reject).sum()}')
             # print(f'len(sidx) = {len(sidx)}')
             raise ValueError(f"median(dra) = {med_dra}.  np.nanmedian(dra) = {np.nanmedian(dra)}")
 

@@ -66,15 +66,16 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
         idx, sidx, sep, sep3d = vvv_reference_coordinates.search_around_sky(skycrds_f200, 0.5*u.arcsec)
         idx_sel = np.isin(np.arange(len(f200tb)), idx)
-        dra = (skycrds_f200[idx].ra - vvv_reference_coordinates[sidx].ra).to(u.arcsec)
-        ddec = (skycrds_f200[idx].dec - vvv_reference_coordinates[sidx].dec).to(u.arcsec)
+        # dra = (skycrds_f200[idx].ra - vvv_reference_coordinates[sidx].ra).to(u.arcsec)
+        # ddec = (skycrds_f200[idx].dec - vvv_reference_coordinates[sidx].dec).to(u.arcsec)
         closeneighbors_idx, closest_sep, _ = skycrds_f200.match_to_catalog_sky(skycrds_f200, 2)
 
         # select only sources close enough in magnitude
         magmatch = np.abs(reftb_vvv['Ksmag3'][sidx] - mag200[idx]) < 0.5
 
         # ignore sources where there are multiple JWST sources close to each other (confusion)
-        not_closesel = (closest_sep > 0.5*u.arcsec)
+        # I dropped this from 0.5 (VVV size) to 0.2 b/c magmatch should help and I wanted more sources
+        not_closesel = (closest_sep > 0.2*u.arcsec)
 
         sel = (not_closesel[idx]) & magmatch
         print(f"Selected {sel.sum()} reference source matching between VVV & F200W", flush=True)
@@ -147,23 +148,25 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
                     ww = WCS(header)
 
-                    # start by shifting by measured offsets
-                    match = ((handmeasured_offsets['Visit'] == visitname) &
-                             (handmeasured_offsets['Exposure'] == int(expno)) &
-                             ((handmeasured_offsets['Module'] == module) | (handmeasured_offsets['Module'] == module.strip('1234'))) &
-                             (handmeasured_offsets['Filter'] == filtername)
-                            )
-                    assert match.sum() == 1
-                    handsel_row = handmeasured_offsets[match][0]
-                    dra_hand, ddec_hand = u.Quantity([handsel_row['dra (arcsec)'], handsel_row['ddec (arcsec)']], u.arcsec)
-                    ww.wcs.crval = ww.wcs.crval + [dra_hand.to(u.deg).value, ddec_hand.to(u.deg).value]
-
                     if 'RAOFFSET' in header:
                         raoffset = u.Quantity(header['RAOFFSET'], u.arcsec)
                         decoffset = u.Quantity(header['DEOFFSET'], u.arcsec)
                         # print(f"Found RAOFFSET in header: {raoffset}, {decoffset}")
                         header['CRVAL1'] = header['OLCRVAL1']
                         header['CRVAL2'] = header['OLCRVAL2']
+                    elif handmeasured_offsets is not None:
+                        # start by shifting by measured offsets
+                        match = ((handmeasured_offsets['Visit'] == visitname) &
+                                (handmeasured_offsets['Exposure'] == int(expno)) &
+                                ((handmeasured_offsets['Module'] == module) | (handmeasured_offsets['Module'] == module.strip('1234'))) &
+                                (handmeasured_offsets['Filter'] == filtername)
+                                )
+                        assert match.sum() == 1
+                        handsel_row = handmeasured_offsets[match][0]
+                        dra_hand, ddec_hand = u.Quantity([handsel_row['dra (arcsec)'], handsel_row['ddec (arcsec)']], u.arcsec)
+                        ww.wcs.crval = ww.wcs.crval + [dra_hand.to(u.deg).value, ddec_hand.to(u.deg).value]
+                        raoffset = dra_hand
+                        decoffset = ddec_hand
                     else:
                         raoffset = 0*u.arcsec
                         decoffset = 0*u.arcsec
@@ -177,18 +180,19 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
                     flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
 
-                    total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration = measure_offsets(reference_coordinates,
-                                                                                                                           skycrds_cat,
-                                                                                                                           refflux=reftb['flux'],
-                                                                                                                           skyflux=cat[flux_colname],
-                                                                                                                           sel=slice(None),
-                                                                                                                           verbose=True,
-                                                                                                                           filtername=filtername,
-                                                                                                                           ab=ab,
-                                                                                                                           expno=expno,
-                                                                                                                           total_dra=raoffset,
-                                                                                                                           total_ddec=decoffset,
-                                                                                                                           )
+                    (total_dra, total_ddec, med_dra, med_ddec,
+                     std_dra, std_ddec, keep, skykeep, reject, iteration) = measure_offsets(reference_coordinates,
+                                                                                            skycrds_cat,
+                                                                                            refflux=reftb['flux'],
+                                                                                            skyflux=cat[flux_colname],
+                                                                                            sel=slice(None),
+                                                                                            verbose=True,
+                                                                                            filtername=filtername,
+                                                                                            ab=ab,
+                                                                                            expno=expno,
+                                                                                            total_dra=raoffset,
+                                                                                            total_ddec=decoffset,
+                                                                                            )
 
                     if keep.sum() < 5:
                         print(fitsfn)
@@ -212,6 +216,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
                         "Exposure": int(expno),
                         "Filter": filtername,
                         "Module": module,
+                        'ab': ab.strip('1234long'),
                         "nmatch": keep.sum(),
                         'RAOFF_hdr': raoffset,
                         'DECOFF_hdr': decoffset,
@@ -219,8 +224,6 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
     tbl = Table(rows)
     tbl.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}.csv", format='ascii.csv', overwrite=True)
-
-    # TODO: aggregate with weighted mean (or maybe we don't wnat that...)
 
     gr = tbl.group_by(['Filter', 'Module', 'Visit'])
     agg = gr.groups.aggregate(np.mean)
@@ -234,3 +237,16 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
     agg['ddec_med'] = aggmed['ddec']
     agg['nmatch_sum'] = aggsum['nmatch']
     agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average.csv", format='ascii.csv', overwrite=True)
+
+    gr = tbl.group_by(['Filter', 'ab', 'Visit'])
+    agg = gr.groups.aggregate(np.mean)
+    del agg['Exposure']
+    aggstd = gr.groups.aggregate(np.std)
+    aggmed = gr.groups.aggregate(np.median)
+    aggsum = gr.groups.aggregate(np.sum)
+    agg['dra_rms'] = aggstd['dra']
+    agg['ddec_rms'] = aggstd['ddec']
+    agg['dra_med'] = aggmed['dra']
+    agg['ddec_med'] = aggmed['ddec']
+    agg['nmatch_sum'] = aggsum['nmatch']
+    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average_lockmodules.csv", format='ascii.csv', overwrite=True)
