@@ -270,6 +270,7 @@ def save_photutils_results(result, ww, filename,
     result.meta['detector'] = detector
     result.meta['pixscale'] = pixscale.to(u.deg).value
     result.meta['pixscale_as'] = pixscale.to(u.arcsec).value
+    result.meta['proposal_id'] = options.proposal_id
 
     if 'RAOFFSET' in im1[0].header:
         result.meta['RAOFFSET'] = im1[0].header['RAOFFSET']
@@ -299,6 +300,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
                              basepath, filtername, module, desat, bgsub, exposure_, visitid_,
                              psf=None,
                              blur=False,
+                             options=None,
                              fpsf=""):
     print("Saving crowdsource results.")
     blur_ = "_blur" if blur else ""
@@ -322,6 +324,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     stars.meta['detector'] = detector
     stars.meta['pixscale'] = pixscale.to(u.deg).value
     stars.meta['pixscale_as'] = pixscale.to(u.arcsec).value
+    stars.meta['proposal_id'] = options.proposal_id
     if exposure_:
         stars.meta['exposure'] = exposure_
     if visitid_:
@@ -850,6 +853,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                              blur=options.blur,
                                              exposure_=exposure_,
                                              visitid_=visitid_,
+                                             options=options,
                                              suffix="unweighted", psf=None)
 
             zoomcut = slice(128, 256), slice(128, 256)
@@ -907,6 +911,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                                  exposure_=exposure_,
                                                  visitid_=visitid_,
                                                  psf=psf if refit_psf else None,
+                                                 options=options,
                                                  suffix=f"nsky{nsky}")
 
                 zoomcut = slice(128, 256), slice(128, 256)

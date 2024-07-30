@@ -121,17 +121,20 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
         here; I want to be able to measure the alignment and be sure it's right
         before applying it.
     """
-    visit = tbl.meta['VISIT']
+    visit = int(tbl.meta['VISIT'])
     exposure = tbl.meta['EXPOSURE']
     thismodule = tbl.meta['MODULE']
     filtername = tbl.meta['FILTER']
 
-    match = ((offsets_table['Visit'] == visit) &
+    offsets_visit_number = np.array([int(vis[-3:]) for vis in offsets_table['Visit']])
+
+    match = ((offsets_visit_number == visit) &
              (offsets_table['Exposure'] == exposure) &
              ((offsets_table['Module'] == thismodule) | (offsets_table['Module'] == thismodule.strip('1234'))) &
              (offsets_table['Filter'] == filtername)
              )
 
+    assert match.sum() == 1
     row = offsets_table[match]
 
     raoffset = tbl.meta['RAOFFSET'] * u.arcsec
