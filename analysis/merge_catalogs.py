@@ -122,8 +122,10 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
         before applying it.
     """
     visit = int(tbl.meta['VISIT'])
-    exposure = tbl.meta['EXPOSURE']
+    exposure = int(tbl.meta['EXPOSURE'][-5:])
     thismodule = tbl.meta['MODULE']
+    if thismodule.endswith('a') or thismodule.endswith('b'):
+        thismodule = thismodule+'long'
     filtername = tbl.meta['FILTER']
 
     offsets_visit_number = np.array([int(vis[-3:]) for vis in offsets_table['Visit']])
@@ -140,17 +142,16 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
     raoffset = tbl.meta['RAOFFSET'] * u.arcsec
     decoffset = tbl.meta['DEOFFSET'] * u.arcsec
 
-    dra = row['dra']*u.arcsec
-    ddec = row['ddec']*u.arcsec
+    dra = row['dra'][0]*u.arcsec
+    ddec = row['ddec'][0]*u.arcsec
 
     skycoord_colname = 'skycoord' if 'skycoord' in tbl.colnames else 'skycoord_centroid'
 
     skycoord = tbl[skycoord_colname]
-    skycoord = SkyCoord(ra=skycoord.ra - raoffset + dra)
-    skycoord = SkyCoord(dec=skycoord.dec - decoffset + ddec)
+    skycoord = SkyCoord(ra=skycoord.ra - raoffset + dra, dec=skycoord.dec - decoffset + ddec, frame=skycoord.frame)
     tbl[skycoord_colname] = skycoord
 
-    print(f"Shifted table from {raoffset},{decoffset} to {dra},{ddec}, a difference of {dra-raoffset},{ddec-decoffset}")
+    print(f"Shifted table from {raoffset:0.4f},{decoffset:0.4f} to {dra:0.4f},{ddec:0.4f}, a difference of {dra-raoffset:0.4f},{ddec-decoffset:0.4f}")
 
     return tbl
 
@@ -211,7 +212,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
 
             newcrds = crds[keep]
             basecrds = SkyCoord([basecrds, newcrds])
-            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''}")
+            print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]")
             # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
         print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
 
@@ -315,7 +316,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 arrays[key][match_inds[keep], ii] = tbl[key][keep]
         arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
         arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
-        print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''}", flush=True)
+        print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]", flush=True)
 
     print("Compiling arrays into table", flush=True)
     print(f"Column names are {arrays.keys()} and should be {column_names}", flush=True)
@@ -1127,6 +1128,9 @@ def main():
 
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
 
+    offsets_tables = {'1182': Table.read(f'{basepath}/catalogs/dao_basic_based_nircam-f444w_reference_astrometric_catalog.fits'),
+                      '2221': None}
+
     # need to have incrementing _before_ test
     index = -1
 
@@ -1170,6 +1174,7 @@ def main():
                                                                     suffix=suffix,
                                                                     target=target,
                                                                     exposure_numbers=np.arange(1, options.max_expnum + 1),
+                                                                    offsets_table=offsets_tables[progid],
                                                                     method=method,
                                                                     basepath=basepath)
                                             print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")

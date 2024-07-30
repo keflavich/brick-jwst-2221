@@ -55,6 +55,9 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
         # magnitude-style
         ratio = np.log(skyflux[idx[keep]]) - np.log(refflux[keep])
 
+        # masks break all the math below?
+        ratio = np.where(ratio.mask, np.nan, ratio.data)
+
         reject = np.zeros(ratio.size, dtype='bool')
         if ratio_match:
             rejection_data = []
@@ -63,10 +66,10 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
                 med = np.nanmedian(ratio[~reject])
                 reject = (ratio < (med - nsigma_reject * madstd)) | (ratio > (med + nsigma_reject * madstd)) | reject
                 rejection_data.append([med, madstd, reject.sum()])
-            if np.all(reject):
-                print("ALL SOURCES WERE REJECTED - this isn't really possible so it indicates an error")
-                print(f"Iterations were: {rejection_data}")
-                reject = np.zeros(ratio.size, dtype='bool')
+                if np.all(reject):
+                    print(f"ALL SOURCES WERE REJECTED - this isn't really possible so it indicates an error {ii}")
+                    print(f"Iterations were: {rejection_data}")
+                    reject = np.zeros(ratio.size, dtype='bool')
 
         # dra and ddec should be the vector added to CRVAL to put the image in the right place
         dra = -(skycrds_cat[sel][idx[keep][~reject]].ra - reference_coordinates[keep][~reject].ra).to(u.arcsec)

@@ -26,10 +26,11 @@ def main(return_method=None, return_filter=None):
     """
     basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
-    for filtername, vvvcatfn in zip(('f405n', 'f200w', 'f444w'),
+    for filtername, vvvcatfn in zip(('f405n', 'f444w', 'f200w',),
                                     ('F405N/pipeline/jw02221-o001_t001_nircam_clear-f405n-merged_vvvcat.ecsv',
                                      'catalogs/jw01182_VVV_reference_catalog.ecsv',
-                                     'catalogs/jw01182_VVV_reference_catalog.ecsv')):
+                                     'catalogs/jw01182_VVV_reference_catalog.ecsv',
+                                     )):
         print()
         print(filtername)
         for tblfilename, method in zip((f'{basepath}/catalogs/{filtername}_merged_indivexp_merged_crowdsource_nsky0.fits',
@@ -45,7 +46,7 @@ def main(return_method=None, return_filter=None):
                 sel = ((tbl['qf'] > 0.95) & (tbl['spread_model'] < 0.25) & (tbl['fracflux'] > 0.9) & (tbl[flux_colname] > 0))
             elif 'qfit' in tbl.colnames:
                 flux_colname = 'flux_fit'
-                sel = ((tbl['qfit'] < 0.4) & (tbl['cfit'] < 0.4) & (tbl[flux_colname] > 0)) & (np.isfinite(tbl['skycoord'].ra) & np.isfinite(tbl['skycoord'].dec))
+                sel = ((tbl['qfit'] < 0.1) & (tbl['cfit'] < 0.1) & (tbl[flux_colname] > 0)) & (np.isfinite(tbl['skycoord'].ra) & np.isfinite(tbl['skycoord'].dec))
 
             print(f"QFs are good for {sel.sum()} out of {len(tbl)} catalog entries")
             print(f"Making the reference catalog from {sel.sum()} out of {len(tbl)} catalog entries")
