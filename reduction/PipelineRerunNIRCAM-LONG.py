@@ -79,7 +79,7 @@ fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
                }
 
-refnames = {'2221': 'F405ref', # NOTE TO SELF FINISH HERE...
+refnames = {'2221': 'F405ref',
             '1182': 'VVV',
             }
 
