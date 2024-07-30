@@ -272,6 +272,8 @@ def save_crowdsource_results(results, ww, filename, suffix,
     stars.meta['pixscale_as'] = pixscale.to(u.arcsec).value
     if exposure_:
         stars.meta['exposure'] = exposure_
+    if visitid_:
+        stars.meta['visit'] = int(visitid_[-3:])
 
     tblfilename = (f"{basepath}/{filtername}/"
                    f"{filtername.lower()}_{module}{visitid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}"
@@ -941,6 +943,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         basic_daophot_catalog_fn = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits"
         if options.each_exposure:
             result.meta['exposure'] = exposure_
+        if visitid_ is not None:
+            result.meta['visit'] = int(visitid_[-3:])
         result.meta['filename'] = filename
         result.meta['filter'] = filtername
         result.meta['module'] = module
@@ -1058,6 +1062,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         result2['skycoord_centroid'] = coords2
         if options.each_exposure:
             result2.meta['exposure'] = exposure_
+        if visitid_ is not None:
+            result2.meta['visit'] = int(visitid_[-3:])
         result2.meta['filename'] = filename
         result2.meta['filter'] = filtername
         result2.meta['module'] = module

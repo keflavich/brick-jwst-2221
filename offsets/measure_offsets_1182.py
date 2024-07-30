@@ -35,9 +35,9 @@ else:
     Vizier.ROW_LIMIT = 1e5
     coord = SkyCoord(266.534963671, -28.710074995, unit=(u.deg, u.deg), frame='fk5')
     reftb_vvv = Vizier.query_region(coordinates=coord,
-                                 width=7*u.arcmin,
-                                 height=7*u.arcmin,
-                                 catalog=['II/348/vvv2'])[0]
+                                    width=7*u.arcmin,
+                                    height=7*u.arcmin,
+                                    catalog=['II/348/vvv2'])[0]
     reftb_vvv['RA'] = reftb_vvv['RAJ2000']
     reftb_vvv['DEC'] = reftb_vvv['DEJ2000']
 
@@ -49,8 +49,10 @@ else:
     reftb_vvv.write(vvvfn.replace(".ecsv", ".fits"), overwrite=True)
 
 
-for reftbfn, reftbname in ((vvvfn, 'VVV'),
+for reftbfn, reftbname in (
                            (f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', 'F405ref'),
+                           (vvvfn, 'VVV'),
+                           ('/blue/adamginsburg/adamginsburg/jwst/brick//catalogs/f200w_merged_indivexp_merged_dao_basic.fits', 'F200ref'),
                            ):
     print()
     print(reftbname)
@@ -105,9 +107,9 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        for filtername in 'F200W,F356W,F444W,F115W'.split(","):
+        for filtername in 'F444W,F200W,F356W,F115W'.split(","):
             for visit in ('002', '001'):
-                print(f"Working on filter {filtername} visit {visit}")
+                print(f"Working on filter {filtername} visit {visit} with reference table {reftbname}")
                 print(f"{'filt':5s}, {'ab':3s}, {'expno':5s}, {'ttl_dra':8s}, {'ttl_ddec':8s}, {'med_dra':8s}, {'med_ddec':8s}, {'std_dra':8s}, {'std_dec':8s}, nmatch, nreject, niter")
                 # pipeline/tweakreg version globstr = f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"
                 # F405N/f405n_nrcb_visit001_exp00008_crowdsource_nsky0.fits
@@ -238,7 +240,7 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
     agg['nmatch_sum'] = aggsum['nmatch']
     agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average.csv", format='ascii.csv', overwrite=True)
 
-    gr = tbl.group_by(['Filter', 'ab', 'Visit'])
+    gr = tbl.group_by(['Filter', 'Visit'])
     agg = gr.groups.aggregate(np.mean)
     del agg['Exposure']
     aggstd = gr.groups.aggregate(np.std)
@@ -249,4 +251,4 @@ for reftbfn, reftbname in ((vvvfn, 'VVV'),
     agg['dra_med'] = aggmed['dra']
     agg['ddec_med'] = aggmed['ddec']
     agg['nmatch_sum'] = aggsum['nmatch']
-    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average_lockmodules.csv", format='ascii.csv', overwrite=True)
+    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average_lockmodules.cs/std_v", format='ascii.csv', overwrite=True)

@@ -79,6 +79,10 @@ fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
                }
 
+refnames = {'2221': 'F405ref', # NOTE TO SELF FINISH HERE...
+            '1182': 'VVV',
+            }
+
 # it's very difficult to modify the Webb pipeline in this way
 # # replace Image2Pipeline's 'resample' with one that uses our hand-corrected coordinates
 # def pre_resample(func):
@@ -578,11 +582,12 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
         module = 'nrc' + mod.meta.instrument.module.lower()
 
     if (field == '004' and proposal_id == '1182') or (field == '001' and proposal_id == '2221'):
+        refname = refnames[proposal_id]
         exposure = int(fn.split("_")[-3])
         thismodule = fn.split("_")[-2]
         visit = fn.split("_")[0]
         if use_average:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_F405ref_average.csv'
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_{refname}_average.csv'
             print(f"Using average offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
             match = (((offsets_tbl['Module'] == thismodule) |
@@ -594,7 +599,7 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
             row = offsets_tbl[match]
             print(f'Running manual align for merged for {filtername} {row["Module"][0]}.')
         else:
-            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_F405ref.csv'
+            tblfn = f'{basepath}/offsets/Offsets_JWST_Brick{proposal_id}_{refname}.csv'
             print(f"Using offset table {tblfn}")
             offsets_tbl = Table.read(tblfn)
             match = ((offsets_tbl['Visit'] == visit) &

@@ -111,14 +111,44 @@ def nanaverage_dask(data, weights, **kwargs):
     return avg.compute()
 
 
+def shift_individual_catalog(tbl, offsets_table):
+    """
+    offsets_table:
+        A table to use to re-calculate sky coordinates from the WCS after
+        shifting it.  This can be used because the catalogs are all
+        intrinsically in pixel space, so changing the shift after the fact is OK.
+        Using an offset table enables splitting out the re-alignment task from
+        here; I want to be able to measure the alignment and be sure it's right
+        before applying it.
+    """
+    match = ((offsets_table['Visit'] == visit) &
+             (offsets_table['Exposure'] == exposure) &
+             ((offsets_table['Module'] == thismodule) | (offsets_table['Module'] == thismodule.strip('1234'))) &
+             (offsets_table['Filter'] == filtername)
+             )
+    if 'Visit' in offsets_table.colnames:
+        match &= (offsets_table['Visit'] == visit)
+    row = offsets_table[match]
+
+
 def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask,
                         min_offset=0.01*u.arcsec,
+                        offsets_table=None,
                         ):
     """
 
     min_offset : 
         The minimum allowed offset to declare a 'new' star.  Anything below this is assumed same star.
+
+    offsets_table:
+        A table to use to re-calculate sky coordinates from the WCS after
+        shifting it.  This can be used because the catalogs are all
+        intrinsically in pixel space, so changing the shift after the fact is OK.
+        Using an offset table enables splitting out the re-alignment task from
+        here; I want to be able to measure the alignment and be sure it's right
+        before applying it.
     """
+
     # set up DAO vs crowd column names
     if 'qf' in tbls[0].colnames:
         qfcn = 'qf'

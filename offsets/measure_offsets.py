@@ -33,6 +33,8 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
     dra = -(skycrds_cat[sel][idx[mutual_matches]].ra - reference_coordinates[reverse_idx[reverse_mutual_matches]].ra).to(u.arcsec)
     ddec = -(skycrds_cat[sel][idx[mutual_matches]].dec - reference_coordinates[reverse_idx[reverse_mutual_matches]].dec).to(u.arcsec)
 
+    success = False
+
     iteration = 0
     while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
 
@@ -44,6 +46,10 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
 
         keep = (offset < max_offset) & mutual_matches
         skykeep = (reverse_sep < max_offset) & reverse_mutual_matches
+        if keep.sum() < 5:
+            print(f"Only {keep.sum()} sources matched - this is too few to be useful")
+            print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {keep.sum():6d}, {iteration:5d}", flush=True)
+            break
 
         # ratio = skyflux[idx[keep]] / refflux[keep]
         # magnitude-style
@@ -86,12 +92,14 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
 
         skycrds_cat = SkyCoord(ra=skycrds_cat.ra + med_dra, dec=skycrds_cat.dec + med_ddec, frame=skycrds_cat.frame)
 
+        success = True
+
         iteration += 1
         if iteration > 50:
             break # there is at least one case in which we converged to an oscillator
             raise ValueError("Iteration is not converging")
 
-    if verbose:
+    if verbose and success:
         print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {total_dra.value:8.3f}, {total_ddec.value:8.3f}, {med_dra.value:8.3f}, {med_ddec.value:8.3f}, {std_dra.value:8.3f}, {std_ddec.value:8.3f}, {keep.sum():6d}, {reject.sum():7d}, {iteration:5d}", flush=True)
 
     return total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration
