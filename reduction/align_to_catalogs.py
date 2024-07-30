@@ -110,34 +110,34 @@ def retrieve_vvv(
     width = fov[0].width
     height, width = width, height # CARTA wrote it wrong
 
-    vvvdr2filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
+    vvvdr4filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_vvvcat.ecsv'
 
-    if os.path.exists(vvvdr2filename):
-        vvvdr2 = Table.read(vvvdr2filename)
-        vvvdr2['RA'] = vvvdr2['RAJ2000']
-        vvvdr2['DEC'] = vvvdr2['DEJ2000']
+    if os.path.exists(vvvdr4filename):
+        vvvdr4 = Table.read(vvvdr4filename)
+        vvvdr4['RA'] = vvvdr4['RAJ2000']
+        vvvdr4['DEC'] = vvvdr4['DEJ2000']
 
         # FK5 because it says 'J2000' on the Vizier page (same as twomass)
-        vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
-        if 'skycoord' not in vvvdr2.colnames:
-            vvvdr2['skycoord'] = vvvdr2_crds
-            vvvdr2.write(vvvdr2filename, overwrite=True)
-            vvvdr2.write(vvvdr2filename.replace(".ecsv", ".fits"), overwrite=True)
+        vvvdr4_crds = SkyCoord(vvvdr4['RAJ2000'], vvvdr4['DEJ2000'], frame='fk5')
+        if 'skycoord' not in vvvdr4.colnames:
+            vvvdr4['skycoord'] = vvvdr4_crds
+            vvvdr4.write(vvvdr4filename, overwrite=True)
+            vvvdr4.write(vvvdr4filename.replace(".ecsv", ".fits"), overwrite=True)
     else:
         Vizier.ROW_LIMIT = 5e4
-        vvvdr2 = Vizier.query_region(coordinates=coord, width=width, height=height, catalog=['II/348/vvv2'])[0]
-        vvvdr2['RA'] = vvvdr2['RAJ2000']
-        vvvdr2['DEC'] = vvvdr2['DEJ2000']
+        vvvdr4 = Vizier.query_region(coordinates=coord, width=width, height=height, catalog=['II/376/vvv4'])[0]
+        vvvdr4['RA'] = vvvdr4['RAJ2000']
+        vvvdr4['DEC'] = vvvdr4['DEJ2000']
 
         # FK5 because it says 'J2000' on the Vizier page (same as twomass)
-        vvvdr2_crds = SkyCoord(vvvdr2['RAJ2000'], vvvdr2['DEJ2000'], frame='fk5')
-        vvvdr2['skycoord'] = vvvdr2_crds
+        vvvdr4_crds = SkyCoord(vvvdr4['RAJ2000'], vvvdr4['DEJ2000'], frame='fk5')
+        vvvdr4['skycoord'] = vvvdr4_crds
 
-        vvvdr2.write(vvvdr2filename, overwrite=True)
-        vvvdr2.write(vvvdr2filename.replace(".ecsv", ".fits"), overwrite=True)
+        vvvdr4.write(vvvdr4filename, overwrite=True)
+        vvvdr4.write(vvvdr4filename.replace(".ecsv", ".fits"), overwrite=True)
 
-    assert 'skycoord' in vvvdr2.colnames
-    return vvvdr2_crds, vvvdr2
+    assert 'skycoord' in vvvdr4.colnames
+    return vvvdr4_crds, vvvdr4
 
 def realign_to_vvv(
     basepath = '/orange/adamginsburg/jwst/brick/',
@@ -157,14 +157,14 @@ def realign_to_vvv(
     ksmag_limit is a *lower* limit (we want fainter sources from VVV), while mag_limit is an *upper limit* - we want brighter sources from JWST
     """
 
-    vvvdr2_crds, vvvdr2 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname, fieldnumber=fieldnumber)
+    vvvdr4_crds, vvvdr4 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname, fieldnumber=fieldnumber)
 
     if ksmag_limit:
-        ksmag_sel = vvvdr2['Ksmag3'] > ksmag_limit
-        log.info(f"Kept {ksmag_sel.sum()} out of {len(vvvdr2)} VVV stars using ksmag_limit>{ksmag_limit}")
-        vvvdr2_crds = vvvdr2_crds[ksmag_sel]
+        ksmag_sel = vvvdr4['Ksmag3'] > ksmag_limit
+        log.info(f"Kept {ksmag_sel.sum()} out of {len(vvvdr4)} VVV stars using ksmag_limit>{ksmag_limit}")
+        vvvdr4_crds = vvvdr4_crds[ksmag_sel]
 
-    return realign_to_catalog(vvvdr2_crds, filtername=filtername,
+    return realign_to_catalog(vvvdr4_crds, filtername=filtername,
                               module=module, basepath=basepath,
                               fieldnumber=fieldnumber,
                               catfile=catfile, imfile=imfile,

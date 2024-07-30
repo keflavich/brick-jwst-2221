@@ -851,14 +851,14 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
 
    # VVV
 
-    vvvdr2 = Vizier.query_region(coordinates=coord, radius=0.5*u.arcsec, catalog=['II/348/vvv2'])
-    if len(vvvdr2) > 0:
-        vvvdr2_ = vvvdr2[0]
-        if len(vvvdr2_) > 0:
-            vvvdr2_crds = SkyCoord(vvvdr2_['RAJ2000'], vvvdr2_['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
-            vvvindex = coord.separation(vvvdr2_crds) < radius
+    vvvdr4 = Vizier.query_region(coordinates=coord, radius=0.5*u.arcsec, catalog=['II/376/vvv4'])
+    if len(vvvdr4) > 0:
+        vvvdr4_ = vvvdr4[0]
+        if len(vvvdr4_) > 0:
+            vvvdr4_crds = SkyCoord(vvvdr4_['RAJ2000'], vvvdr4_['DEJ2000'], frame='fk5', unit=(u.hour, u.deg))
+            vvvindex = coord.separation(vvvdr4_crds) < radius
             #print(len(vvvindex))
-            vvvmatch = vvvdr2_[vvvindex]
+            vvvmatch = vvvdr4_[vvvindex]
     else:
         log.debug("No VVV match")
 
@@ -872,7 +872,7 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
                 filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint']
                 * u.Jy)
 
-    if len(vvvdr2) > 0:
+    if len(vvvdr4) > 0:
         for filtername,colname in [('Z', 'Zmag3'),
                                 ('Y', 'Ymag3'),
                                 ('J', 'Jmag3'),
@@ -881,7 +881,7 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
                                 ]:
             eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
             wavelengths.append(eff_wavelength)
-            if len(vvvdr2_) == 0 or vvvmatch[colname].mask:
+            if len(vvvdr4_) == 0 or vvvmatch[colname].mask:
                 fluxes.append(np.nan * u.Jy)
                 lims.append(mag2flux(lim_dict[filtername], filtername))
             else:

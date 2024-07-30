@@ -37,9 +37,9 @@ else:
     reftb_vvv = Vizier.query_region(coordinates=coord,
                                     width=7*u.arcmin,
                                     height=7*u.arcmin,
-                                    catalog=['II/348/vvv2'])[0]
-    reftb_vvv['RA'] = reftb_vvv['RAJ2000']
-    reftb_vvv['DEC'] = reftb_vvv['DEJ2000']
+                                    catalog=['II/364/virac'])[0]
+    reftb_vvv['RA'] = reftb_vvv['RA_ICRS']
+    reftb_vvv['DEC'] = reftb_vvv['DE_ICRS']
 
     # FK5 because it says 'J2000' on the Vizier page (same as twomass)
     reftb_vvv_crds = SkyCoord(reftb_vvv['RAJ2000'], reftb_vvv['DEJ2000'], frame='fk5')
@@ -196,7 +196,7 @@ for reftbfn, reftbname in (
                                                                                             total_ddec=decoffset,
                                                                                             )
 
-                    if keep.sum() < 5:
+                    if np.sum(keep) < 5:
                         print("FAILURE: ", fitsfn, fn)
                         continue
 
@@ -250,4 +250,4 @@ for reftbfn, reftbname in (
     agg['dra_med'] = aggmed['dra']
     agg['ddec_med'] = aggmed['ddec']
     agg['nmatch_sum'] = aggsum['nmatch']
-    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average_lockmodules.cs/std_v", format='ascii.csv', overwrite=True)
+    agg.write(f"{basepath}/offsets/Offsets_JWST_Brick1182_{reftbname}_average_lockmodules.csv", format='ascii.csv', overwrite=True)
