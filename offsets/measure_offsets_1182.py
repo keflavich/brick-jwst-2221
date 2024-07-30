@@ -159,10 +159,10 @@ for reftbfn, reftbname in (
                     elif handmeasured_offsets is not None:
                         # start by shifting by measured offsets
                         match = ((handmeasured_offsets['Visit'] == visitname) &
-                                (handmeasured_offsets['Exposure'] == int(expno)) &
-                                ((handmeasured_offsets['Module'] == module) | (handmeasured_offsets['Module'] == module.strip('1234'))) &
-                                (handmeasured_offsets['Filter'] == filtername)
-                                )
+                                 (handmeasured_offsets['Exposure'] == int(expno)) &
+                                 ((handmeasured_offsets['Module'] == module) | (handmeasured_offsets['Module'] == module.strip('1234'))) &
+                                 (handmeasured_offsets['Filter'] == filtername)
+                                 )
                         assert match.sum() == 1
                         handsel_row = handmeasured_offsets[match][0]
                         dra_hand, ddec_hand = u.Quantity([handsel_row['dra (arcsec)'], handsel_row['ddec (arcsec)']], u.arcsec)
