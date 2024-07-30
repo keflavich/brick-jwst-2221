@@ -111,7 +111,7 @@ def nanaverage_dask(data, weights, **kwargs):
     return avg.compute()
 
 
-def shift_individual_catalog(tbl, offsets_table):
+def shift_individual_catalog(tbl, offsets_table, verbose=True):
     """
     offsets_table:
         A table to use to re-calculate sky coordinates from the WCS after
@@ -121,23 +121,45 @@ def shift_individual_catalog(tbl, offsets_table):
         here; I want to be able to measure the alignment and be sure it's right
         before applying it.
     """
+    visit = tbl.meta['VISIT']
+    exposure = tbl.meta['EXPOSURE']
+    thismodule = tbl.meta['MODULE']
+    filtername = tbl.meta['FILTER']
+
     match = ((offsets_table['Visit'] == visit) &
              (offsets_table['Exposure'] == exposure) &
              ((offsets_table['Module'] == thismodule) | (offsets_table['Module'] == thismodule.strip('1234'))) &
              (offsets_table['Filter'] == filtername)
              )
-    if 'Visit' in offsets_table.colnames:
-        match &= (offsets_table['Visit'] == visit)
+
     row = offsets_table[match]
+
+    raoffset = tbl.meta['RAOFFSET'] * u.arcsec
+    decoffset = tbl.meta['DEOFFSET'] * u.arcsec
+
+    dra = row['dra']*u.arcsec
+    ddec = row['ddec']*u.arcsec
+
+    skycoord_colname = 'skycoord' if 'skycoord' in tbl.colnames else 'skycoord_centroid'
+
+    skycoord = tbl[skycoord_colname]
+    skycoord = SkyCoord(ra=skycoord.ra - raoffset + dra)
+    skycoord = SkyCoord(dec=skycoord.dec - decoffset + ddec)
+    tbl[skycoord_colname] = skycoord
+
+    print(f"Shifted table from {raoffset},{decoffset} to {dra},{ddec}, a difference of {dra-raoffset},{ddec-decoffset}")
+
+    return tbl
 
 
 def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask,
                         min_offset=0.01*u.arcsec,
                         offsets_table=None,
+                        verbose=True
                         ):
     """
 
-    min_offset : 
+    min_offset :
         The minimum allowed offset to declare a 'new' star.  Anything below this is assumed same star.
 
     offsets_table:
@@ -148,6 +170,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         here; I want to be able to measure the alignment and be sure it's right
         before applying it.
     """
+    if offsets_table is not None:
+        tbls = [shift_individual_catalog(tbl, offsets_table, verbose=verbose) for tbl in tbls]
 
     # set up DAO vs crowd column names
     if 'qf' in tbls[0].colnames:
@@ -594,6 +618,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
                                         exposure_numbers=np.arange(1, 25),
                                         max_visitid=10,
                                         method='crowdsource',
+                                        offsets_table=None,
                                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
 
     desat = "_unsatstar" if desat else ""
@@ -643,7 +668,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
             print('tb.meta:', tb.meta)
             raise ValueError(f"Table file {fn} is not correctly formatted; it is missing FILENAME metadata")
 
-    merged_exposure_table = combine_singleframe(tables)
+    merged_exposure_table = combine_singleframe(tables, offsets_table=offsets_table)
 
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}_allcols.fits"
     print(f"Writing {outfn} with length {len(merged_exposure_table)}")

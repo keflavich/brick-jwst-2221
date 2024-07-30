@@ -49,7 +49,7 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
         if keep.sum() < 5:
             print(f"Only {keep.sum()} sources matched - this is too few to be useful")
             print(f"{filtername:5s}, {ab:3s}, {expno:5s}, {keep.sum():6d}, {iteration:5d}", flush=True)
-            break
+            return 0, 0, 0, 0, 0, 0, [0], [0], [0], 0
 
         # ratio = skyflux[idx[keep]] / refflux[keep]
         # magnitude-style

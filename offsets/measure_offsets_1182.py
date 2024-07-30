@@ -197,9 +197,8 @@ for reftbfn, reftbname in (
                                                                                             )
 
                     if keep.sum() < 5:
-                        print(fitsfn)
-                        print(fn)
-                        raise
+                        print("FAILURE: ", fitsfn, fn)
+                        continue
 
                     rows.append({
                         'Filename': fn,
