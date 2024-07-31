@@ -143,8 +143,8 @@ for reftbfn, reftbname in (
                         sel &= cat['fracflux'] > 0.8
                         cat = cat[sel]
                     elif 'qfit' in cat.colnames:
-                        sel = cat['qfit'] < 0.4
-                        sel &= cat['cfit'] < 0.4
+                        sel = cat['qfit'] < 0.1
+                        sel &= cat['cfit'] < 0.1
                         cat = cat[sel]
 
                     header = ffh['SCI'].header

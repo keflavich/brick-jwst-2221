@@ -83,7 +83,8 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
         for filtername in 'F466N,F405N,F410M,F212N,F182M,F187N'.split(","):
             # old version cats = sorted(glob.glob(f"{basepath}/{filtername}/pipeline/jw{project_id}{obsid}{visit}_*nrc*destreak_cat.fits"))
             # F405N/f405n_nrcb_visit001_exp00008_crowdsource_nsky0.fits
-            globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit*_exp*_crowdsource_nsky0.fits"
+            # globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit*_exp*_crowdsource_nsky0.fits"
+            globstr = f"{basepath}/{filtername}/{filtername.lower()}_*visit{visit}_exp*_daophot_basic.fits"
             cats = sorted(glob.glob(globstr))
             if len(cats) == 0:
                 raise ValueError(f"No matches to {globstr}")
@@ -116,6 +117,10 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
                     sel = cat['qf'] > 0.95
                     sel &= cat['fracflux'] > 0.8
                     cat = cat[sel]
+                elif 'qfit' in cat.colnames:
+                    sel = cat['qfit'] < 0.1
+                    sel &= cat['cfit'] < 0.1
+                    cat = cat[sel]
 
                 if 'RAOFFSET' in header:
                     raoffset = u.Quantity(header['RAOFFSET'], u.arcsec)
@@ -127,12 +132,13 @@ for reftbfn, reftbname in ((f'{basepath}/F212N/pipeline/jw02221-o001_t001_nircam
 
                 flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
 
-                skycrd_cat = cat['skycoord'] if 'skycoord' in cat.colnames else cat['sky_centroid']
+                skycrd_cat = cat['skycoord'] if 'skycoord' in cat.colnames else cat['skycoord_centroid']
+                refflux_colname = 'flux' if 'flux' in reftb.colnames else 'flux_fit'
 
                 total_dra, total_ddec, med_dra, med_ddec, std_dra, std_ddec, keep, skykeep, reject, iteration = measure_offsets(reference_coordinates,
                                                                                                                        skycrd_cat,
                                                                                                                        max_offset=0.2*u.arcsec,
-                                                                                                                       refflux=reftb['flux'],
+                                                                                                                       refflux=reftb[refflux_colname],
                                                                                                                        skyflux=cat[flux_colname],
                                                                                                                        sel=slice(None),
                                                                                                                        verbose=True,

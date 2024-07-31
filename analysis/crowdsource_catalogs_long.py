@@ -56,15 +56,17 @@ pl.rcParams['image.origin'] = 'lower'
 import os
 print("Importing webbpsf", flush=True)
 import webbpsf
+print(f"Webbpsf version: {webbpsf.__version__}")
 from webbpsf.utils import to_griddedpsfmodel
 import datetime
+print("Done with imports", flush=True)
+
 
 def print(*args, **kwargs):
     now = datetime.datetime.now().isoformat()
     from builtins import print as printfunc
     return printfunc(f"{now}:", *args, **kwargs)
 
-print("Done with imports", flush=True)
 
 class WrappedPSFModel(crowdsource.psf.SimplePSF):
     """
@@ -215,7 +217,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 
     axlims = pl.axis()
     if zoomcut[0].start:
-        #pl.axis([0,zoomcut[0].stop-zoomcut[0].start, 0, zoomcut[1].stop-zoomcut[1].start])
+        # pl.axis([0,zoomcut[0].stop-zoomcut[0].start, 0, zoomcut[1].stop-zoomcut[1].start])
         ok = ((stars['x'] >= zoomcut[1].start) &
               (stars['x'] <= zoomcut[1].stop) &
               (stars['y'] >= zoomcut[0].start) &
@@ -343,7 +345,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     skymskyhdu = fits.PrimaryHDU(data=skymsky, header=im1[1].header)
     modskyhdu = fits.ImageHDU(data=modsky, header=im1[1].header)
     # PSF doesn't need saving / can't be saved, it's a function
-    #psfhdu = fits.ImageHDU(data=psf)
+    # psfhdu = fits.ImageHDU(data=psf)
     hdul = fits.HDUList([skymskyhdu, modskyhdu])
     hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{visitid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
 

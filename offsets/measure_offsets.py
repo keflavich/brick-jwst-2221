@@ -55,8 +55,9 @@ def measure_offsets(reference_coordinates, skycrds_cat, refflux, skyflux, total_
         # magnitude-style
         ratio = np.log(skyflux[idx[keep]]) - np.log(refflux[keep])
 
-        # masks break all the math below?
-        ratio = np.where(ratio.mask, np.nan, ratio.data)
+        if hasattr(ratio, 'mask'):
+            # masks break all the math below?
+            ratio = np.where(ratio.mask, np.nan, ratio.data)
 
         reject = np.zeros(ratio.size, dtype='bool')
         if ratio_match:
