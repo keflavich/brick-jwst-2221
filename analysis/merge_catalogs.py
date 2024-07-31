@@ -23,6 +23,7 @@ from astropy import units as u
 from astroquery.svo_fps import SvoFps
 from astropy.stats import sigma_clip, mad_std
 import dask
+import dask.array
 
 from tqdm.auto import tqdm
 
@@ -121,7 +122,15 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
         here; I want to be able to measure the alignment and be sure it's right
         before applying it.
     """
-    visit = int(tbl.meta['VISIT'])
+    if 'Visit' in tbl.meta:
+        visit = int(tbl.meta['Visit'])
+    elif 'VISIT' in tbl.meta:
+        visit = int(tbl.meta['VISIT'])
+    elif 'visit' in tbl.meta:
+        visit = int(tbl.meta['visit'])
+    else:
+        print(tbl.meta)
+        raise KeyError("'Visit' not found in meta")
     exposure = int(tbl.meta['EXPOSURE'][-5:])
     thismodule = tbl.meta['MODULE']
     if thismodule.endswith('a') or thismodule.endswith('b'):
@@ -1128,7 +1137,7 @@ def main():
 
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
 
-    offsets_tables = {'1182': Table.read(f'{basepath}/catalogs/dao_basic_based_nircam-f444w_reference_astrometric_catalog.fits'),
+    offsets_tables = {'1182': Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182_F444ref.csv'),
                       '2221': None}
 
     # need to have incrementing _before_ test

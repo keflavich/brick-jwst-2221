@@ -50,6 +50,7 @@ else:
 
 
 for reftbfn, reftbname in (
+                           (f'{basepath}/catalogs/dao_basic_based_nircam-f444w_reference_astrometric_catalog.fits', 'F444ref'),
                            (f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits', 'F405ref'),
                            (vvvfn, 'VVV'),
                            ('/blue/adamginsburg/adamginsburg/jwst/brick//catalogs/f200w_merged_indivexp_merged_dao_basic.fits', 'F200ref'),
@@ -181,11 +182,12 @@ for reftbfn, reftbname in (
                         skycrds_cat = ww.pixel_to_world(cat['x_fit'], cat['y_fit'])
 
                     flux_colname = 'flux' if 'flux' in cat.colnames else 'flux_fit'
+                    refflux_colname = 'flux' if 'flux' in reftb.colnames else 'flux_fit'
 
                     (total_dra, total_ddec, med_dra, med_ddec,
                      std_dra, std_ddec, keep, skykeep, reject, iteration) = measure_offsets(reference_coordinates,
                                                                                             skycrds_cat,
-                                                                                            refflux=reftb['flux'],
+                                                                                            refflux=reftb[refflux_colname],
                                                                                             skyflux=cat[flux_colname],
                                                                                             sel=slice(None),
                                                                                             verbose=True,
