@@ -690,9 +690,9 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     # make a table that is nearly equivalent to standard tables (with no 'x' or 'y' coordinate)
     minimal_version = {colname: merged_exposure_table[f'{colname}_avg']
                        for colname in column_names if f'{colname}_avg' in merged_exposure_table.colnames}
-    for key in ('dra', 'ddec', 'std_ra', 'std_dec', 'nmatch', 'nmatch_good', f'{flux_error_colname}_prop'):
+    for key in ('dra_avg', 'ddec_avg', 'std_ra', 'std_dec', 'nmatch', 'nmatch_good', f'{flux_error_colname}_prop'):
         if key in merged_exposure_table.colnames:
-            minimal_version[key] = merged_exposure_table[key]
+            minimal_version[key.split("_avg")[0]] = merged_exposure_table[key]
 
     minimal_table = Table(minimal_version)
     minimal_table.meta = merged_exposure_table.meta.copy()
@@ -707,6 +707,9 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}.fits"
     print(f"Final table length is {len(minimal_table)}.  Writing {outfn}")
     minimal_table.write(outfn, overwrite=True)
+
+    for colname in minimal_table.colnames:
+        assert minimal_table[colname].ndim == 1
 
     return minimal_table
 
