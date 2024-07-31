@@ -651,7 +651,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
         # flux_colname = 'flux_fit'
     elif method in ('dao', 'daophot', 'basic', 'daobasic', 'iterative', 'daoiterative'):
         flux_error_colname = 'flux_err'
-        column_names = ('flux_fit', flux_error_colname, 'skycoord', 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size')
+        column_names = ('flux_fit', flux_error_colname, 'skycoord', 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_size')
         # flux_colname = 'flux'
         method_suffix = 'daophot'
     else:

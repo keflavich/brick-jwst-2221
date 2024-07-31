@@ -258,9 +258,18 @@ def save_photutils_results(result, ww, filename,
     blur_ = "_blur" if blur else ""
 
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
-    coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+    if 'x_fit' in result.colnames:
+        coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
+        result['skycoord_centroid'] = coords
+    elif 'xcentroid' in result.colnames:
+        coords = ww.pixel_to_world(result['xcentroid'], result['ycentroid'])
+        result['skycoord_centroid'] = coords
+    elif 'x_init' in result.colnames:
+        coords = ww.pixel_to_world(result['x_init'], result['y_init'])
+        result['skycoord_init'] = coords
+    else:
+        raise KeyError(f"No x value found in {result.colnames}")
     print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
-    result['skycoord_centroid'] = coords
     detector = "" # no detector #'s for long
     if options.each_exposure:
         result.meta['exposure'] = exposure_
