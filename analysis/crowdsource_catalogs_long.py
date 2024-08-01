@@ -301,7 +301,7 @@ def save_photutils_results(result, ww, filename,
     print("tblfilename={tblfilename}, filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
 
     result.write(tblfilename, overwrite=True)
-    print(f"Completed BASIC photometry, and wrote out file {tblfilename}")
+    print(f"Completed {basic_or_iterative} photometry, and wrote out file {tblfilename}")
 
     return result
 

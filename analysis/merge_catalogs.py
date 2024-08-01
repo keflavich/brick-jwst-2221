@@ -716,6 +716,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
 
 def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
                       epsf=False, fitpsf=False, blur=False, target='brick',
+                      min_qf=0.75,
                       indivexp=False,
                       basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     if epsf:
@@ -766,7 +767,14 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
 
     for catfn in catfns:
         print(catfn, getmtime(catfn))
-    tbls = [Table.read(catfn) for catfn in tqdm(catfns, desc='Reading Tables')]
+
+    # added a fq cut at read time to reduce memory usage during merge
+    def read_cat(catfn, min_qf=min_qf):
+        tbl = Table.read(catfn)
+        if min_qf is not None:
+            tbl = tbl[tbl['qf'] > min_qf]
+        return tbl
+    tbls = [read_cat(catfn) for catfn in tqdm(catfns, desc='Reading Tables')]
 
     for catfn, tbl in zip(catfns, tbls):
         tbl.meta['filename'] = catfn
