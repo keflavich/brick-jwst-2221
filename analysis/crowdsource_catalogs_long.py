@@ -341,6 +341,13 @@ def save_crowdsource_results(results, ww, filename, suffix,
     if visitid_:
         stars.meta['visit'] = int(visitid_[-3:])
 
+    if 'RAOFFSET' in im1[0].header:
+        stars.meta['RAOFFSET'] = im1[0].header['RAOFFSET']
+        stars.meta['DEOFFSET'] = im1[0].header['DEOFFSET']
+    elif 'RAOFFSET' in im1[1].header:
+        stars.meta['RAOFFSET'] = im1[1].header['RAOFFSET']
+        stars.meta['DEOFFSET'] = im1[1].header['DEOFFSET']
+
     tblfilename = (f"{basepath}/{filtername}/"
                    f"{filtername.lower()}_{module}{visitid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}"
                    f"_crowdsource_{suffix}.fits")
