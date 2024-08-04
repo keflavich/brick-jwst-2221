@@ -1,5 +1,6 @@
 import numpy as np
-import sys, imp
+import sys
+import importlib as imp
 import regions
 import warnings
 import glob
