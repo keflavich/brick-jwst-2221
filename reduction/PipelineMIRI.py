@@ -266,39 +266,43 @@ def main(filtername, Observations=None, regionname='brick',
 
             fix_alignment(member['expname'], proposal_id=proposal_id,
                           field=field, basepath=basepath,
-                          filtername=filtername, use_average=use_average)
+                          regionname=regionname,
+                          filtername=filtername,
+                          use_average=use_average)
 
         asn_file_each = asn_file
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
         if True:
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            # just use 2MASS b/c the MIRI stars are all super bright
+            abs_refcat = f'{basepath}/catalogs/twomass.fits'
             reftbl = Table.read(abs_refcat)
             # For non-F410M, try aligning to F410M instead of VVV?
-            reftblversion = reftbl.meta['VERSION']
-            reftbl.meta['name'] = 'F405N Reference Astrometric Catalog'
+            # reftblversion = reftbl.meta['VERSION']
+            reftbl.meta['name'] = '2MASS Reference Astrometric Catalog'
 
             tweakreg_parameters['abs_searchrad'] = 0.4
             # try forcing searchrad to be tighter to avoid bad crossmatches
             # (the raw data are very well-aligned to begin with, though CARTA
             # can't display them b/c they are using SIP)
             tweakreg_parameters['searchrad'] = 0.05
-            print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
+            print(f"Reference catalog is {abs_refcat} with version 2MASS")
 
         tweakreg_parameters.update({'abs_refcat': abs_refcat,})
 
-        print(f"Running tweakreg")
+        print("Running tweakreg")
         calwebb_image3.Image3Pipeline.call(
             asn_file_each,
             steps={'tweakreg': tweakreg_parameters,
                    # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
                    'skymatch': {'save_results': True,
                                 'subtract': False,
-                                'skymethod': 'match', 'match_down': False},
+                                'skymethod': 'match',
+                                'match_down': False},
                    # MIRI ticket https://stsci.service-now.com/jwst?id=ticket&table=incident&sys_id=aa4172264715b510ec5b9448436d43ae recommends modifying snr & good_bits
                    # https://jwst-pipeline.readthedocs.io/en/latest/jwst/outlier_detection/arguments.html
-                   'outlier_detection': {'snr': (7.0, 5.0),
+                   'outlier_detection': {'snr': "7.0, 5.0",
                                          # https://jwst-pipeline.readthedocs.io/en/stable/jwst/references_general/references_general.html#data-quality-flags
                                          'good_bits': "SATURATED, JUMP_DET",
                                          },
@@ -317,7 +321,7 @@ def main(filtername, Observations=None, regionname='brick',
     return locals()
 
 
-def fix_alignment(fn, proposal_id=None, field=None, basepath=None, filtername=None,
+def fix_alignment(fn, proposal_id=None, regionname='brick', field=None, basepath=None, filtername=None,
                   use_average=True):
     if os.path.exists(fn):
         print(f"Running manual align for data ({proposal_id} + {field}): {fn}", flush=True)
@@ -341,11 +345,12 @@ def fix_alignment(fn, proposal_id=None, field=None, basepath=None, filtername=No
     if field is None:
         field = mod.meta.observation.observation_number
     if basepath is None:
-        basepath = f'/orange/adamginsburg/jwst/{field_name}'
+        basepath = f'/orange/adamginsburg/jwst/{regionname}'
 
     print("TODO: calculate MIRI offsets and implement them")
-    rashift = 0*u.arcsec
-    decshift = 0*u.arcsec
+    # 2024 08 04: tried these, then tried flipping
+    rashift = -3.895*u.arcsec
+    decshift = 1.28*u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:
