@@ -1148,7 +1148,7 @@ def main():
 
     basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
 
-    offsets_tables = {'1182': Table.read(f'{basepath}/offsets/Offsets_JWST_Brick1182_F444ref.csv'),
+    offsets_tables = {'1182': Table.read(f'/blue/adamginsburg/adamginsburg/jwst/brick/offsets/Offsets_JWST_Brick1182_F444ref.csv'),
                       '2221': None}
 
     # need to have incrementing _before_ test
