@@ -483,36 +483,36 @@ def main():
     # save nrca and nrcb result tables
     # print()
     # print("NRCA")
-    # from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
+    # from .analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
     # result = load_table(basetable_nrca, ww=ww)
     # globals().update({key+"_a": val for key, val in result.items()})
 
     #print()
     #print("NRCB")
-    #from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
+    #from .analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
     #result = load_table(basetable_nrcb, ww=ww)
     #globals().update({key+"_b": val for key, val in result.items()})
 
     #print()
     #print("merged-reproject")
-    from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
+    from .analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
     #result = load_table(basetable_merged_reproject, ww=ww)
     #globals().update({key+"_mr": val for key, val in result.items()})
 
     #print()
     #print("merged")
-    from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+    from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
     #result = load_table(basetable_merged, ww=ww)
     #globals().update({key+"_m": val for key, val in result.items()})
 
     #if options.module == 'nrca':
-    #    from analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
+    #    from .analysis_setup import fh_nrca as fh, ww410_nrca as ww410, ww410_nrca as ww
     #    result = load_table(basetable_nrca, ww=ww)
     #    globals().update(result)
     #    basetable = basetable_nrca
     #    print("Loaded nrca")
     #elif options.module == 'nrcb':
-    #    from analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
+    #    from .analysis_setup import fh_nrcb as fh, ww410_nrcb as ww410, ww410_nrcb as ww
     #    result = load_table(basetable_nrcb, ww=ww)
     #    globals().update(result)
     #    basetable = basetable_nrcb
@@ -520,35 +520,35 @@ def main():
     print()
     print(options.module)
     if options.module == 'merged':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged = basetable = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
         result = load_table(basetable_merged, ww=ww)
         globals().update(result)
         basetable = basetable_merged
         print("Loaded merged")
     elif options.module == 'merged1182indivexp_cut':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts_oksep2221.fits')
         result = load_table(basetable_merged1182, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182
         print("Loaded merged1182 indivexp")
     elif options.module == 'merged1182indivexp':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts.fits')
         result = load_table(basetable_merged1182, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182
         print("Loaded merged1182 indivexp")
     elif options.module == 'merged1182':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182 = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits')
         result = load_table(basetable_merged1182, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182
         print("Loaded merged1182")
     elif options.module == 'merged1182_blur':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_blur = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged_photometry_tables_merged_blur.fits')
         result = load_table(basetable_merged1182_blur, ww=ww)
         globals().update(result)
@@ -556,7 +556,7 @@ def main():
         print("Loaded merged1182_blur")
 
     elif options.module == 'merged1182_daophot_iterative':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/iterative_merged_photometry_tables_merged.fits')
         result = load_table(basetable_merged1182_daophot, ww=ww)
         globals().update(result)
@@ -564,7 +564,7 @@ def main():
         print("Loaded merged1182_daophot_iterative")
 
     elif options.module == 'merged1182_daophot_iterative_blur':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot_blur = Table.read(f'{basepath}/catalogs/iterative_merged_photometry_tables_merged_blur.fits')
         result = load_table(basetable_merged1182_daophot_blur, ww=ww)
         globals().update(result)
@@ -572,14 +572,14 @@ def main():
         print("Loaded merged1182_daophot_iterative_blur")
 
     elif options.module == 'merged1182_daophot_basic_indivexp':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
         result = load_table(basetable_merged1182_daophot, ww=ww)
         globals().update(result)
         basetable = basetable_merged1182_daophot
         print("Loaded merged1182_daophot_basic_indivexp")
     elif options.module == 'merged1182_daophot_basic':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged.fits')
         result = load_table(basetable_merged1182_daophot, ww=ww)
         globals().update(result)
@@ -587,7 +587,7 @@ def main():
         print("Loaded merged1182_daophot_basic")
 
     elif options.module == 'merged1182_daophot_basic_blur':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot_blur = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_blur.fits')
         result = load_table(basetable_merged1182_daophot_blur, ww=ww)
         globals().update(result)
@@ -595,7 +595,7 @@ def main():
         print("Loaded merged1182_daophot_basic_blur")
 
     elif options.module == 'merged1182_daophot_basic_bgsub':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot_bgsub = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_bgsub.fits')
         result = load_table(basetable_merged1182_daophot_bgsub, ww=ww)
         globals().update(result)
@@ -603,7 +603,7 @@ def main():
         print("Loaded merged1182_daophot_basic_bgsub")
 
     elif options.module == 'merged1182_daophot_basic_bgsub_blur':
-        from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from .analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot_bgsub_blur = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_bgsub_blur.fits')
         result = load_table(basetable_merged1182_daophot_bgsub_blur, ww=ww)
         globals().update(result)
@@ -613,7 +613,7 @@ def main():
 
 
     elif options.module == 'merged-reproject':
-        from analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
+        from .analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
         basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20231003.fits')
         result = load_table(basetable_merged_reproject, ww=ww)
         globals().update(result)
@@ -621,7 +621,7 @@ def main():
         print("Loaded merged-reproject")
     elif options.module == 'merged-reproject-iterative-bg-epsf':
         print("Merged DAOPHOT iterative")
-        from analysis_setup import (fh_merged_reproject as fh,
+        from .analysis_setup import (fh_merged_reproject as fh,
                                     ww410_merged_reproject as ww410,
                                     ww410_merged_reproject as ww)
         result = load_table_dao(basetable_merged_reproject_dao_iter_bg_epsf, ww=ww)
