@@ -25,7 +25,7 @@ from matplotlib.path import Path
 import matplotlib.patches as patches
 
 try:
-    from paths import basepath
+    from brick2221.analysis.paths import basepath
 except ImportError:
     basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
@@ -1129,8 +1129,11 @@ def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=
 
 
 def star_density_color(crd, ww, dx=1, blur=False, size=(2.55*u.arcmin, 8.4*u.arcmin),
-                       fig=pl.figure(figsize=(18, 6))):
+                       fig=None):
     from scipy.ndimage import gaussian_filter
+
+    if fig is None:
+        fig = pl.figure(figsize=(18, 6))
 
     bins_ra = np.arange(0, size[1].to(u.arcsec).value, dx)
     bins_dec = np.arange(0, size[0].to(u.arcsec).value, dx)

@@ -43,15 +43,12 @@ pl.rcParams['font.size'] = 16
 
 
 try:
-    from paths import basepath
+    from brick2221.analysis.paths import basepath
 except ImportError:
     basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
 
-sys.path.append(f'{basepath}/analysis/')
-sys.path.append(f'{basepath}/reduction/')
-import plot_tools
-imp.reload(plot_tools)
-from plot_tools import regzoomplot, starzoom, ccd, ccds, cmds, plot_extvec_ccd
+from brick2221.analysis import plot_tools
+from brick2221.analysis.plot_tools import regzoomplot, starzoom, ccd, ccds, cmds, plot_extvec_ccd
 
 
 distance_modulus = dm = 5*np.log10(8.3*u.kpc / (10*u.pc))
