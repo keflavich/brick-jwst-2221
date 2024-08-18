@@ -28,11 +28,9 @@ try:
     from paths import basepath
 except ImportError:
     basepath = '/blue/adamginsburg/adamginsburg/jwst/brick/'
-import sys
-sys.path.append(f'{basepath}/analysis/')
-sys.path.append(f'{basepath}/reduction/')
-import filtering
-from filtering import get_fwhm
+
+from brick2221.reduction import filtering
+from brick2221.reduction.filtering import get_fwhm
 
 filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
