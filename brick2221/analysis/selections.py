@@ -632,7 +632,9 @@ def main():
         print("Loaded nothing")
 
     assert 'blue_410m405_466' in globals()
+    return globals()
 
 
 if __name__ == "__main__":
-    main()
+    result = main()
+    globals.update(result)
