@@ -1128,3 +1128,30 @@ def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=
         pl.title(f'{mag-0.5} < mag < {mag}')
         pl.subplot(2, ncol, ii+1+ncol).imshow(residual_cutout, cmap='gray')
     pl.tight_layout()
+
+
+def star_density_color(crd, ww, dx=1, blur=False, size=(2.55*u.arcmin, 8.4*u.arcmin),
+                       fig=pl.figure(figsize=(18, 6))):
+    from scipy.ndimage import gaussian_filter
+
+    bins_ra = np.arange(0, size[1].to(u.arcsec).value, dx)
+    bins_dec = np.arange(0, size[0].to(u.arcsec).value, dx)
+
+    bins_pix_ra = bins_ra/ww.proj_plane_pixel_scales()[1].to(u.arcsec).value
+    bins_pix_dec = bins_dec/ww.proj_plane_pixel_scales()[1].to(u.arcsec).value
+
+    crds_pix = np.array(ww.world_to_pixel(crd))
+
+    ax = fig.add_subplot(111, projection=ww)
+    ax.set_xlabel('RA')
+    ax.set_ylabel('Dec')
+    h, xedges, yedges = np.histogram2d(crds_pix[0], crds_pix[1], bins=[bins_pix_ra, bins_pix_dec])
+    if not blur:
+        h1, xedges1, yedges1, y = ax.hist2d(crds_pix[0], crds_pix[1], bins=[bins_pix_ra, bins_pix_dec])
+        pl.colorbar(h1)
+        return h
+    else:
+        blurred = gaussian_filter(h, 1)
+        im = ax.imshow(blurred.swapaxes(0,1))
+        pl.colorbar(im)
+        return blurred
