@@ -276,7 +276,7 @@ def save_photutils_results(result, ww, filename,
     if visitid_ is not None:
         result.meta['visit'] = int(visitid_[-3:])
     if vgroupid_ is not None:
-        result.meta['vgroup'] = int(vgroupid_)
+        result.meta['vgroup'] = int(vgroupid_[-4:])
     result.meta['filename'] = filename
     result.meta['filter'] = filtername
     result.meta['module'] = module
@@ -343,7 +343,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     if visitid_:
         stars.meta['visit'] = int(visitid_[-3:])
     if vgroupid_:
-        stars.meta['vgroup'] = int(vgroupid_)
+        stars.meta['vgroup'] = int(vgroupid_[-4:])
 
     if 'RAOFFSET' in im1[0].header:
         stars.meta['RAOFFSET'] = im1[0].header['RAOFFSET']
