@@ -1128,8 +1128,7 @@ def diagnostic_stamps_by_mag(result, residual, pixel_area, filtername, data, sz=
     pl.tight_layout()
 
 
-def star_density_color(crd, ww, dx=1*u.arcsec, blur=False, size=(2.55*u.arcmin, 8.4*u.arcmin),
-                       fig=None):
+def star_density_color(crd, ww, dx=1*u.arcsec, blur=False, fig=None):
     from scipy.ndimage import gaussian_filter
 
     if fig is None:
@@ -1138,19 +1137,17 @@ def star_density_color(crd, ww, dx=1*u.arcsec, blur=False, size=(2.55*u.arcmin, 
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
     crds_pix = np.array(ww.world_to_pixel(crd))
 
-    bins_pix_ra = np.arange(crds_pix[0].min(), crds_pix[1].max(), dx/pixscale)
-    bins_pix_dec = np.arange(crds_pix[0].min(), crds_pix[1].max(), dx/pixscale)
+    bins_pix_ra = np.arange(crds_pix[0].min(), crds_pix[0].max(), dx/pixscale)
+    bins_pix_dec = np.arange(crds_pix[1].min(), crds_pix[1].max(), dx/pixscale)
 
     ax = fig.add_subplot(111, projection=ww)
     ax.set_xlabel('RA')
     ax.set_ylabel('Dec')
-    h, xedges, yedges = np.histogram2d(crds_pix[0], crds_pix[1], bins=[bins_pix_ra, bins_pix_dec])
-    if not blur:
-        h1, xedges1, yedges1, qm = ax.hist2d(crds_pix[0], crds_pix[1], bins=[bins_pix_ra, bins_pix_dec])
-        pl.colorbar(qm)
-        return h
-    else:
-        blurred = gaussian_filter(h, 1)
-        im = ax.imshow(blurred.swapaxes(0,1))
-        pl.colorbar(im)
-        return blurred
+    hh, xedges, yedges = np.histogram2d(crds_pix[0], crds_pix[1], bins=[bins_pix_ra, bins_pix_dec])
+    if blur:
+        blurred = gaussian_filter(hh, blur)
+        hh = blurred
+    
+    im = ax.imshow(hh.swapaxes(0,1))
+    pl.colorbar(im)
+    return hh

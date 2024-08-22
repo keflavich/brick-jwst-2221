@@ -611,7 +611,6 @@ def main():
         print("Loaded merged1182_daophot_basic_bgsub_blur")
 
 
-
     elif options.module == 'merged-reproject':
         from .analysis_setup import fh_merged_reproject as fh, ww410_merged_reproject as ww410, ww410_merged_reproject as ww
         basetable_merged_reproject = Table.read(f'{basepath}/catalogs/crowdsource_nsky0_merged-reproject_photometry_tables_merged_20231003.fits')
