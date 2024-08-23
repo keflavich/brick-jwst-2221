@@ -663,7 +663,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
               for visitid in range(1, max_visitid+1)
               for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
+                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
                                  f"_{method_suffix}{suffix}.fits")
               ]
     tblfns = sorted(set(tblfns))
