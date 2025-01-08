@@ -452,6 +452,7 @@ def get_psf_model(filtername, proposal_id, field,
                         nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
                     else:
                         nrc.detector = f'{module.upper()}1' #TODO: figure out a way to use all 4?
+                    # default oversampling is 4
                     grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
                 elif 'nrc' in module:
                     # Allow nrca1, nrca2, ...

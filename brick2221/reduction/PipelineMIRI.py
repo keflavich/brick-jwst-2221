@@ -71,6 +71,8 @@ print(jwst.__version__)
 
 fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
+               'w51': 'nope',
+               'sgrb2': 'nope',
                }
 
 
@@ -274,9 +276,9 @@ def main(filtername, Observations=None, regionname='brick',
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        if True:
+        abs_refcat = f'{basepath}/catalogs/twomass.fits'
+        if os.path.exists(abs_refcat):
             # just use 2MASS b/c the MIRI stars are all super bright
-            abs_refcat = f'{basepath}/catalogs/twomass.fits'
             reftbl = Table.read(abs_refcat)
             # For non-F410M, try aligning to F410M instead of VVV?
             # reftblversion = reftbl.meta['VERSION']
@@ -289,7 +291,7 @@ def main(filtername, Observations=None, regionname='brick',
             tweakreg_parameters['searchrad'] = 0.05
             print(f"Reference catalog is {abs_refcat} with version 2MASS")
 
-        tweakreg_parameters.update({'abs_refcat': abs_refcat,})
+            tweakreg_parameters.update({'abs_refcat': abs_refcat,})
 
         print("Running tweakreg")
         calwebb_image3.Image3Pipeline.call(
@@ -302,7 +304,7 @@ def main(filtername, Observations=None, regionname='brick',
                                 'match_down': False},
                    # MIRI ticket https://stsci.service-now.com/jwst?id=ticket&table=incident&sys_id=aa4172264715b510ec5b9448436d43ae recommends modifying snr & good_bits
                    # https://jwst-pipeline.readthedocs.io/en/latest/jwst/outlier_detection/arguments.html
-                   'outlier_detection': {'snr': "7.0, 5.0",
+                   'outlier_detection': {#'snr': "7.0, 5.0",
                                          # https://jwst-pipeline.readthedocs.io/en/stable/jwst/references_general/references_general.html#data-quality-flags
                                          'good_bits': "SATURATED, JUMP_DET",
                                          },
@@ -440,7 +442,10 @@ if __name__ == "__main__":
     Observations.login(api_token)
 
 
-    field_to_reg_mapping = {'2221': {'002': 'brick', '001': 'cloudc'}, }[proposal_id]
+    field_to_reg_mapping = {'2221': {'002': 'brick', '001': 'cloudc'},
+                            '5365': {'001': 'sgrb2'},
+                            '6151': {'001': 'w51_background', '002': 'w51'},
+                            }[proposal_id]
 
     for field in fields:
         for filtername in filternames:

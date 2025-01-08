@@ -110,6 +110,8 @@ def ccd(basetable,
         alpha=0.5,
         alpha_sel=0.5,
         max_uncertainty=None,
+        markersize=5,
+        **kwargs
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
     keys2 = [f'mag_ab_{col}' for col in color2]
@@ -130,8 +132,8 @@ def ccd(basetable,
         include = ~exclude
         sel = sel & include
 
-    ax.scatter(colorp1[include], colorp2[include], s=5, alpha=alpha, c='k', rasterized=rasterized)
-    ax.scatter(colorp1[sel], colorp2[sel], s=5, alpha=alpha_sel, c='r', rasterized=rasterized)
+    ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c='k', rasterized=rasterized)
+    ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c='r', rasterized=rasterized)
     ax.set_xlabel(f"{color1[0]} - {color1[1]}")
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)
@@ -148,6 +150,8 @@ def ccds(basetable, sel=True,
          ext=CT06_MWGC(),
          extvec_scale=200,
          rasterized=True,
+         gridspec_kwargs={},
+         **kwargs
         ):
     if fig is None:
         fig = pl.figure()
@@ -157,7 +161,11 @@ def ccds(basetable, sel=True,
         ax = fig.add_subplot(gridspec[ii])
         ccd(basetable, ax=ax, color1=color1, color2=color2,
             axlims=axlims, sel=sel,
-            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,)
+            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,
+            **kwargs)
+
+    fig.subplots_adjust(**gridspec_kwargs)
+
     return fig
 
 
