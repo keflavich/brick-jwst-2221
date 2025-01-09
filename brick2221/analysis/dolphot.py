@@ -2,7 +2,7 @@ import subprocess, glob
 import shutil
 from tqdm.auto import tqdm
 from astropy.io import fits
-from brick2221.reduction.filtering import get_fwhm
+from brick2221.reduction.filtering import get_fwhm, get_filtername
 from brick2221.analysis.paths import basepath
 
 default_params = {
@@ -57,7 +57,7 @@ default_params = {
     'PSFres':  1,          ### PSFres = 1: Solve for PSF residual image? Allowed values are 0 (no) and 1 (yes). Turning this feature off can create nonlinearities in the photometry unless PSFphot is also set to zero.
     'FlagMask':  0,        ### FlagMask = 4: FlagMask is a bitwise mask that determines what error flags will not be accepted when producing the combined photometry blocks for each filter. A value of zero allows photometry with an error flag less than eight to be used. Adding one eliminates stars close to the chip edge, adding two eliminates stars with too many bad pixels, and adding four eliminates stars with saturated cores.
     'InterpPSFlib':  1,    ### If InterpPSFlib is set to 0, the PSF library will use the nearest X,Y position where a precalculated PSF is available rather than interpolating. The impact is approx. 1percent on the PSF shape but some speed improvement.
-    'MIRIvega':  1,        ### If MIRIvega is set to 0, calibrated fluxes will be provided in units of Jy, and instrummental magnitudes in units of ABmag. Otherwise, when set to 1, Vega magnitudes are used and calibrated fluxes are scaled to for a zeroth magnitude source.                                                                 
+    'MIRIvega':  1,        ### If MIRIvega is set to 0, calibrated fluxes will be provided in units of Jy, and instrummental magnitudes in units of ABmag. Otherwise, when set to 1, Vega magnitudes are used and calibrated fluxes are scaled to for a zeroth magnitude source.
     ####### Camera Specific #######
     #'img_rsky': (0,0),     ### img_rsky (int int): Inner and outer radii for computing sky values, if FitSky=1 is being used. Also used in a few places if using FitSky = 2, 3, or 4, so should always be set. The inner radius (first number) should be outside the bulk of the light from the star; the outer (second) should be sufficiently large to compute an accurate sky.
     #'img_rsky2': (0,0),    ### img_rsky2 (int int)*: The annulus setting when using FitSky=2.
@@ -66,11 +66,12 @@ default_params = {
 }
 
 
-def write_params(filelist, filtername):
+def write_params(filelist):
     for ii, fn in enumerate(filelist):
 
         header = fits.getheader(fn)
         fwhm_as, fwhm = get_fwhm(header)
+        filtername = get_filtername(header)
 
         perim_params = {
             # ?? 'img{ii}_rsky': (fwhm, 4*fwhm),
@@ -93,7 +94,7 @@ def write_params(filelist, filtername):
             if isinstance(val, tuple):
                 val = ' '.join(str(v) for v in val)
             fh.write(f"{key} = {val}\n")
-    
+
     return paramfn
 
 
@@ -124,8 +125,26 @@ def assemble_data():
         filelist = glob.glob(f'{basepath}/{filtername}/pipeline/*_cal.fits')
         for fn in tqdm(filelist):
             shutil.copy(fn, dolpath)
-        paramfn = write_params(filelist, filtername)
+
+    full_filelist = glob.glob(f'{dolpath}/*_cal.fits')
+
+    return full_filelist
 
 
 def main():
+    filelist = assemble_data()
+
+    run_masking(filelist)
+
+    run_calcsky(filelist)
+
+    paramfn = write_params(filelist)
+
     subprocess.check_call(f"dolphot {fn} -p {paramfn}".split())
+
+if __name__ == "__main__":
+    main()
+
+"""
+sbatch --job-name=webb-cat-dolph --output=web-cat-dolph-%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/dolphot.py "
+"""
