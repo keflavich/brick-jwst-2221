@@ -8,7 +8,8 @@ from astropy.io import fits
 from brick2221.reduction.filtering import get_fwhm, get_filtername
 from brick2221.analysis.analysis_setup import basepath
 
-dolphot_binpath = '/orange/adamginsburg/software/dolphot2.0/bin/'
+dolphot_binpath = os.getenv('DOLPHOT_BINPATH',
+                            '/orange/adamginsburg/software/dolphot2.0/bin/')
 
 default_params = {
     'Align': 0,             ### Align = 1: Align images to reference? Allowed values are 0 (no), 1 (x/y offsets only), 2 (x/y offsets plus scale difference), 3 (x/y offsets plus distortion), and 4 (full third-order polynomial fit).
