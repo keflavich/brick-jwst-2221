@@ -573,7 +573,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     parser.add_option("--bgsub", dest="bgsub",
                     default=False,
                     action='store_true',
-                    help="perform background-subtraction first?", metavar="bgsub")
+                    help="perform global background-subtraction first?", metavar="bgsub")
     parser.add_option("--epsf", dest="epsf",
                     default=False,
                     action='store_true',

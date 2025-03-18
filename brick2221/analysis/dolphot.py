@@ -1,8 +1,10 @@
 # flake8: noqa: E262
 import os
+import numpy as np
 import subprocess, glob
 import datetime
 import shutil
+from astropy.table import Table
 from tqdm.auto import tqdm
 from astropy.io import fits
 from brick2221.reduction.filtering import get_fwhm, get_filtername
@@ -28,13 +30,13 @@ default_params = {
 
     ####### Star-finding parameters #######
     'SecondPass': 5,      ### SecondPass = 1: Number of additional passes when finding stars to locate stars in the wings of brighter stars. Must be a non-negative value.
-    'RCentroid': 2,       ### RCentroid = 1: The centroid used for obtaining initial positions of stars is a square of size 2RCentroid + 1 on each side
+    'RCentroid': 1,       ### RCentroid = 1: The centroid used for obtaining initial positions of stars is a square of size 2RCentroid + 1 on each side
     'SearchMode': 1,      ### SearchMode = 1: Sets the minimization used to determine star positions. Allowed values are 0 (chi divided by SNR) and 1 (chi only). A value of one appears safe for all applications. A value of zero has been seen to fail if images of very different exposure times are used together.
     'SigFind': 2.,        ### SigFind = 2.5: Sigma detection threshold. Stars above this limit will be kept in the photometry until the final output.
     'SigFindMult': 0.85,  ### SigFindMult = 0.85: Multiple for sigma detection threshold in initial finding algorithm. This should be close to one for larger PSFs, and as low as 0.75 for badly undersampled PSFs.
     'SigFinal': 2.,       ### SigFinal = 3.5: Sigma threshold for a star to be listed in the final photometry list. To get all stars, set SigFinal equal to SigFind.
     'PosStep': 0.25,      ### PosStep = 0.25: Typical stepsize in x and y during photometry iterations. Should be set to a factor of a few smaller than the PSF FHWM.
-    'RCombine': 2.0,      ### RCombine = 2.0: Minimum separation of two stars (they will be combined if they become closer than this value). This value can generally be about 2/3 of the PSF FWHM, but setting below 1.4 will not always be effective.
+    'RCombine': 1.5,      ### RCombine = 2.0: Minimum separation of two stars (they will be combined if they become closer than this value). This value can generally be about 2/3 of the PSF FWHM, but setting below 1.4 will not always be effective.
     'FSat': 0.999,        ### FSat = 0.999: Fraction of nominal saturation for which pixels are considered saturated.
 
     ####### Photometry #######
@@ -68,37 +70,62 @@ default_params = {
     #'img_rsky': (0,0),     ### img_rsky (int int): Inner and outer radii for computing sky values, if FitSky=1 is being used. Also used in a few places if using FitSky = 2, 3, or 4, so should always be set. The inner radius (first number) should be outside the bulk of the light from the star; the outer (second) should be sufficiently large to compute an accurate sky.
     #'img_rsky2': (0,0),    ### img_rsky2 (int int)*: The annulus setting when using FitSky=2.
     #'img_RSF': (0,0),      ### img_RSF: The size of the PSF used for star subtraction, as well as the size of the PSF residual calculated if PSFRes is set to 1
-    'img_apsky': (0,0),    ### img_apsky (int int): Set the inner and outer radii of the annulus used for calculating sky values for aperture corrections.
+    'img_apsky': (20,35),    ### img_apsky (int int): Set the inner and outer radii of the annulus used for calculating sky values for aperture corrections.
 }
 
 
-def write_params(filelist, suffix=''):
+def write_params(filelist, filtername, suffix=''):
     params = default_params.copy()
+    
+    long = int(filtername[1]) > 2
+
+    jj = 0
     for ii, fn in enumerate(filelist):
 
         header = fits.getheader(fn)
         fwhm_as, fwhm = get_fwhm(header)
-        filtername = get_filtername(header)
+        this_filtername = get_filtername(header)
+        if this_filtername == filtername:
 
-        perim_params = {
-            # ?? 'img{ii}_rsky': (fwhm, 4*fwhm),
-            f'img{ii}_rsky0': fwhm,
-            f'img{ii}_rsky1': fwhm*4,
-            f'img{ii}_rsky2': (4, 10),
-            f'img{ii}_rpsf': fwhm,
-            f'img{ii}_apsky': (3*fwhm, 4*fwhm),
-            f'img{ii}_shift': (0, 0),
-            f'img{ii}_xform': (1, 0, 0),
-            f'img{ii}_raper': 3, # unsure what this does....
-            f'img{ii}_rchi': 2.0,
-            f'img{ii}_file': os.path.splitext(os.path.basename(fn))[0],
-        }
+            # the example gives Nimg=60 and goes from 0 to 60, so there are 61 files...
+            # unclear if img0 is special
+            jj += 1
 
-        params.update(perim_params)
+            perim_params = {
+                # ?? 'img{ii}_rsky': (fwhm, 4*fwhm),
+                f'img{jj}_rsky0': fwhm,
+                f'img{jj}_rsky1': fwhm*4,
+                # Error: RPSF needs to be at least RAper+2 if using FitSky=2
+                f'img{jj}_rpsf': min([fwhm*6, 24]), # Size of the PSF used for star subtraction.  Cannot be > 24
+                f'img{jj}_apsky': (3*fwhm, 4*fwhm),
+                f'img{jj}_shift': (0, 0),
+                f'img{jj}_xform': (1, 0, 0),
+                f'img{jj}_file': os.path.splitext(os.path.basename(fn))[0],
+            }
 
-    params['Nimg'] = len(filelist)
+            if long:
+                perim_params.update({
+                    f'img{jj}_raper': 3.0,
+                    f'img{jj}_rchi': 2.0,
+                    f'img{jj}_rsky2': (4, 10),
+                })
+            else:
+                perim_params.update({
+                    f'img{jj}_raper': 2.0,
+                    f'img{jj}_rchi': 1.5,
+                    f'img{jj}_rsky2': (3, 10),
+                })
 
-    paramfn = f'params{suffix}.txt'
+            params.update(perim_params)
+
+    params['Nimg'] = jj
+
+    keys = list(params.keys())
+    keys.remove('Nimg')
+    keys.insert(0, 'Nimg')
+    params = {key:params[key] for key in keys}
+
+    paramfn = f'params_{filtername}{suffix}.txt'
     with open(paramfn, 'w') as fh:
         for key, val in params.items():
             if isinstance(val, tuple):
@@ -111,19 +138,63 @@ def write_params(filelist, suffix=''):
 def run_masking(filelist):
     for fn in tqdm(filelist, desc='nircammask'):
         if 'DQ' in fits.open(fn) or 'WHT' in fits.open(fn):
+            # -etctime used to be required, now it's -noetctime to turn off
             subprocess.check_call(f"{dolphot_binpath}/nircammask {fn}".split())
+            dd = fits.getdata(fn)
+            if dd.min() == dd.max():
+                raise ValueError("masking deleted the data instead of masking it.")
+            assert np.nanmax(dd) > np.nanmin(dd), fn
 
 def run_calcsky(filelist):
     for fn in tqdm(filelist, desc='calcsky'):
-        if not os.path.exists(f'{os.path.splitext(fn)[0]}.sky.fits'):
+        if True: #not os.path.exists(f'{os.path.splitext(fn)[0]}.sky.fits'):
             subprocess.check_call(f"{dolphot_binpath}/calcsky {os.path.splitext(fn)[0]} 10 25 2 2.25 2.0".split())
 
-def assemble_data():
+            dd = fits.getdata(fn)
+            if dd.min() == dd.max():
+                raise ValueError("sky subtraction deleted data.")
+            assert np.nanmax(dd) > np.nanmin(dd), fn
+
+def assemble_data(filtername, return_full_filelist=True):
 
     dolpath = f'{basepath}/dolphot'
     if not os.path.exists(dolpath):
         os.mkdir(dolpath)
 
+    filelist = sorted(glob.glob(f'{basepath}/{filtername}/pipeline/*_cal.fits'))
+    print(f"Found {len(filelist)} matches for filter {filtername}")
+    cped_filelist = []
+    for fn in tqdm(filelist, desc='copy'):
+        if True:#not os.path.exists(f'{dolpath}/{os.path.basename(fn)}'):
+            shutil.copy(fn, dolpath)
+            #print(f"Copied {fn} to {dolpath}")
+            cped_filelist.append(f'{dolpath}/{os.path.basename(fn)}')
+
+    if return_full_filelist:
+        full_filelist = glob.glob(f'{dolpath}/*_cal.fits')
+
+        return full_filelist
+    else:
+        return cped_filelist
+
+
+def run_dolphot(paramfn):
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dolpath = f'{basepath}/dolphot'
+    subprocess.check_call(f"{dolphot_binpath}/dolphot brick_dolph_{timestamp}.phot -p{paramfn} > {dolpath}/dolphot_{timestamp}.log".split())
+
+
+def read_dolphot(basename):
+
+    colnames = "Extension Chip X Y ChiFit SNRfit Sharp Round PA Crowd ObjectType PassNo TotalCounts TotalSky NormalizedCountRate eNormalizedCountRate InstrumentalVegaMag TransformedUBVRIMagnitude MagnitudeUncertainty Chi SNR Sharpness Roundness Crowding PhotometryQualityFlag".split()
+    with open(basename, 'r') as fh:
+        lines = [x.split()[:len(colnames)] for x in fh.readlines()]
+    tbl = Table(rows=lines, names=colnames, dtype=[int]*2 + [float]*6 + [int, float, int, int] + [float]*12 + [int])
+
+    return tbl
+
+
+def main():
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-f", "--filternames", dest="filternames",
@@ -133,33 +204,29 @@ def assemble_data():
 
     filternames = options.filternames.split(",")
 
+
     for filtername in filternames:
-        filelist = glob.glob(f'{basepath}/{filtername}/pipeline/*_cal.fits')
-        for fn in tqdm(filelist):
-            if not os.path.exists(f'{dolpath}/{os.path.basename(fn)}'):
-                shutil.copy(fn, dolpath)
+        filelist = assemble_data(filtername)
 
-    full_filelist = glob.glob(f'{dolpath}/*_cal.fits')
+        for fn in tqdm(filelist, desc='precheck'):
+            dd = fits.getdata(fn)
+            assert np.nanmax(dd) > np.nanmin(dd), fn
 
-    return full_filelist
+        paramfn = write_params(filelist, filtername)
 
+        run_masking(filelist)
 
-def run_dolphot(paramfn):
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    dolpath = f'{basepath}/dolphot'
-    subprocess.check_call(f"{dolphot_binpath}/dolphot brick_dolph_{timestamp}.phot -p{paramfn} > {dolpath}/dolphot_{timestamp}.log".split())
+        for fn in tqdm(filelist, desc='check-postmask'):
+            dd = fits.getdata(fn)
+            assert np.nanmax(dd) > np.nanmin(dd), fn
 
+        run_calcsky(filelist)
 
-def main():
-    filelist = assemble_data()
+        for fn in tqdm(filelist, desc='check-prephot'):
+            dd = fits.getdata(fn)
+            assert np.nanmax(dd) > np.nanmin(dd), fn
 
-    paramfn = write_params(filelist)
-
-    run_masking(filelist)
-
-    run_calcsky(filelist)
-
-    run_dolphot(paramfn)
+        run_dolphot(paramfn)
 
 
 if __name__ == "__main__":

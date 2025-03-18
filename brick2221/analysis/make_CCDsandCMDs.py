@@ -20,11 +20,11 @@ from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged 
 from selections import main as selections_main
 
 from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-basetable_merged1182_daophot_bgsub_blur = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged_bgsub_blur.fits')
-result = selections_main(basetable_merged1182_daophot_bgsub_blur, ww=ww)
+basetable_merged1182_indivexp = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+result = selections_main(basetable_merged1182_indivexp, ww=ww)
 globals().update(result)
-basetable = basetable_merged1182_daophot_bgsub_blur
-print("Loaded merged1182_daophot_basic_bgsub_blur")
+basetable = basetable_merged1182_indivexp
+print("Loaded merged1182_daophot_indivexp")
 
 print()
 print("merged-1182")
@@ -52,6 +52,7 @@ colors=[('f410m', 'f466n'),
         ('f356w', 'f410m'),
         ('f410m', 'f444w'),
         ('f405n', 'f444w'),
+        ('f405n', 'f466n'),
         ('f444w', 'f466n'),
         ('f200w', 'f356w'),
         ('f200w', 'f212n'),

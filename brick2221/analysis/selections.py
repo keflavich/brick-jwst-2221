@@ -438,11 +438,31 @@ def load_table(basetable, ww):
     # Coarse color cut eyeballed in CatalogExploration_Sep2023
     recomb_excess_over_212 = c212_405 > c187_212 * (4 / 3.) + 0.35
 
+    ok2221 = ((basetable['emag_ab_f182m'] < 0.1)
+              & (basetable['emag_ab_f212n'] < 0.1)
+              & (basetable['emag_ab_f466n'] < 0.1)
+              & (basetable['emag_ab_f405n'] < 0.1)
+              & (basetable['emag_ab_f410m'] < 0.1)
+              & (basetable['emag_ab_f187n'] < 0.1)
+              & (basetable['qfit_f187n'] < 0.4)
+              & (basetable['qfit_f410m'] < 0.4)
+              & (basetable['qfit_f405n'] < 0.4)
+              & (basetable['qfit_f182m'] < 0.4)
+              & (basetable['qfit_f212n'] < 0.4)
+              & (basetable['qfit_f466n'] < 0.4))
+    ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
+              & (basetable['emag_ab_f356w'] < 0.1)
+              & (basetable['emag_ab_f200w'] < 0.1)
+              & (basetable['qfit_f444w'] < 0.4)
+              & (basetable['qfit_f356w'] < 0.4)
+              & (basetable['qfit_f200w'] < 0.4)
+              )
+
     # calculate A_V from colors
     # super naive version
     av212410 = (basetable['mag_ab_f212n'] - basetable['mag_ab_f410m']) / (CT06_MWGC()(2.12*u.um) - CT06_MWGC()(4.10*u.um))
     # but empirically, this value appears to start at 1.2 (f212n - f410m has a locus at -1.2)
-    av212410 = (1.2 + basetable['mag_ab_f212n'] - basetable['mag_ab_f410m']) / (CT06_MWGC()(2.12*u.um) - CT06_MWGC()(4.10*u.um))
+    #av212410 = (1.2 + basetable['mag_ab_f212n'] - basetable['mag_ab_f410m']) / (CT06_MWGC()(2.12*u.um) - CT06_MWGC()(4.10*u.um))
     # so why not just use the 182m?
     av182212 = (basetable['mag_ab_f182m'] - basetable['mag_ab_f212n']) / (CT06_MWGC()(1.82*u.um) - CT06_MWGC()(2.12*u.um))
     # or 182-410
