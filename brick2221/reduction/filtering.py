@@ -1,6 +1,8 @@
 import photutils
 import regions
-from photutils import CircularAperture, EPSFBuilder, find_peaks, CircularAnnulus
+from photutils.aperture import CircularAperture, CircularAnnulus
+from photutils.psf import EPSFBuilder
+from photutils.detection import find_peaks
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import extract_stars
 
