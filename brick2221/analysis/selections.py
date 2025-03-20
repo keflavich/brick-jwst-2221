@@ -73,7 +73,7 @@ def find_stars_in_same_pixel(xx, yy, max_offset=1):
     return close_neighbor
 
 
-def load_table(basetable, ww):
+def load_table(basetable, ww, verbose=False):
 
     # empirical test: these sources are almost certainly saturated in f410m =(
     # 3.1 is the difference between the wrong mag and right mag
@@ -87,7 +87,8 @@ def load_table(basetable, ww):
         print(f"Failed to mask flux column f410m {ex}")
 
     filternames = [basetable.meta[key] for key in basetable.meta if 'FILT' in key]
-    print(f"Selecting based on filters {filternames}")
+    if verbose:
+        print(f"Selecting based on filters {filternames}")
 
     # FITS tables can't mask boolean columns
     # so, we have to mask the saturated mask using the mask on the flux for the filter
@@ -100,23 +101,29 @@ def load_table(basetable, ww):
 
     any_saturated = any_saturated_[0]
     for col in any_saturated_[1:]:
-        print(f"{col.sum()} saturated in {col.name}")
+        if verbose:
+            print(f"{col.sum()} saturated in {col.name}")
         any_saturated = any_saturated | col
-    print(f"{any_saturated.sum()} near saturated out of {len(basetable)}.  That leaves {(~any_saturated).sum()} not near unsaturated")
+    if verbose:
+        print(f"{any_saturated.sum()} near saturated out of {len(basetable)}.  That leaves {(~any_saturated).sum()} not near unsaturated")
 
     any_saturated_narrow = any_saturated_narrow_[0]
     for col in any_saturated_narrow_[1:]:
-        print(f"{col.sum()} saturated in {col.name}")
+        if verbose:
+            print(f"{col.sum()} saturated in {col.name}")
         any_saturated_narrow = any_saturated_narrow | col
-    print(f"{any_saturated_narrow.sum()} near saturated out of {len(basetable)}.  That leaves {(~any_saturated_narrow).sum()} not near unsaturated")
+    if verbose:
+        print(f"{any_saturated_narrow.sum()} near saturated out of {len(basetable)}.  That leaves {(~any_saturated_narrow).sum()} not near unsaturated")
 
     any_replaced_saturated_ = [basetable[f'replaced_saturated_{x}'] &
                                ~basetable[f'flux_{x}'].mask for x in filternames]
     any_replaced_saturated = any_replaced_saturated_[0]
     for col in any_replaced_saturated_[1:]:
-        print(f"{col.sum()} saturated in {col.name}")
+        if verbose:
+            print(f"{col.sum()} saturated in {col.name}")
         any_replaced_saturated = any_replaced_saturated | col
-    print(f"{any_replaced_saturated.sum()} saturated out of {len(basetable)}.  That leaves {(~any_replaced_saturated).sum()} unsaturated")
+    if verbose:
+        print(f"{any_replaced_saturated.sum()} saturated out of {len(basetable)}.  That leaves {(~any_replaced_saturated).sum()} unsaturated")
 
     magerr_gtpt1_any = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.1 for filtername in filternames])
     magerr_gtpt05_any = np.logical_or.reduce([basetable[f'emag_ab_{filtername}'] > 0.05 for filtername in filternames])
@@ -179,19 +186,21 @@ def load_table(basetable, ww):
             ffok = True
 
         basetable[f'good_{filt}'] = allok = (qfok & spok & ffok)
-        print(f"Filter {filt} has qf={qfok.sum()}, spread={spok.sum()}, fracflux={ffok.sum() if hasattr(ffok, 'sum') else 1} ok,"
-            f" totaling {allok.sum()}.  There are {len(basetable)} total, of which "
-            f"{mask.sum()} are masked and {(~mask).sum()} are unmasked. qfmasksum={qfmask.sum()}, inverse={(~qfmask).sum()}.")
+        if verbose:
+            print(f"Filter {filt} has qf={qfok.sum()}, spread={spok.sum()}, fracflux={ffok.sum() if hasattr(ffok, 'sum') else 1} ok,"
+                f" totaling {allok.sum()}.  There are {len(basetable)} total, of which "
+                f"{mask.sum()} are masked and {(~mask).sum()} are unmasked. qfmasksum={qfmask.sum()}, inverse={(~qfmask).sum()}.")
 
     # DO NOT exclude missing f115w; it removes too much
     all_good = np.all([basetable[f'good_{filt}'] for filt in filternames if filt.lower() != 'f115w'], axis=0)
     any_good = np.any([basetable[f'good_{filt}'] for filt in filternames  if filt.lower() != 'f115w'], axis=0)
     long_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' in filt], axis=0)
     short_good = np.all([basetable[f'good_{filt}'] for filt in filternames if 'f4' not in filt], axis=0)
-    print(f"Of {len(all_good)} rows, {all_good.sum()} are good in all filters.")
-    print(f"Of {len(all_good)} rows, {long_good.sum()} are good in long filters.")
-    print(f"Of {len(all_good)} rows, {short_good.sum()} are good in short filters.")
-    print(f"Of {len(all_good)} rows, {any_good.sum()} are good in at least one filter.")
+    if verbose:
+        print(f"Of {len(all_good)} rows, {all_good.sum()} are good in all filters.")
+        print(f"Of {len(all_good)} rows, {long_good.sum()} are good in long filters.")
+        print(f"Of {len(all_good)} rows, {short_good.sum()} are good in short filters.")
+        print(f"Of {len(all_good)} rows, {any_good.sum()} are good in at least one filter.")
 
     # crowdsource
     if 'qf_f410m' in basetable.colnames:
@@ -253,16 +262,20 @@ def load_table(basetable, ww):
     badspreadshort = ~goodspreadshort
     badfracfluxshort = ~goodfracfluxshort
 
-    print(f"QFs: {goodqfshort.sum()} good short")
-    print(f"QFs: {goodqflong.sum()} good long")
+    if verbose:
+        print(f"QFs: {goodqfshort.sum()} good short")
+        print(f"QFs: {goodqflong.sum()} good long")
 
     # threshold = 0.1 arcsec
     oksep_notwide = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'w' not in filtername])
-    print(f"Found {oksep_notwide.sum()} of {len(oksep_notwide)} sources with separations < 0.1 arcsec (excluding wide filters)")
+    if verbose:
+        print(f"Found {oksep_notwide.sum()} of {len(oksep_notwide)} sources with separations < 0.1 arcsec (excluding wide filters)")
     oksep_noJ = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'f115w' not in filtername])
-    print(f"Found {oksep_noJ.sum()} of {len(oksep_noJ)} sources with separations < 0.1 arcsec (excluding f115w)")
+    if verbose:
+        print(f"Found {oksep_noJ.sum()} of {len(oksep_noJ)} sources with separations < 0.1 arcsec (excluding f115w)")
     oksep = np.logical_and.reduce([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames])
-    print(f"Found {oksep.sum()} of {len(oksep)} sources with separations < 0.1 arcsec")
+    if verbose:
+        print(f"Found {oksep.sum()} of {len(oksep)} sources with separations < 0.1 arcsec")
     oklong = oksep & (~any_saturated) & (~(basetable['mag_ab_410m405'].mask)) & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
 
     # This text is just to check what the offset was to account for an error I made in 2023.  We no longer need to correct that error because it's done right in cataloging.
@@ -272,6 +285,7 @@ def load_table(basetable, ww):
     filtconv410 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint']) - abconv.value
     filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint']) - abconv.value
     zeropoint_offset_410_466 = filtconv410-filtconv466
+    if verbose:
     print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
     # May 11, 2024: the new versions of the catalogs don't have this magnitude offset error
     # so this should be gone now, right?
@@ -319,6 +333,7 @@ def load_table(basetable, ww):
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+    if verbose:
     print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_410b.sum()}.")
 
     blue_BrA_and_PaA = (oksep & ~any_saturated &
@@ -362,44 +377,52 @@ def load_table(basetable, ww):
                          (~basetable['mag_ab_f187n'].mask) &
                          (~basetable['mag_ab_f182m'].mask))
     detected_allbands = np.vstack([(~basetable[f'mag_ab_{filt}'].mask) for filt in filternames]).min(axis=0)
-    print(f"Detected in 405, 410, 187, and 182: {detected.sum()}.  In all 2221: {detected_allnonwidebands.sum()}.  All incl 1182: {detected_allbands.sum()}")
-    print(f"Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
-    print(f"Pretty blue [410-466] sources: {blue_410_466.sum()}")
-    print(f"Pretty blue [410m405-466] sources: {blue_410m405_466.sum()}")
-    print(f"Very blue [410-466] sources: {veryblue_410_466.sum()}")
-    print(f"Very blue [410m405-466] sources: {veryblue_410m405_466.sum()}")
-    print(f"Somewhat blue [410m405-466] sources: {slightly_blue_410_466.sum()}")
-    print(oklong.sum(), blue_410_466.sum(), slightly_blue_410_466.sum(), blue_405_410.sum(), blue_405_410b.sum(), blue_BrA_and_PaA.sum(), detected.sum(), blue_BrA_and_PaA.sum() / detected.sum())
+    if verbose:
+        print(f"Detected in 405, 410, 187, and 182: {detected.sum()}.  In all 2221: {detected_allnonwidebands.sum()}.  All incl 1182: {detected_allbands.sum()}")
+        print(f"Very likely BrA+PaA excess (405-410 < -0.1 and 187-182 < -0.1): {blue_BrA_and_PaA.sum()}, <-0.5: {veryblue_BrA_and_PaA.sum()}.")
+        print(f"Pretty blue [410-466] sources: {blue_410_466.sum()}")
+        print(f"Pretty blue [410m405-466] sources: {blue_410m405_466.sum()}")
+        print(f"Very blue [410-466] sources: {veryblue_410_466.sum()}")
+        print(f"Very blue [410m405-466] sources: {veryblue_410m405_466.sum()}")
+        print(f"Somewhat blue [410m405-466] sources: {slightly_blue_410_466.sum()}")
+        print(oklong.sum(), blue_410_466.sum(), slightly_blue_410_466.sum(), blue_405_410.sum(), blue_405_410b.sum(), blue_BrA_and_PaA.sum(), detected.sum(), blue_BrA_and_PaA.sum() / detected.sum())
 
     neg_405m410 = basetable['flux_jy_405m410'] < 0
-    print(f"Negative 405-410 colors: {neg_405m410.sum()}, Nonnegative: {(~neg_405m410).sum()}")
+    if verbose:
+        print(f"Negative 405-410 colors: {neg_405m410.sum()}, Nonnegative: {(~neg_405m410).sum()}")
 
     any_saturated |= saturated_f410m
     all_good &= ~saturated_f410m
-    print(f"There are {all_good.sum()} before flagging out any_saturated (there are {any_saturated.sum()} any_saturated)")
+    if verbose:
+        print(f"There are {all_good.sum()} before flagging out any_saturated (there are {any_saturated.sum()} any_saturated)")
     all_good &= ~any_saturated
-    print(f"There are {all_good.sum()} after flagging out any_saturated")
+    if verbose:
+        print(f"There are {all_good.sum()} after flagging out any_saturated")
 
-    print(f"There are {oksep.sum()} out of {len(oksep)} oksep, and {(oksep & all_good).sum()} all_good & oksep")
+    if verbose:
+        print(f"There are {oksep.sum()} out of {len(oksep)} oksep, and {(oksep & all_good).sum()} all_good & oksep")
     all_good_phot = all_good.copy()
     all_good = all_good_phot & oksep
 
     exclude = (any_saturated  | magerr_gtpt1_all |
                basetable['mag_ab_f405n'].mask | basetable['mag_ab_f410m'].mask)
               # unknown why - badqflong is excluding too much  | badqflong | badfracfluxlong | badspreadlong) | ~oksep_noJ
-    print(f"Excluding {exclude.sum()} of {exclude.size} ({exclude.sum()/exclude.size*100}%)")
+    if verbose:
+        print(f"Excluding {exclude.sum()} of {exclude.size} ({exclude.sum()/exclude.size*100}%)")
 
     # "bad" was totally broken; (bad & all_good) is very nonzero
     # bad = (any_saturated | ~oksep | magerr_gtpt1 | basetable['mag_ab_f212n'].mask |
     #        basetable['mag_ab_f410m'].mask | badqflong | badfracfluxlong |
     #        badspreadlong | badqfshort | badfracfluxshort | badspreadshort)
     bad = ~all_good
-    print("'Bad' sources are those where _any_ filter is masked out")
-    print(f"Not-bad:{(~bad).sum()}, bad: {bad.sum()},"# bad.mask: {bad.mask.sum()},"
-          f" len(bad):{len(bad)}, len(table):{len(basetable)}.")
+    if verbose:
+        print("'Bad' sources are those where _any_ filter is masked out")
+        print(f"Not-bad:{(~bad).sum()}, bad: {bad.sum()},"# bad.mask: {bad.mask.sum()},"
+              f" len(bad):{len(bad)}, len(table):{len(basetable)}.")
 
-    for filt in filternames:
-        print(f"{filt} median mag={np.nanmedian(np.array(basetable['mag_ab_'+filt][basetable['good_'+filt]]))}")
+    if verbose:
+        for filt in filternames:
+            print(f"{filt} median mag={np.nanmedian(np.array(basetable['mag_ab_'+filt][basetable['good_'+filt]]))}")
 
     # Basic selections for CMD, CCD plotting
     sel = reg.contains(basetable['skycoord_f410m'], ww)
@@ -508,7 +531,8 @@ def load_table(basetable, ww):
         for _, inds in doubled:
             two_stars_in_same_pixel[inds] = True
 
-        print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
+        if verbose:
+            print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
 
     return locals()
 
