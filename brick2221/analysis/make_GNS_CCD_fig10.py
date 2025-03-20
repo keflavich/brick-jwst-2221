@@ -36,6 +36,8 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     basetable = Table.read(f'{basepath}/catalogs/{catname}')
     result = load_table(basetable, ww=ww)
     globals().update(result)
+    assert 'ok2221' in result
+    assert 'ok2221' in locals()
 
     fov = regions.Regions.read(f'{basepath}/regions_/brick_fov_2221and1182.reg')
     coord = fov[0].center
