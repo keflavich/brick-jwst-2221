@@ -75,8 +75,8 @@ def make_mymix_tables():
 
     co_gerakines = gerakines = retrieve_gerakines_co()
 
-    cotbs[('ocdb', 63, 25)] = co_gerakines
-    cotbs[('ocdb', 64, 25)] = co_gerakines
+    cotbs[('ocdb', 63, 25)] = retrieve_gerakines_co(resolution='low')
+    cotbs[('ocdb', 64, 25)] = retrieve_gerakines_co(resolution='high')
 
     grid = co_gerakines['Wavelength']
 
@@ -157,6 +157,8 @@ def process_table(args):
              )
     flxd_ref = fluxes_in_filters(xarr, phx4000['fnu'].quantity, filterids=cmd_x, transdata=transdata)
 
+    author = consts.meta['author'] if 'author' in consts.meta else ''
+
     for col in cols:
         spec = absorbed_spectrum(col*u.cm**-2, consts, molecular_weight=molwt,
                                   spectrum=phx4000['fnu'].quantity,
@@ -181,11 +183,14 @@ def process_table(args):
         except TypeError:
             mol_id = key
             database = 'ocdb'
+
             
         dmag_rows.append({
             'molecule': molecule,
             'mol_id': mol_id,
+            'molwt': molwt,
             'database': database,
+            'author': author,
             'composition': consts.meta['composition'],
             'temperature': consts.meta['temperature'],
             'density': consts.meta['density'],
