@@ -1,3 +1,7 @@
+"""
+2025-03-20 note: these figures look like they're missing some cross-matches in stripey areas in all three catalogs.  That is really discouraging.
+
+"""
 import importlib as imp
 from brick2221.analysis import plot_tools
 imp.reload(plot_tools)
@@ -26,7 +30,9 @@ import glob
 if 'basepath' not in locals():
     basepath = '/orange/adamginsburg/jwst/brick/'
 
-for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts.fits', 'crowdsource_indivexp'), ('basic_merged_indivexp_photometry_tables_merged.fits', 'dao_basic_indivexp')]:
+for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables_merged_qualcuts.fits', 'crowdsource_indivexp'),
+                           ('crowdsource_nsky0_merged-reproject_photometry_tables_merged_20231003.fits', 'crowdsource_20231003'),
+                           ('basic_merged_indivexp_photometry_tables_merged.fits', 'dao_basic_indivexp')]:
     basetable = Table.read(f'{basepath}/catalogs/{catname}')
     result = load_table(basetable, ww=ww)
     globals().update(result)
@@ -38,7 +44,6 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     height = width = max((width, height))
 
     galnuc2021 = Vizier(row_limit=-1).query_region(coordinates=coord, width=width, height=height, catalog=['J/A+A/653/A133'])[0]
-    gntable = Table.read(f'{basepath}/catalogs/GALACTICNUCLEUS_2021_merged.fits')
     galnuc2021_crds = SkyCoord(galnuc2021['RAJ2000'], galnuc2021['DEJ2000'], frame='fk5')
 
     # Crossmatch galnuc w/"best"
@@ -47,9 +52,10 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     idx2, sidx2, sep2, sep3d2 = basetable['skycoord_ref'].search_around_sky(galnuc2021_crds, threshold)
     idxmatch, sepmatch, _ = coordinates.match_coordinates_sky(galnuc2021_crds, basetable['skycoord_ref'][idx2])
 
-    galnuc_merged = table.hstack([galnuc2021[(sepmatch < threshold)], basetable_merged_reproject[idxmatch[sepmatch<threshold]]])
+    galnuc_merged = table.hstack([galnuc2021[(sepmatch < threshold)],
+                                  basetable[idx2][idxmatch[sepmatch < threshold]]])
     galnuc_merged.write(f'{basepath}/catalogs/GALACTICNUCLEUS_2021_merged_with_{shortname}.fits', overwrite=True)
-
+    gntable = galnuc_merged
 
     pl.figure(figsize=(20,10))
     ax = pl.subplot(2,1,1, adjustable='box', aspect=0.88)
@@ -61,6 +67,7 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     sel &= gntable['good_f212n']
     sel &= gntable['good_f410m']
     sel &= gntable['good_f182m']
+    sel &= (ok2221[idx2][idxmatch[sepmatch < threshold]] | ok1182[idx2][idxmatch[sepmatch < threshold]])
     xx,yy = ww410.world_to_pixel(crds[sel])
 
     colorby = gntable['mag_ab_f187n'] - gntable['mag_ab_f405n']
@@ -145,6 +152,6 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     cb.set_label("[F187N] - [F405N]")
     pl.suptitle(shortname)
 
-    pl.savefig(f"{basepath}/paper_co/figures/ColorColorDiagrams_WithSourceMap_ALL_GN_2025_{shortname}.pdf", dpi=150, bbox_inches='tight')
-    pl.savefig(f"{basepath}/paper_co/figures/ColorColorDiagrams_WithSourceMap_ALL_GN_2025_{shortname}.png", dpi=150, bbox_inches='tight')
+    pl.savefig(f"{basepath}/figures/ColorColorDiagrams_WithSourceMap_ALL_GN_2025_{shortname}.pdf", dpi=150, bbox_inches='tight')
+    pl.savefig(f"{basepath}/figures/ColorColorDiagrams_WithSourceMap_ALL_GN_2025_{shortname}.png", dpi=150, bbox_inches='tight')
     print(f"Selected {sel.sum()} stars")
