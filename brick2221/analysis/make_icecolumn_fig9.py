@@ -77,13 +77,13 @@ def makeplot(avfilts=['F182M', 'F410M'],
     cols = dmag_tbl['column'] * molwt * mol_massfrac / (mol_wt_tgtmol)
 
     dmag_466m410 = np.array(dmags466) - np.array(dmags410) 
-    inferred_co_column = np.interp(unextincted_466m410, dmag_466m410[cols<1e21], cols[cols<1e21])
+    inferred_molecular_column = np.interp(unextincted_466m410, dmag_466m410[cols<1e21], cols[cols<1e21])
 
     pl.scatter(np.array(av[sel & ok]),
-               np.log10(inferred_co_column[sel & ok]),
+               np.log10(inferred_molecular_column[sel & ok]),
                marker='.', s=0.5, alpha=alpha)
     _,_,H,_,_,levels = mpl_plot_templates.adaptive_param_plot(np.array(av[sel & ok]),
-                                    np.log10(inferred_co_column[sel & ok]),
+                                    np.log10(inferred_molecular_column[sel & ok]),
                                     bins=50,
                                     threshold=15,
                                     #linewidths=[0.5]*5,
@@ -108,7 +108,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
     
-    pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
+    #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
     
     NMolofAV = 2.21e21 * np.linspace(0.1, 100, 1000) * 1e-4
     pl.plot(np.linspace(0.1, 100, 1000), np.log10(NMolofAV),
@@ -122,7 +122,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
 
-    return av, inferred_co_column
+    return av, inferred_molecular_column
 
 def main():
 
@@ -154,6 +154,17 @@ def main():
              icemol='H2O', abundance=10**-3.31,
              title='H2O:CO (10:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
+
+
+    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+             icemol='CO', abundance=1e-4,
+             title='H2O:CO:CO2 (10:1:2)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
+    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+             icemol='H2O', abundance=10**-3.31,
+             title='H2O:CO:CO2 (10:1:2)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
+
 
 
     makeplot(avfilts=['F182M', 'F410M'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())

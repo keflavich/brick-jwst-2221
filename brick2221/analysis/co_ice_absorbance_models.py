@@ -127,7 +127,7 @@ phx4000 = atmo_model(4000, xarr=xarr)
 cols = np.geomspace(1e15, 1e21, 25)
 
 def process_table(args):
-    mol, key, consts, xarr, phx4000, cols, filter_data, basepath = args
+    mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath = args
     dmag_rows = []
 
     if 'k' not in consts.colnames:
@@ -147,19 +147,19 @@ def process_table(args):
         return []
 
     cmd_x = ('JWST/NIRCam.F410M',
-                'JWST/NIRCam.F466N',
-                'JWST/NIRCam.F356W',
-                'JWST/NIRCam.F444W',
-                'JWST/NIRCam.F405N',
-                )
-    flxd_ref = fluxes_in_filters(xarr, phx4000['fnu'].quantity, filterids=cmd_x)
+             'JWST/NIRCam.F466N',
+             'JWST/NIRCam.F356W',
+             'JWST/NIRCam.F444W',
+             'JWST/NIRCam.F405N',
+             )
+    flxd_ref = fluxes_in_filters(xarr, phx4000['fnu'].quantity, filterids=cmd_x, transdata=transdata)
 
     for col in cols:
         spec = absorbed_spectrum(col*u.cm**-2, consts, molecular_weight=molwt,
                                   spectrum=phx4000['fnu'].quantity,
                                   xarr=xarr,
                                  )
-        flxd = fluxes_in_filters(xarr, spec, filterids=cmd_x)
+        flxd = fluxes_in_filters(xarr, spec, filterids=cmd_x, transdata=transdata)
         
         # Calculate magnitudes
         mags_x_star = tuple(-2.5*np.log10(flxd_ref[cmd] / u.Quantity(filter_data[cmd], u.Jy))
@@ -203,12 +203,13 @@ if __name__ == '__main__':
     filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W', 
                  'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N']
     filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
+    transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 
     # Create list of all tables to process
     all_tables = []
     for mol, tbs in molecules.items():
         for key, consts in tbs.items():
-            all_tables.append((mol, key, consts, xarr, phx4000, cols, filter_data, basepath))
+            all_tables.append((mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
 
     # Process all tables in parallel
     results = process_map(process_table, 

@@ -438,25 +438,26 @@ def load_table(basetable, ww):
     # Coarse color cut eyeballed in CatalogExploration_Sep2023
     recomb_excess_over_212 = c212_405 > c187_212 * (4 / 3.) + 0.35
 
-    ok2221 = ((basetable['emag_ab_f182m'] < 0.1)
-              & (basetable['emag_ab_f212n'] < 0.1)
-              & (basetable['emag_ab_f466n'] < 0.1)
-              & (basetable['emag_ab_f405n'] < 0.1)
-              & (basetable['emag_ab_f410m'] < 0.1)
-              & (basetable['emag_ab_f187n'] < 0.1)
-              & (basetable['qfit_f187n'] < 0.4)
-              & (basetable['qfit_f410m'] < 0.4)
-              & (basetable['qfit_f405n'] < 0.4)
-              & (basetable['qfit_f182m'] < 0.4)
-              & (basetable['qfit_f212n'] < 0.4)
-              & (basetable['qfit_f466n'] < 0.4))
-    ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
-              & (basetable['emag_ab_f356w'] < 0.1)
-              & (basetable['emag_ab_f200w'] < 0.1)
-              & (basetable['qfit_f444w'] < 0.4)
-              & (basetable['qfit_f356w'] < 0.4)
-              & (basetable['qfit_f200w'] < 0.4)
-              )
+    if 'qfit_f182m' in basetable.colnames:
+        ok2221 = ((basetable['emag_ab_f182m'] < 0.1)
+                & (basetable['emag_ab_f212n'] < 0.1)
+                & (basetable['emag_ab_f466n'] < 0.1)
+                & (basetable['emag_ab_f405n'] < 0.1)
+                & (basetable['emag_ab_f410m'] < 0.1)
+                & (basetable['emag_ab_f187n'] < 0.1)
+                & (basetable['qfit_f187n'] < 0.4)
+                & (basetable['qfit_f410m'] < 0.4)
+                & (basetable['qfit_f405n'] < 0.4)
+                & (basetable['qfit_f182m'] < 0.4)
+                & (basetable['qfit_f212n'] < 0.4)
+                & (basetable['qfit_f466n'] < 0.4))
+        ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
+                & (basetable['emag_ab_f356w'] < 0.1)
+                & (basetable['emag_ab_f200w'] < 0.1)
+                & (basetable['qfit_f444w'] < 0.4)
+                & (basetable['qfit_f356w'] < 0.4)
+                & (basetable['qfit_f200w'] < 0.4)
+                )
 
     # calculate A_V from colors
     # super naive version
@@ -653,6 +654,8 @@ def main():
         print("Loaded merged-reproject-iterative-bg-epsf")
     else:
         print("Loaded nothing")
+
+    globals().update(locals())
 
     assert 'blue_410m405_466' in globals()
     return globals()
