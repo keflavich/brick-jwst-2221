@@ -9,9 +9,10 @@ import glob
 import pylab as pl
 basepath = '/orange/adamginsburg/jwst/brick/'
 
+from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
 
-def make_av_comparison(basetable, color1, color2, color3, color4, color5, axlims1=(0.0, 2, -0.5, 4), axlims2=(0,3,-2.5,2), suffix=''):
+def make_av_comparison(basetable, color1, color2, color3, color4, color5, color6, color7, axlims1=(0.0, 2, -0.5, 4), axlims2=(0,3,-2.5,2), suffix=''):
     pl.figure(figsize=(20,10))
     ax = pl.subplot(2,1,1, adjustable='box', aspect=0.88)
 
@@ -96,7 +97,7 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, axlims
     cb = pl.colorbar(mappable=sc, ax=pl.gcf().axes)
     cb.set_label(f"[{color5[0].upper()}] - [{color5[1].upper()}]")
 
-    print(f"Selected {sel.sum()} stars for the colorcolor diagram plot.  sel466 has {sel466.sum()} stars.")
+    print(f"Selected {sel.sum()} stars for the colorcolor diagram plot.  sel466 has {sel466.sum()} stars. name={os.path.basename(fn)}")
     newname = os.path.basename(fn).replace('.fits', f'{suffix}_colorcolorcolor.png')
     pl.savefig(f"{basepath}/figures/{newname}", dpi=150, bbox_inches='tight')
 
@@ -111,10 +112,60 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, axlims
     histname = os.path.basename(fn).replace('.fits', f'{suffix}_hist.png')
     pl.savefig(f"{basepath}/figures/{histname}", dpi=150, bbox_inches='tight')
 
+    pl.figure()
+    #colors = set(map(tuple, [color1, color2, color3, color4, color5, color6, color7, color8]))
+    colors = [('f187n', 'f212n'), ('f187n', 'f405n'), ('f187n', 'f410m'), ('f187n', 'f466n'),
+              ('f182m', 'f212n'), ('f182m', 'f405n'), ('f182m', 'f410m'), ('f182m', 'f466n'),
+              ('f212n', 'f405n'), ('f212n', 'f410m'), ('f212n', 'f466n'),
+              ('f410m', 'f466n'), ('f405n', 'f466n'),
+    ]
+
+    for ii, color in enumerate(colors):
+        av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in color]
+        av = (basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}']) / (CT06_MWGC()(av_wavelengths[0]) - CT06_MWGC()(av_wavelengths[1]))
+        av1 = np.array(av[sel])
+        av1 = av1[np.isfinite(av1)]
+        linestyle = '-'
+        ax = pl.subplot(2, 1, 1)
+        if 'f410m' in color:
+            linestyle = '--'
+        if 'f187n' in color:
+            linestyle = ':'
+        if 'f466n' in color:
+            ax = pl.subplot(2, 1, 2)
+        if len(av1) > 0:
+            ax.hist(av1, bins=np.linspace(0 + np.random.randn(), 100 + np.random.randn(), 100),
+                    label=f"[{color[0].upper()}] - [{color[1].upper()}]", histtype='step', linestyle=linestyle,
+                    alpha=0.5 if linestyle == '-' else 1,
+                    )
+
+
+    color = ('f182m', 'f212n')
+    av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in color]
+    av = (basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}']) / (CT06_MWGC()(av_wavelengths[0]) - CT06_MWGC()(av_wavelengths[1]))
+    av1 = np.array(av[sel])
+    av1 = av1[np.isfinite(av1)]
+    pl.subplot(2, 1, 2).hist(av1, bins=np.linspace(0 + np.random.randn(), 100 + np.random.randn(), 100), label=f"[{color[0].upper()}] - [{color[1].upper()}]", color='k', alpha=0.25, zorder=-5)
+        # av2 = np.array(av[sel466])
+        # av2 = av2[np.isfinite(av2)]
+        # if len(av2) > 0:
+        #     ax.hist(av2, bins=np.linspace(0 + np.random.randn(), 100 + np.random.randn(), 100), label=f"[{color[0].upper()}] - [{color[1].upper()}]", alpha=0.25, zorder=-5)
+    pl.subplot(2, 1, 1).set_xticks([])
+    pl.subplot(2, 1, 1).set_xlim(-1, 101)
+    pl.title(os.path.splitext(os.path.basename(fn))[0])
+    pl.legend(loc='best')
+    pl.subplot(2, 1, 2).set_xlabel("AV")
+    pl.subplot(2, 1, 2).set_xlim(-1, 101)
+    pl.legend(loc='best')
+    pl.tight_layout()
+    histname = os.path.basename(fn).replace('.fits', f'{suffix}_hist_av.png')
+    pl.savefig(f"{basepath}/figures/{histname}", dpi=150, bbox_inches='tight')
+
 if __name__ == "__main__":
 
-    for fn in glob.glob(f'{basepath}/catalogs/basic*merged*fits') + glob.glob(f"{basepath}/catalogs/iter*merged*fits") + glob.glob(f'{basepath}/catalogs/crowd*merged*fits'):
+    for fn in glob.glob(f'{basepath}/catalogs/basic*merged*fits') + glob.glob(f'{basepath}/catalogs/crowd*merged*fits') + glob.glob(f"{basepath}/catalogs/iter*merged*fits"):
         basetable = Table.read(fn)
-        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f410m', 'f466n'], color5=['f182m', 'f410m'], suffix='_410466')
-        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f212n', 'f466n'], color5=['f182m', 'f410m'], suffix='_212466', axlims2=(-0.1, 2.5, -0.1, 2.5), axlims1=(-0.1, 2.5, -0.1, 3.5))
+        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f410m'], color3=['f182m', 'f212n'], color4=['f410m', 'f466n'], color5=['f187n', 'f405n'], color6=['f212n', 'f466n'], color7=['f182m', 'f410m'],  suffix='_410466_color187405')
+        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f410m', 'f466n'], color5=['f182m', 'f410m'], color6=['f212n', 'f466n'], color7=['f187n', 'f405n'],  suffix='_410466')
+        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f212n', 'f466n'], color5=['f182m', 'f410m'], color6=['f410m', 'f466n'], color7=['f187n', 'f405n'],  suffix='_212466', axlims2=(-0.1, 2.5, -0.1, 2.5), axlims1=(-0.1, 2.5, -0.1, 3.5))
         pl.close('all')
