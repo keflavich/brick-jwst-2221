@@ -481,7 +481,7 @@ def load_table(basetable, ww, verbose=False):
                 & (basetable['qfit_f356w'] < max_qfit)
                 & (basetable['qfit_f200w'] < max_qfit)
                 )
-    elif 'qfit_f182m' in basetable.colnames:
+    elif 'qf_f182m' in basetable.colnames:
         ok2221 = ((basetable['emag_ab_f182m'] < 0.1)
                 & (basetable['emag_ab_f212n'] < 0.1)
                 & (basetable['emag_ab_f466n'] < 0.1)
@@ -502,6 +502,8 @@ def load_table(basetable, ww, verbose=False):
                 & (basetable['qf_f356w'] < minqf)
                 & (basetable['qf_f200w'] < minqf)
                 )
+    else:
+        raise ValueError("What kind of catalog is this?")
 
     # calculate A_V from colors
     # super naive version
@@ -534,6 +536,7 @@ def load_table(basetable, ww, verbose=False):
         if verbose:
             print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
 
+    assert 'ok2221' in locals()
     return locals()
 
 
