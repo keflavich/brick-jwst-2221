@@ -334,7 +334,7 @@ def load_table(basetable, ww, verbose=False):
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
     if verbose:
-    print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_410b.sum()}.")
+        print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_410b.sum()}.")
 
     blue_BrA_and_PaA = (oksep & ~any_saturated &
                         (basetable['flux_f405n'] > basetable['flux_f410m']) &
