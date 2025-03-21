@@ -9,10 +9,8 @@ import pylab as pl
 basepath = '/orange/adamginsburg/jwst/brick/'
 
 
-for fn in glob.glob(f'{basepath}/catalogs/crowd*merged*fits') + glob.glob(f'{basepath}/catalogs/basic*merged*fits') + glob.glob(f"{basepath}/catalogs/iter*merged*fits"):
-    basetable = Table.read(fn)
 
-
+def make_av_comparison(basetable, color1, color2, color3, color4, color5, axlims1=(0.0, 2, -0.5, 4), axlims2=(0,3,-2.5,2), suffix=''):
     pl.figure(figsize=(20,10))
     ax = pl.subplot(2,1,1, adjustable='box', aspect=0.88)
 
@@ -33,7 +31,7 @@ for fn in glob.glob(f'{basepath}/catalogs/crowd*merged*fits') + glob.glob(f'{bas
     #sel &= basetable['mag_ab_f410m'] < 18.5
     xx,yy = ww410.world_to_pixel(crds[sel])
 
-    colorby = basetable['mag_ab_f182m'] - basetable['mag_ab_f410m']
+    colorby = basetable[f'mag_ab_{color5[0]}'] - basetable[f'mag_ab_{color5[1]}']
 
     colornorm = simple_norm(colorby[sel], stretch='linear', min_cut=-0.5, max_cut=4)
     cmap = 'YlOrRd'
@@ -56,8 +54,8 @@ for fn in glob.glob(f'{basepath}/catalogs/crowd*merged*fits') + glob.glob(f'{bas
     ax.set_xlabel("Declination [ICRS]")
 
     ax2 = pl.subplot(2,3,5)
-    sc = ax2.scatter((basetable['mag_ab_f182m'] - basetable['mag_ab_f212n'])[sel],
-                    (basetable['mag_ab_f212n'] - basetable['mag_ab_f405n'])[sel],
+    sc = ax2.scatter((basetable[f'mag_ab_{color1[0]}'] - basetable[f'mag_ab_{color1[1]}'])[sel],
+                    (basetable[f'mag_ab_{color2[0]}'] - basetable[f'mag_ab_{color2[1]}'])[sel],
                     s=0.5, alpha=0.75,
                     marker=',',
                     c=colorby[sel],
@@ -65,32 +63,40 @@ for fn in glob.glob(f'{basepath}/catalogs/crowd*merged*fits') + glob.glob(f'{bas
                     )
     # A_V=30 roughly corresponds to 1 mag color excess in 182-212
     # 1/(CT06_MWGC()(1.82*u.um) - CT06_MWGC()(2.12*u.um))
-    plot_extvec_ccd(ax2, ('f182m', 'f212n'), ('f212n', 'f405n'), start=(1, 0,), color='k', extvec_scale=30, head_width=0.1)
-    ax2.set_xlabel("[F182M] - [F212N]")
-    ax2.set_ylabel("[F212N] - [F405N]");
-    ax2.axis((0.0, 2, -0.5, 4));
+    plot_extvec_ccd(ax2, color1, color2, start=(1, 0,), color='k', extvec_scale=30, head_width=0.1)
+    ax2.set_xlabel(f"[{color1[0].upper()}] - [{color1[1].upper()}]")
+    ax2.set_ylabel(f"[{color2[0].upper()}] - [{color2[1].upper()}]");
+    ax2.axis(axlims1);
     ax2.text(2, 1.5, "A$_V = 30$", ha='center')
 
 
     ax3 = pl.subplot(2,3,6)
-    sc = ax3.scatter((basetable['mag_ab_f182m'] - basetable['mag_ab_f212n'])[sel],
-                (basetable['mag_ab_f410m'] - basetable['mag_ab_f466n'])[sel],
+    sc = ax3.scatter((basetable[f'mag_ab_{color3[0]}'] - basetable[f'mag_ab_{color3[1]}'])[sel],
+                (basetable[f'mag_ab_{color4[0]}'] - basetable[f'mag_ab_{color4[1]}'])[sel],
                 s=0.5, alpha=0.75,
                 c=colorby[sel],
                 norm=colornorm, cmap=cmap
             )
-    plot_extvec_ccd(ax3, ('f182m', 'f212n'), ('f410m', 'f466n'), start=(0.5,1,), color='k', extvec_scale=30, head_width=0.1)
+    plot_extvec_ccd(ax3, color3, color4, start=(0.5,1,), color='k', extvec_scale=30, head_width=0.1)
 
 
-    ax3.set_ylabel("[F410M] - [F466N]")
-    ax3.set_xlabel("[F182M] - [F212N]")
-    ax3.axis((0,3,-2.5,2));
+    ax3.set_xlabel(f"[{color3[0].upper()}] - [{color3[1].upper()}]")
+    ax3.set_ylabel(f"[{color4[0].upper()}] - [{color4[1].upper()}]")
+    ax3.axis(axlims2);
     ax3.text(1, 1.25, "A$_V = 30$", ha='center')
 
     pl.suptitle(os.path.splitext(os.path.basename(fn))[0])
     cb = pl.colorbar(mappable=sc, ax=pl.gcf().axes)
-    cb.set_label("[F182M] - [F410M]")
+    cb.set_label(f"[{color5[0].upper()}] - [{color5[1].upper()}]")
 
     print(f"Selected {sel.sum()} stars for the colorcolor diagram plot")
-    newname = os.path.basename(fn).replace('.fits', '_colorcolorcolor.png')
+    newname = os.path.basename(fn).replace('.fits', f'{suffix}_colorcolorcolor.png')
     pl.savefig(f"{basepath}/figures/{newname}", dpi=150, bbox_inches='tight')
+
+if __name__ == "__main__":
+
+    for fn in glob.glob(f'{basepath}/catalogs/basic*merged*fits') + glob.glob(f"{basepath}/catalogs/iter*merged*fits") + glob.glob(f'{basepath}/catalogs/crowd*merged*fits'):
+        basetable = Table.read(fn)
+        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f410m', 'f466n'], color5=['f182m', 'f410m'], suffix='_410466')
+        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f212n', 'f466n'], color5=['f182m', 'f410m'], suffix='_212466', axlims2=(-0.1, 2.5, -0.1, 2.5), axlims1=(-0.1, 2.5, -0.1, 3.5))
+        pl.close('all')
