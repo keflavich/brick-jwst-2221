@@ -286,7 +286,7 @@ def load_table(basetable, ww, verbose=False):
     filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint']) - abconv.value
     zeropoint_offset_410_466 = filtconv410-filtconv466
     if verbose:
-    print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
+        print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
     # May 11, 2024: the new versions of the catalogs don't have this magnitude offset error
     # so this should be gone now, right?
     zeropoint_offset_410_466 = 0
