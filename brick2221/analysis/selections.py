@@ -285,6 +285,7 @@ def load_table(basetable, ww, verbose=False):
     filtconv410 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint']) - abconv.value
     filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint']) - abconv.value
     zeropoint_offset_410_466 = filtconv410-filtconv466
+
     if verbose:
         print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
     # May 11, 2024: the new versions of the catalogs don't have this magnitude offset error
@@ -495,13 +496,14 @@ def load_table(basetable, ww, verbose=False):
                 & (basetable['qf_f212n'] < minqf)
                 & (basetable['qf_f466n'] < minqf)
                 )
-        ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
-                & (basetable['emag_ab_f356w'] < 0.1)
-                & (basetable['emag_ab_f200w'] < 0.1)
-                & (basetable['qf_f444w'] < minqf)
-                & (basetable['qf_f356w'] < minqf)
-                & (basetable['qf_f200w'] < minqf)
-                )
+        if 'emag_ab_f444w' in basetable.colnames:
+            ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
+                    & (basetable['emag_ab_f356w'] < 0.1)
+                    & (basetable['emag_ab_f200w'] < 0.1)
+                    & (basetable['qf_f444w'] < minqf)
+                    & (basetable['qf_f356w'] < minqf)
+                    & (basetable['qf_f200w'] < minqf)
+                    )
     else:
         raise ValueError("What kind of catalog is this?")
 
