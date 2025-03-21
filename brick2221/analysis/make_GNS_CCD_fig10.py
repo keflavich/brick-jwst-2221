@@ -65,11 +65,17 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     crds = gntable['skycoord_f410m']
     sel = gntable['sep_f405n'].quantity < 0.1*u.arcsec
     sel &= gntable['mag_ab_f410m'] < 18.5
+    assert sel.sum() > 0
     sel &= gntable['good_f466n']
+    assert sel.sum() > 0
     sel &= gntable['good_f212n']
+    assert sel.sum() > 0
     sel &= gntable['good_f410m']
+    assert sel.sum() > 0
     sel &= gntable['good_f182m']
+    assert sel.sum() > 0
     sel &= (ok2221[idx2][idxmatch[sepmatch < threshold]] | ok1182[idx2][idxmatch[sepmatch < threshold]])
+    assert sel.sum() > 0
     xx,yy = ww410.world_to_pixel(crds[sel])
 
     colorby = gntable['mag_ab_f187n'] - gntable['mag_ab_f405n']

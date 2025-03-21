@@ -52,6 +52,7 @@ def makeplot(avfilts=['F182M', 'F212N'],
     try:
         E_V = (CT06_MWGC()(av_wavelengths[0]) - CT06_MWGC()(av_wavelengths[1]))
     except ValueError:
+        print("Using G21_MWAvg() instead of CT06_MWGC()")
         E_V = (G21_MWAvg()(av_wavelengths[0]) - CT06_MWGC()(av_wavelengths[1]))
 
     E_V_212_466 = (CT06_MWGC()(2.12*u.um) - CT06_MWGC()(4.66*u.um))

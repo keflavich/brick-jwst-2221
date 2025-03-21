@@ -1,3 +1,4 @@
+import numpy as np
 from astropy.table import Table
 import os
 from astropy import units as u
@@ -24,16 +25,22 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, axlims
 
     if 'qfit_f410m' in basetable.colnames:
         # add qfit cuts - can be generous by requiring multiple bands
-        sel &= basetable['qfit_f410m'] < 0.5
-        sel &= basetable['qfit_f405n'] < 0.5
-        sel &= basetable['qfit_f212n'] < 0.5
+        sel &= basetable['qfit_f410m'] < 0.4
+        sel &= basetable['qfit_f405n'] < 0.4
+        sel &= basetable['qfit_f212n'] < 0.4
+        sel466 = basetable['qfit_f466n'] < 0.4
+    elif 'qf_f410m' in basetable.colnames:
+        sel &= basetable['qf_f410m'] > 0.9
+        sel &= basetable['qf_f405n'] > 0.9
+        sel &= basetable['qf_f212n'] > 0.9
+        sel466 = basetable['qf_f466n'] > 0.9
 
     #sel &= basetable['mag_ab_f410m'] < 18.5
     xx,yy = ww410.world_to_pixel(crds[sel])
 
     colorby = basetable[f'mag_ab_{color5[0]}'] - basetable[f'mag_ab_{color5[1]}']
 
-    colornorm = simple_norm(colorby[sel], stretch='linear', min_cut=-0.5, max_cut=4)
+    colornorm = simple_norm(colorby[sel], stretch='linear', vmin=-0.5, vmax=4)
     cmap = 'YlOrRd'
 
     scat = ax.scatter(
@@ -89,9 +96,20 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, axlims
     cb = pl.colorbar(mappable=sc, ax=pl.gcf().axes)
     cb.set_label(f"[{color5[0].upper()}] - [{color5[1].upper()}]")
 
-    print(f"Selected {sel.sum()} stars for the colorcolor diagram plot")
+    print(f"Selected {sel.sum()} stars for the colorcolor diagram plot.  sel466 has {sel466.sum()} stars.")
     newname = os.path.basename(fn).replace('.fits', f'{suffix}_colorcolorcolor.png')
     pl.savefig(f"{basepath}/figures/{newname}", dpi=150, bbox_inches='tight')
+
+    pl.figure(figsize=(15,5))
+    for ii, color in enumerate([color1, color2, color3, color4, color5]):
+        ax = pl.subplot(1,5,ii+1)
+        pl.hist((basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}'])[sel], bins=np.linspace(axlims1[0], axlims1[1], 100))
+        pl.hist((basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}'])[sel466], bins=np.linspace(axlims1[0], axlims1[1], 100), histtype='step', color='k')
+        pl.xlabel(f"[{color[0].upper()}] - [{color[1].upper()}]")
+    pl.tight_layout()
+    pl.suptitle(os.path.splitext(os.path.basename(fn))[0])
+    histname = os.path.basename(fn).replace('.fits', f'{suffix}_hist.png')
+    pl.savefig(f"{basepath}/figures/{histname}", dpi=150, bbox_inches='tight')
 
 if __name__ == "__main__":
 
