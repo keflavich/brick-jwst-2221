@@ -42,6 +42,7 @@ color2= ['F410M', 'F466N']
 
 def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1]):
     plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1], color2=[x.lower() for x in color2],
+    s=1, sel=False,
                 exclude=~ok2221)
 
     def wavelength_of_filter(filtername):
@@ -52,6 +53,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1]):
         
     abundance = 1e-4
     nh2_to_av = 2.21e21 #* u.cm**-2 / u.mag
+    #nh2_to_av = 1.8e22 #* u.cm**-2 / u.mag # try the more extreme version...
 
     dcol = 2
     for mol_id in np.unique(dmag_mine['mol_id']):
@@ -71,14 +73,14 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1]):
         #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
     pl.axis(axlims);
 
-    return a_color1, a_color2, c1, c2, sel
+    return a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2
 
 if __name__ == "__main__":
     color1= ['F182M', 'F212N']
     color2= ['F410M', 'F466N']
-    a_color1, a_color2, c1, c2, sel = plot_ccd_with_icemodels(color1, color2)
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2 = plot_ccd_with_icemodels(color1, color2)
 
     color1= ['F182M', 'F212N']
     color2= ['F212N', 'F466N']
     pl.figure()
-    a_color1, a_color2, c1, c2, sel = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4])
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2 = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4])
