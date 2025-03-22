@@ -62,7 +62,7 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     galnuc2021_crds = SkyCoord(galnuc2021['RAJ2000'], galnuc2021['DEJ2000'], frame='fk5')
 
     # Crossmatch galnuc w/"best"
-    threshold = 0.2*u.arcsec
+    threshold = 0.3*u.arcsec
     idx, sidx, sep, sep3d = galnuc2021_crds.search_around_sky(basetable['skycoord_ref'], threshold)
     idx2, sidx2, sep2, sep3d2 = basetable['skycoord_ref'].search_around_sky(galnuc2021_crds, threshold)
     idxmatch, sepmatch, _ = coordinates.match_coordinates_sky(galnuc2021_crds, basetable['skycoord_ref'][idx2])
@@ -93,7 +93,7 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
 
     colorby = gntable['mag_ab_f187n'] - gntable['mag_ab_f405n']
 
-    colornorm = simple_norm(colorby[sel], stretch='linear', min_cut=-0.1, max_cut=4.0)
+    colornorm = simple_norm(colorby[sel], stretch='linear', vmin=-0.1, vmax=4.0)
     cmap = 'YlOrRd'
 
     scat = ax.scatter(
@@ -200,21 +200,24 @@ for catname, shortname in [('crowdsource_nsky0_merged_indivexp_photometry_tables
     pl.xlabel("Ks")
     pl.ylabel("F212N")
     pl.subplot(2,2,2).scatter(gntable['Hmag'][sel], gntable['mag_ab_f182m'][sel], s=0.5, alpha=0.75)
-    pl.plot(np.linspace(13,20,100), np.linspace(13,20,100), 'k--', zorder=-5, alpha=0.5)
+    pl.plot(np.linspace(13,21,100), np.linspace(13,21,100), 'k--', zorder=-5, alpha=0.5)
     pl.xlabel("H")
     pl.ylabel("F182M")
+
     diff = gntable['Ksmag'][sel] - gntable['mag_ab_f212n'][sel]
     diff = np.array(diff[diff == diff])
-    pl.subplot(2,2,3).hist(gntable['Ksmag'][sel] - gntable['mag_ab_f212n'][sel], bins=np.linspace(np.nanpercentile(diff, 1), np.nanpercentile(diff, 99), 50))
+    pl.subplot(2,2,3).hist(gntable['Ksmag'][sel] - gntable['mag_ab_f212n'][sel], bins=np.linspace(np.nanpercentile(diff, 0.1), np.nanpercentile(diff, 99.9), 50))
     pl.axvline(np.nanmedian(diff), color='k', linestyle=':', zorder=-5, alpha=0.5, label=f'{np.nanmedian(diff):.2f}')
     pl.legend(loc='best')
     pl.xlabel("Ks - 212N")
-    pl.subplot(2,2,4).hist(gntable['Hmag'][sel] - gntable['mag_ab_f182m'][sel], bins=np.linspace(np.nanpercentile(diff, 1), np.nanpercentile(diff, 99), 50))
+
+    pl.subplot(2,2,4).hist(gntable['Hmag'][sel] - gntable['mag_ab_f182m'][sel], bins=np.linspace(np.nanpercentile(diff, 0.1), np.nanpercentile(diff, 99.9), 50))
     diff = gntable['Hmag'][sel] - gntable['mag_ab_f182m'][sel]
     diff = diff[diff == diff]
     pl.axvline(np.nanmedian(diff), color='k', linestyle=':', zorder=-5, alpha=0.5, label=f'{np.nanmedian(diff):.2f}')
     pl.legend(loc='best')
     pl.xlabel("H - 182M")
+
     pl.savefig(f"{basepath}/figures/MagMagDiagrams_GN_2025_{shortname}.pdf", dpi=150, bbox_inches='tight')
     pl.savefig(f"{basepath}/figures/MagMagDiagrams_GN_2025_{shortname}.png", dpi=150, bbox_inches='tight')
     print(f"Selected {sel.sum()} stars")
