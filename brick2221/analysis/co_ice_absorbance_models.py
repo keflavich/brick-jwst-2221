@@ -81,7 +81,10 @@ def make_mymix_tables():
     grid = co_gerakines['Wavelength']
 
     for ii, (mol, composition) in enumerate([('COplusH2O', 'H2O:CO (3:1)'),
+                                            ('COplusH2O', 'H2O:CO (5:1)'),
+                                            ('COplusH2O', 'H2O:CO (7:1)'),
                                             ('COplusH2O', 'H2O:CO (10:1)'),
+                                            ('COplusH2O', 'H2O:CO (15:1)'),
                                             ('COplusH2O', 'H2O:CO (20:1)'),
                                             ('COplusH2O', 'H2O:CO (1:1)'),
                                             ('COplusH2O', 'H2O:CO (0.5:1)'),

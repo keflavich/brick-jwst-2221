@@ -77,6 +77,7 @@ def makeplot(avfilts=['F182M', 'F212N'],
     mol_wt_tgtmol = Formula(icemol).mass * u.Da
     print(f'icemol={icemol}, molwt={molwt}, mol_wt_tgtmol={mol_wt_tgtmol}, comps={comps}, mols={mols}, massfrac={mol_massfrac}')
 
+    # cols are .... column density of the selected ice species
     cols = dmag_tbl['column'] * molwt * mol_massfrac / (mol_wt_tgtmol)
 
     # there is no ice effect on 212
@@ -116,7 +117,7 @@ def makeplot(avfilts=['F182M', 'F212N'],
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
     
     # Liszt value: 5.8e21 * 3.1
-    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * 1e-4
+    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
     logN = int(np.log10(NtoAV))
     pl.plot(np.linspace(0.1, 100, 1000), np.log10(NMolofAV),
             label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
