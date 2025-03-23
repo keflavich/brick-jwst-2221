@@ -72,6 +72,8 @@ def make_mymix_tables():
 
     water_mastrapa = h2otbs[('ocdb', 242, 25)]
     co2_gerakines = co2tbs[('ocdb', 55, 8)]
+    ethanol = read_lida_file(f'{basepath}/tables/87_CH3CH2OH_1_885_30.0K.txt')
+    methanol = read_lida_file(f'{basepath}/tables/58_CH3OH_1_499_25.0K.txt')
 
     co_gerakines = gerakines = retrieve_gerakines_co()
 
@@ -80,14 +82,15 @@ def make_mymix_tables():
 
     grid = co_gerakines['Wavelength']
 
-    for ii, (mol, composition) in enumerate([('COplusH2O', 'H2O:CO (3:1)'),
+    for ii, (mol, composition) in enumerate([
+                                            ('COplusH2O', 'H2O:CO (0.5:1)'),
+                                            ('COplusH2O', 'H2O:CO (1:1)'),
+                                            ('COplusH2O', 'H2O:CO (3:1)'),
                                             ('COplusH2O', 'H2O:CO (5:1)'),
                                             ('COplusH2O', 'H2O:CO (7:1)'),
                                             ('COplusH2O', 'H2O:CO (10:1)'),
                                             ('COplusH2O', 'H2O:CO (15:1)'),
                                             ('COplusH2O', 'H2O:CO (20:1)'),
-                                            ('COplusH2O', 'H2O:CO (1:1)'),
-                                            ('COplusH2O', 'H2O:CO (0.5:1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (1:1:0.1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (3:1:0.1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (5:1:0.5)'),
@@ -97,22 +100,33 @@ def make_mymix_tables():
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (5:1:1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (5:1:2)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (10:1:2)'),
+                                            ('COplusH2OplusCO2', 'H2O:CO:CO2 (10:1:10)'),
+                                            ('COplusH2OplusCO2', 'H2O:CO:CO2 (1:1:10)'),
                                             ('CO', 'CO 1'),
+                                            ('H2O', 'H2O 1'),
+                                            ('CO2', 'CO2 1'),
+                                            ('COplusH2OplusCO2plusCH3OH', 'H2O:CO:CO2:CH3OH (1:1:0.1:0.1)'),
+                                            ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:0.1:0.1)'),
                                             ]):
         compspl = composition.split(' ')[1].strip('()').split(':')
         if len(compspl) == 1:
             co_mult = 1
-            h2o_mult = co2_mult = 0
+            ch3oh_mult = h2o_mult = co2_mult = ch3ch2oh_mult = 0
         else:
             h2o_mult = float(compspl[0])
             co_mult = float(compspl[1])
             co2_mult = float(compspl[2] if len(compspl) > 2 else 0)
+            ch3oh_mult = float(compspl[3] if len(compspl) > 3 else 0)
+            ch3ch2oh_mult = float(compspl[4] if len(compspl) > 4 else 0)
 
         inds = np.argsort(water_mastrapa['Wavelength'])
         co_plus_co2_plus_water_k = (co_mult * gerakines['k'] +
                                     h2o_mult * np.interp(grid, water_mastrapa['Wavelength'][inds], water_mastrapa['k'][inds],) +
-                                    co2_mult * np.interp(grid, co2_gerakines['Wavelength'], co2_gerakines['k'])) / (
-                                        co_mult + h2o_mult + co2_mult
+                                    co2_mult * np.interp(grid, co2_gerakines['Wavelength'], co2_gerakines['k']) +
+                                    ch3oh_mult * np.interp(grid, methanol['Wavelength'], methanol['k']) +
+                                    ch3ch2oh_mult * np.interp(grid, ethanol['Wavelength'], ethanol['k'])
+                                    ) / (
+                                        co_mult + h2o_mult + co2_mult + ch3oh_mult + ch3ch2oh_mult
                                         )
 
         tbl = Table({'Wavelength': grid, 'k': co_plus_co2_plus_water_k})

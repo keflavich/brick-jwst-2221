@@ -96,7 +96,7 @@ def plot_extvec_ccd(ax, color1, color2, ext=CT06_MWGC(), extvec_scale=200,
              start[1],
              e_1 - e_2,
              e_3 - e_4,
-             color=color, head_width=head_width)
+             color=color, head_width=head_width, label=f'$A_V={extvec_scale}$')
 
 def ccd(basetable,
         ax,
@@ -113,6 +113,8 @@ def ccd(basetable,
         selcolor='r',
         max_uncertainty=None,
         markersize=5,
+        head_width=0.1,
+        extvec_start=(0, 0),
         **kwargs
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
@@ -141,7 +143,7 @@ def ccd(basetable,
     ax.axis(axlims)
     if ext is not None:
         try:
-            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale)
+            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale, head_width=head_width, start=extvec_start)
         except Exception as ex:
             print(ex)
 
@@ -153,6 +155,7 @@ def ccds(basetable, sel=True,
          extvec_scale=200,
          rasterized=True,
          gridspec_kwargs={},
+         head_width=0.1,
          **kwargs
         ):
     if fig is None:
@@ -163,7 +166,7 @@ def ccds(basetable, sel=True,
         ax = fig.add_subplot(gridspec[ii])
         ccd(basetable, ax=ax, color1=color1, color2=color2,
             axlims=axlims, sel=sel,
-            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,
+            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale, head_width=head_width,
             **kwargs)
 
     fig.subplots_adjust(**gridspec_kwargs)
@@ -177,6 +180,7 @@ def cmds(basetable, sel=True,
          ext=CT06_MWGC(),
          fig=None,
          extvec_scale=30,
+         head_width=0.5,
          markersize=5,
          rasterized=True,
          exclude=False,
@@ -230,7 +234,7 @@ def cmds(basetable, sel=True,
             e_1 = ext(w1) * extvec_scale
             e_2 = ext(w2) * extvec_scale
 
-            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=0.5)
+            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=head_width)
     return fig
 
 

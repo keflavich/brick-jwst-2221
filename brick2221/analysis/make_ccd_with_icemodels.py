@@ -32,17 +32,26 @@ if 'basetable_merged1182_daophot' not in globals():
 
 sel = ok = ok2221
 
-dmag_h2o = Table.read(f'{basepath}/tables/H2O_ice_absorption_tables.ecsv')
 dmag_co2 = Table.read(f'{basepath}/tables/CO2_ice_absorption_tables.ecsv')
+dmag_co2.add_index('mol_id')
+dmag_co2.add_index('composition')
+dmag_co2.add_index('temperature')
+dmag_co2.add_index('database')
 dmag_co = Table.read(f'{basepath}/tables/CO_ice_absorption_tables.ecsv')
+dmag_co.add_index('mol_id')
+dmag_co.add_index('composition')
+dmag_co.add_index('temperature')
+dmag_co.add_index('database')
 dmag_mine = Table.read(f'{basepath}/tables/H2O+CO_ice_absorption_tables.ecsv')
 dmag_mine.add_index('mol_id')
 dmag_mine.add_index('composition')
+dmag_mine.add_index('temperature')
+dmag_mine.add_index('database')
+dmag_h2o = Table.read(f'{basepath}/tables/H2O_ice_absorption_tables.ecsv')
+dmag_h2o.add_index('mol_id')
 dmag_h2o.add_index('composition')
 dmag_h2o.add_index('temperature')
-
-color1= ['F182M', 'F212N']
-color2= ['F410M', 'F466N']
+dmag_h2o.add_index('database')
 
 x = np.linspace(1.24*u.um, 5*u.um, 1000)
 pp_ct06 = np.polyfit(x, CT06_MWGC()(x), 7)
@@ -60,10 +69,16 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1], nh2_to_av=2
                             max_column=5e20,
                             icemol='CO',
                             ext=ext,
+                            dmag_tbl=dmag_mine,
+                            temperature_id=0,
                             ):
+    """
+    """
     plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
                    color2=[x.lower() for x in color2], s=1, sel=False,
-                   ext=None,
+                   ext=ext,
+                   extvec_scale=30,
+                   head_width=0.1,
                    exclude=~ok2221)
 
     def wavelength_of_filter(filtername):
@@ -74,20 +89,33 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1], nh2_to_av=2
         
     dcol = 2
     for mol_id in molids:
-        tb = dmag_mine.loc[mol_id]
+        if isinstance(mol_id, tuple):
+            mol_id, database = mol_id
+            tb = dmag_tbl.loc[mol_id].loc['database', database]
+        else:
+            tb = dmag_tbl.loc[mol_id]
         comp = np.unique(tb['composition'])[0]
+        temp = np.unique(tb['temperature'])[temperature_id]
+        tb = tb.loc['temperature', temp]
 
         sel = tb['column'] < max_column
 
         molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-        if len(comp.split(" (")) == 1:
+        if len(comp.split(" ")) == 2:
+            mols, comps = comp.split(" ")
+            comps = list(map(float, re.split("[: ]", comps.strip("()"))))
+            mols = re.split("[: ]", mols)
+        elif len(comp.split(" (")) == 1:
             mols = [comp.split()[0]]
             comps = [1]
         else:
             mols, comps = comp.split(" (")
             comps = list(map(float, re.split("[: ]", comps.strip(")"))))
             mols = re.split("[: ]", mols)
-        mol_massfrac = comps[mols.index(icemol)] / sum(comps)
+        if icemol in mols:
+            mol_massfrac = comps[mols.index(icemol)] / sum(comps)
+        else:
+            continue
 
         mol_wt_tgtmol = Formula(icemol).mass * u.Da
 
@@ -106,14 +134,16 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1], nh2_to_av=2
         #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
     pl.axis(axlims);
 
-    return a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2
+    return a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb
 
 if __name__ == "__main__":
     color1= ['F182M', 'F212N']
     color2= ['F410M', 'F466N']
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2 = plot_ccd_with_icemodels(color1, color2)
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=np.arange(8))
+    pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
 
     color1= ['F182M', 'F212N']
     color2= ['F212N', 'F466N']
     pl.figure()
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2 = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4])
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4], molids=np.arange(8))
+    pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
