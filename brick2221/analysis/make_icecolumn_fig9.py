@@ -55,6 +55,22 @@ def calc_av(avfilts=['F182M', 'F410M'], basetable=basetable, ext=CT06_MWGC()):
 
     return av
 
+
+def molscomps(comp):
+    if len(comp.split(" ")) == 2:
+        mols, comps = comp.split(" ")
+        comps = list(map(float, re.split("[: ]", comps.strip("()"))))
+        mols = re.split("[: ]", mols)
+    elif len(comp.split(" (")) == 1:
+        mols = [comp]
+        comps = [1]
+    else:
+        mols, comps = comp.split(" (")
+        comps = list(map(float, re.split("[: ]", comps.strip(")"))))
+        mols = re.split("[: ]", mols)
+
+    return mols, comps
+
     
 def compute_molecular_column(unextincted_466m410, av, dmag_tbl, basetable, ext, icemol='CO'):
     dmags466 = dmag_tbl['F466N']
@@ -62,13 +78,7 @@ def compute_molecular_column(unextincted_466m410, av, dmag_tbl, basetable, ext, 
 
     comp = np.unique(dmag_tbl['composition'])[0]
     molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-    if len(comp.split()) == 1:
-        mols = [comp]
-        comps = [1]
-    else:
-        mols, comps = comp.split(" (")
-        comps = list(map(float, re.split("[: ]", comps.strip(")"))))
-        mols = re.split("[: ]", mols)
+    mols, comps = molscomps(comp)
     mol_massfrac = comps[mols.index(icemol)] / sum(comps)
 
     mol_wt_tgtmol = Formula(icemol).mass * u.Da

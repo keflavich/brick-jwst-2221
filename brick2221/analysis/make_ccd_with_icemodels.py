@@ -11,7 +11,7 @@ from brick2221.analysis.selections import load_table
 from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
 from brick2221.analysis.analysis_setup import basepath
 from brick2221.analysis import plot_tools
-
+from brick2221.analysis.make_icecolumn_fig9 import molscomps
 from icemodels.core import composition_to_molweight
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
@@ -121,17 +121,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         sel = tb['column'] < max_column
 
         molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-        if len(comp.split(" ")) == 2:
-            mols, comps = comp.split(" ")
-            comps = list(map(float, re.split("[: ]", comps.strip("()"))))
-            mols = re.split("[: ]", mols)
-        elif len(comp.split(" (")) == 1:
-            mols = [comp.split()[0]]
-            comps = [1]
-        else:
-            mols, comps = comp.split(" (")
-            comps = list(map(float, re.split("[: ]", comps.strip(")"))))
-            mols = re.split("[: ]", mols)
+        mols, comps = molscomps(comp)
         if icemol in mols:
             mol_massfrac = comps[mols.index(icemol)] / sum(comps)
         else:

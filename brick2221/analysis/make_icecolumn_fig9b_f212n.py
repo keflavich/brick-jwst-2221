@@ -16,7 +16,7 @@ from brick2221.analysis.analysis_setup import basepath
 
 from icemodels.core import composition_to_molweight
 
-from make_icecolumn_fig9 import plot_brandt_model
+from make_icecolumn_fig9 import plot_brandt_model, molscomps
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
@@ -71,13 +71,7 @@ def makeplot(avfilts=['F182M', 'F212N'],
 
     comp = np.unique(dmag_tbl['composition'])[0]
     molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-    if len(comp.split()) == 1:
-        mols = [comp]
-        comps = [1]
-    else:
-        mols, comps = comp.split(" (")
-        comps = list(map(float, re.split("[: ]", comps.strip(")"))))
-        mols = re.split("[: ]", mols)
+    mols, comps = molscomps(comp)
     mol_massfrac = comps[mols.index(icemol)] / sum(comps)
 
     mol_wt_tgtmol = Formula(icemol).mass * u.Da
