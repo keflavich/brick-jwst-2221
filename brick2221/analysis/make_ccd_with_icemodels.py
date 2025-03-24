@@ -24,14 +24,14 @@ if 'basetable_merged1182_daophot' not in globals():
     basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
     result = load_table(basetable_merged1182_daophot, ww=ww)
     ok2221 = result['ok2221']
-    ok1182 = result['ok1182']
+    ok1182 = result['ok1182'][ok2221]
     globals().update(result)
-    basetable = basetable_merged1182_daophot
+    basetable = basetable_merged1182_daophot[ok2221]
+    # there are several bad data points in F182M that are brighter than 15.5 mag
     print("Loaded merged1182_daophot_basic_indivexp")
 
+sel = ok = oksep_noJ[ok2221] & ~bad[ok2221] & (basetable['mag_ab_f182m'] > 15.5)
 
-# there are several bad data points in F182M that are brighter than 15.5 mag
-sel = ok = ok2221 & oksep_noJ & ~bad & (basetable['mag_ab_f182m'] > 15.5)
 
 dmag_co2 = Table.read(f'{basepath}/tables/CO2_ice_absorption_tables.ecsv')
 dmag_co2.add_index('mol_id')
@@ -53,6 +53,11 @@ dmag_h2o.add_index('mol_id')
 dmag_h2o.add_index('composition')
 dmag_h2o.add_index('temperature')
 dmag_h2o.add_index('database')
+dmag_all = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
+dmag_all.add_index('mol_id')
+dmag_all.add_index('composition')
+dmag_all.add_index('temperature')
+dmag_all.add_index('database')
 
 x = np.linspace(1.24*u.um, 5*u.um, 1000)
 pp_ct06 = np.polyfit(x, CT06_MWGC()(x), 7)
@@ -72,6 +77,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             nh2_to_av=2.21e21,
                             abundance=(percent_ice/100)*carbon_abundance,
                             molids=np.unique(dmag_mine['mol_id']),
+                            molcomps=None,
                             av_start=20,
                             max_column=2e20,
                             icemol='CO',
@@ -79,7 +85,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             icemol2_col=None,
                             icemol2_abund=None,
                             ext=ext,
-                            dmag_tbl=dmag_mine,
+                            dmag_tbl=dmag_all,
                             temperature_id=0,
                             exclude=~ok,
                             ):
@@ -97,6 +103,9 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
 
     E_V_color1 = (ext(wavelength_of_filter(color1[0])) - ext(wavelength_of_filter(color1[1])))
     E_V_color2 = (ext(wavelength_of_filter(color2[0])) - ext(wavelength_of_filter(color2[1])))
+        
+    if molcomps is not None:
+        molids = np.unique(dmag_tbl.loc['composition', molcomps]['mol_id'])
         
     dcol = 2
     for mol_id in molids:
@@ -162,14 +171,33 @@ if __name__ == "__main__":
 
     color1= ['F182M', 'F212N']
     color2= ['F410M', 'F466N']
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=np.arange(8), icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance, max_column=2e20)
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molcomps=['H2O:CO (0.5:1)',
+ 'H2O:CO (1:1)',
+ 'H2O:CO (3:1)',
+ 'H2O:CO (5:1)',
+ 'H2O:CO (7:1)',
+ 'H2O:CO (10:1)',
+ 'H2O:CO (15:1)',
+ 'H2O:CO (20:1)'],
+                                                                                          dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                          axlims=[-0.1, 2.5, -2, 0.75],
+                                                                                          icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance, max_column=2e20)
     pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
     pl.title(f"{percent_ice}% of CO in ice, N(CO)$_{{max}}$=$2\\times10^{{20}}$ cm$^{{-2}}$")# , dots show N(H$_2$O)=$10^{19}$ cm$^{-2}$")
 
     color1= ['F182M', 'F212N']
     color2= ['F212N', 'F466N']
     pl.figure()
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4], molids=np.arange(8), icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance)
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4], molcomps=['H2O:CO (0.5:1)',
+ 'H2O:CO (1:1)',
+ 'H2O:CO (3:1)',
+ 'H2O:CO (5:1)',
+ 'H2O:CO (7:1)',
+ 'H2O:CO (10:1)',
+ 'H2O:CO (15:1)',
+ 'H2O:CO (20:1)'],
+                                                                                          dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                          icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance)
     pl.title(f"{percent_ice}% of CO in ice, N(CO)$_{{max}}$=$2\\times10^{{20}}$ cm$^{{-2}}$")# , dots show N(H$_2$O)=$10^{19}$ cm$^{-2}$")
     pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
 
@@ -184,9 +212,22 @@ if __name__ == "__main__":
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
                                 ):
         pl.figure();
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[0,1,2,3,4,5,18,24,25,26,27,28],
-                                                                                        abundance=(percent/100.)*carbon_abundance,
-                                                                                        max_column=2e20)
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                              molcomps=['H2O:CO (0.5:1)',
+ 'H2O:CO (1:1)',
+ 'H2O:CO (3:1)',
+ 'H2O:CO (5:1)',
+ 'H2O:CO (7:1)',
+ 'H2O:CO (10:1)',
+ 'H2O:CO:CO2 (1:1:10)',
+ 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:1:0.1)',
+ 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:0.1:0.1)',
+ 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.1:1:0.1:1:0.1)',
+ 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)',
+ 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)'],
+                                                                                              dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                              abundance=(percent/100.)*carbon_abundance,
+                                                                                              max_column=2e20)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
         pl.title(f"{percent}% of CO in ice");
         pl.axis(lims);
