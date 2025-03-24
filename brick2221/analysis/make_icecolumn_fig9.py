@@ -24,43 +24,39 @@ basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_ind
 result = load_table(basetable_merged1182_daophot, ww=ww)
 ok2221 = result['ok2221']
 ok1182 = result['ok1182']
-globals().update(result)
-basetable = basetable_merged1182_daophot
+#globals().update(result)
+basetable = basetable_merged1182_daophot[ok2221]
+ok1182 = ok1182[ok2221]
+del result
 print("Loaded merged1182_daophot_basic_indivexp")
+
+try:
+    basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits', overwrite=False)
+except:
+    pass
 
 measured_466m410 = basetable['mag_ab_f466n'] - basetable['mag_ab_f410m']
 
-sel = ok = ok2221
+sel = ok = ok2221 = np.ones(len(basetable), dtype=bool)
 
 mol = 'COplusH2O'
 dmag_tbl = Table.read(f'{basepath}/tables/H2O+CO_ice_absorption_tables.ecsv')
 dmag_tbl.add_index('composition')
 
 
-def makeplot(avfilts=['F182M', 'F410M'], 
-             ax=None, sel=ok2221, ok=ok2221, alpha=0.5,
-             icemol='CO',
-             abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
-             title='H2O:CO (3:1)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO (3:1)']):
-
-    if ax is None:
-        ax = pl.gca()
-
+def calc_av(avfilts=['F182M', 'F410M'], basetable=basetable, ext=CT06_MWGC()):
     av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
-    ext = CT06_MWGC()
     try:
         E_V = (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
     except ValueError:
         E_V = (G21_MWAvg()(av_wavelengths[0]) - ext(av_wavelengths[1]))
 
-    E_V_410_466 = (ext(4.10*u.um) - ext(4.66*u.um))
-
     av = (basetable[f'mag_ab_{avfilts[0].lower()}'] - basetable[f'mag_ab_{avfilts[1].lower()}']) / E_V
 
-    unextincted_466m410 = measured_466m410 + E_V_410_466 * av
+    return av
 
-
+    
+def compute_molecular_column(unextincted_466m410, av, dmag_tbl, basetable, ext, icemol='CO'):
     dmags466 = dmag_tbl['F466N']
     dmags410 = dmag_tbl['F410M']
 
@@ -83,6 +79,34 @@ def makeplot(avfilts=['F182M', 'F410M'],
     dmag_466m410 = np.array(dmags466) - np.array(dmags410) 
     inferred_molecular_column = np.interp(unextincted_466m410, dmag_466m410[cols<1e21], cols[cols<1e21])
 
+    return inferred_molecular_column
+
+
+def makeplot(avfilts=['F182M', 'F410M'], 
+             ax=None, sel=ok2221, ok=ok2221, alpha=0.5,
+             icemol='CO',
+             abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
+             title='H2O:CO (3:1)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO (3:1)'],
+             plot_brandt=True,
+             NtoAV=2.21e21,
+             av_start=20,
+             ):
+
+    if ax is None:
+        ax = pl.gca()
+
+    ext = CT06_MWGC()
+    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext)
+
+    E_V_410_466 = (ext(4.10*u.um) - ext(4.66*u.um))
+
+    unextincted_466m410 = measured_466m410 + E_V_410_466 * av
+
+
+    inferred_molecular_column = compute_molecular_column(unextincted_466m410=unextincted_466m410, av=av, dmag_tbl=dmag_tbl, basetable=basetable, ext=ext)
+
+    fig = pl.gcf()
     pl.scatter(np.array(av[sel & ok]),
                np.log10(inferred_molecular_column[sel & ok]),
                marker='.', s=0.5, alpha=alpha)
@@ -114,7 +138,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
     
-    NMolofAV = 2.21e21 * np.linspace(0.1, 100, 1000) * 1e-4
+    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * 1e-4
     pl.plot(np.linspace(0.1, 100, 1000), np.log10(NMolofAV),
             label=f'100% of {icemol} in ice if N(H$_2$)=2.2$\\times10^{{21}}$ A$_V$', color='r', linestyle=':')
     
@@ -126,22 +150,31 @@ def makeplot(avfilts=['F182M', 'F410M'],
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
 
+    if plot_brandt:
+        plot_brandt_model(ax, molecule=icemol, nh_to_av=NtoAV, av_start=av_start)
+        fig.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182_Brandt.png", dpi=250, bbox_inches='tight')
+
     return av, inferred_molecular_column, ax
 
     
-def plot_brandt_model(ax, nh_to_av=2.21e21/2):
+def plot_brandt_model(ax, nh_to_av=2.21e21*2, molecule='CO', av_start=0):
     column = fits.getdata(f'{basepath}/brandt_ice/brick.dust_column_density_cf.fits')
-    cocol = np.load(f'{basepath}/brandt_ice/COIceMap_0.npy')
+    if molecule == 'CO':
+        molcol = np.load(f'{basepath}/brandt_ice/COIceMap_0.npy')
+    elif molecule == 'H2O':
+        molcol = np.load(f'{basepath}/brandt_ice/H2OIceMap_0.npy')
+    else:
+        raise ValueError(f"Unknown molecule: {molecule}")
 
     lims = ax.axis()
     if lims == (0.0, 1.0, 0.0, 1.0):
         lims = (0, 100, 15, 21)
-    ok = np.isfinite(column) & np.isfinite(cocol) & (column>0) & (cocol>0)
+    ok = np.isfinite(column) & np.isfinite(molcol) & (column>0) & (molcol>0)
 
-    av = column / nh_to_av
+    av = column / nh_to_av + av_start
 
     nbins = 100
-    hh, x_edges, y_edges = np.histogram2d(av[ok], np.log10(cocol[ok]),
+    hh, x_edges, y_edges = np.histogram2d(av[ok], np.log10(molcol[ok]),
                                bins=[np.linspace(lims[0], lims[1], nbins), np.linspace(lims[2], lims[3], nbins)])
     hh = hh.T
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
@@ -162,40 +195,35 @@ def main():
              icemol='CO', abundance=1e-4,
              title='CO',
              dmag_tbl=dmag_co.loc['mol_id', 64].loc['composition', 'CO'])
-    plot_brandt_model(ax)
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='CO', abundance=1e-4,
              title='H2O:CO:CO2 (5:1:0.5)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
-    plot_brandt_model(ax)
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='H2O', abundance=10**-3.31,
              title='H2O:CO:CO2 (5:1:0.5)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
-    plot_brandt_model(ax)
 
 
-    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+    av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='CO', abundance=1e-4,
              title='H2O:CO (10:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
-    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+    av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='H2O', abundance=10**-3.31,
              title='H2O:CO (10:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
 
-
-    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+    av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='CO', abundance=1e-4,
              title='H2O:CO:CO2 (10:1:2)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
-    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+    av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='H2O', abundance=10**-3.31,
              title='H2O:CO:CO2 (10:1:2)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
-
 
 
     makeplot(avfilts=['F182M', 'F410M'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())

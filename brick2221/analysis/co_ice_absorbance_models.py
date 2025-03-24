@@ -183,6 +183,11 @@ def make_mymix_tables():
         tbl.meta['density'] = 1*u.g/u.cm**3
         tbl.meta['temperature'] = 25*u.K
         tbl.meta['index'] = ii
+        tbl.meta['molecule'] = mol
+        tbl.meta['database'] = 'mymix'
+        tbl.meta['author'] = 'Mastrapa 2024, Gerakines 2020, etc'
+
+
         mymix_tables[(mol, ii, 25)] = tbl
 
     return mymix_tables
@@ -199,6 +204,7 @@ def process_table(args):
     if len(args) == 9:
         mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath = args
         molfn = None
+        tb = consts
     else:
         molfn, xarr, phx4000, cols, filter_data, transdata, basepath = args
         consts = tb = read_table_file(molfn)
@@ -310,11 +316,11 @@ if __name__ == '__main__':
     #    for key, consts in tbs.items():
     #        all_tables.append((mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
     
+    for key, consts in mymix_tables.items():
+        all_tables.append(('H2O+CO', key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
     for fn in glob.glob(f'{optical_constants_cache_dir}/*txt'):
         #all_tables.append((tb.meta['molecule'], (db, int(tb.meta['index']), tb.meta['temperature']), tb, xarr, phx4000, cols, filter_data, transdata, basepath))
         all_tables.append((fn, xarr, phx4000, cols, filter_data, transdata, basepath))
-    for key, consts in mymix_tables.items():
-        all_tables.append(('H2O+CO', key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
 
     # Process all tables in parallel
     results = process_map(process_table, 
@@ -324,14 +330,12 @@ if __name__ == '__main__':
                           unit="table")
 
     # Combine results and write tables for each molecule
-    for mol in molecules:
-        mol_rows = []
-        for result in results:
-            if result and result[0].get('molecule') == mol.lower():
-                mol_rows.extend(result)
+    mol_rows = []
+    for result in results:
+        if result:
+            mol_rows.extend(result)
                 
-        if mol_rows:
-            dmag_tbl = Table(mol_rows)
-            dmag_tbl.write(f'{basepath}/tables/{mol}_ice_absorption_tables.ecsv', overwrite=True)
-            dmag_tbl.add_index('database')
-            dmag_tbl.add_index('mol_id')
+    dmag_tbl = Table(mol_rows)
+    dmag_tbl.write(f'{basepath}/tables/combined_ice_absorption_tables.ecsv', overwrite=True)
+    dmag_tbl.add_index('database')
+    dmag_tbl.add_index('mol_id')

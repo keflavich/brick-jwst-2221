@@ -114,6 +114,6 @@ wwi_short_merged = wcs.WCS(fits.Header.fromstring(avm_nostars.Spatial.FITSheader
 def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
-for module in ('merged', 'merged-reproject'):
-    fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
-    print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
+# for module in ('merged', 'merged-reproject'):
+#     fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
+#     print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
