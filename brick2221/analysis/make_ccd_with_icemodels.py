@@ -30,7 +30,8 @@ if 'basetable_merged1182_daophot' not in globals():
     print("Loaded merged1182_daophot_basic_indivexp")
 
 
-sel = ok = ok2221
+# there are several bad data points in F182M that are brighter than 15.5 mag
+sel = ok = ok2221 & oksep_noJ & ~bad & (basetable['mag_ab_f182m'] > 15.5)
 
 dmag_co2 = Table.read(f'{basepath}/tables/CO2_ice_absorption_tables.ecsv')
 dmag_co2.add_index('mol_id')
@@ -62,15 +63,25 @@ def ext(x, model=CT06_MWGC()):
     else:
         return np.polyval(pp_ct06, x.value)
 
+oxygen_abundance = 10**(9.3-12)
+carbon_abundance = 10**(8.7-12)
 
-def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1], nh2_to_av=2.21e21, abundance=1e-4,
+percent_ice = 20
+
+def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
+                            nh2_to_av=2.21e21,
+                            abundance=(percent_ice/100)*carbon_abundance,
                             molids=np.unique(dmag_mine['mol_id']),
                             av_start=20,
-                            max_column=5e20,
+                            max_column=2e20,
                             icemol='CO',
+                            icemol2=None,
+                            icemol2_col=None,
+                            icemol2_abund=None,
                             ext=ext,
                             dmag_tbl=dmag_mine,
                             temperature_id=0,
+                            exclude=~ok,
                             ):
     """
     """
@@ -79,7 +90,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1], nh2_to_av=2
                    ext=ext,
                    extvec_scale=30,
                    head_width=0.1,
-                   exclude=~ok2221)
+                   exclude=exclude)
 
     def wavelength_of_filter(filtername):
         return u.Quantity(int(filtername[1:-1])/100, u.um).to(u.um, u.spectral())
@@ -122,28 +133,60 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1], nh2_to_av=2
         col = tb['column'][sel] * molwt * mol_massfrac / (mol_wt_tgtmol)
         # print(f'comp={comp}, mol_massfrac={mol_massfrac}, mol_wt_tgtmol={mol_wt_tgtmol}, molwt={molwt}, abundance={abundance}, col[0]={col[0]:0.1e}, col[-1]={col[-1]:0.1e}')
 
-        a_color1 = col / abundance / nh2_to_av * E_V_color1 + av_start * E_V_color1
-        a_color2 = col / abundance / nh2_to_av * E_V_color2 + av_start * E_V_color2
+        h2col = col / abundance
+        a_color1 = h2col / nh2_to_av * E_V_color1 + av_start * E_V_color1
+        a_color2 = h2col / nh2_to_av * E_V_color2 + av_start * E_V_color2
 
         # DEBUG. print(f'color {color1[0]} in colnames: {color1[0] in tb.colnames}.  color {color1[1]} in colnames: {color1[1] in tb.colnames}.  color {color2[0]} in colnames: {color2[0] in tb.colnames}.  color {color2[1]} in colnames: {color2[1] in tb.colnames}.')
         c1 = (tb[color1[0]][sel] if color1[0] in tb.colnames else 0) - (tb[color1[1]][sel] if color1[1] in tb.colnames else 0) + a_color1
         c2 = (tb[color2[0]][sel] if color2[0] in tb.colnames else 0) - (tb[color2[1]][sel] if color2[1] in tb.colnames else 0) + a_color2
 
-        L, = pl.plot(c1, c2, label=comp, )
         #pl.scatter(tb['F410M'][sel][::dcol] - tb['F466N'][sel][::dcol], tb['F356W'][sel][::dcol] - tb['F444W'][sel][::dcol],
         #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
+
+        if icemol2 is not None and icemol2 in mols and icemol2_col is not None:
+            mol_massfrac2 = comps[mols.index(icemol2)] / sum(comps)
+            mol_wt_tgtmol2 = Formula(icemol2).mass * u.Da
+            ind_icemol2 = np.argmin(np.abs(tb['column'][sel] * molwt * mol_massfrac2 / (mol_wt_tgtmol2) - icemol2_col))
+            #print(f'icemol2={icemol2}, icemol2_col={icemol2_col}, ind_icemol2={ind_icemol2} c1[ind_icemol2]={c1[ind_icemol2]}, c2[ind_icemol2]={c2[ind_icemol2]}')
+            L, = pl.plot(c1, c2, label=f'{comp} (X$_{{{icemol2}}}$ = {icemol2_col / h2col[ind_icemol2]:0.1e})', )
+            #L, = pl.plot(c1[ind_icemol2], c2[ind_icemol2], 'o', color=L.get_color())
+        else:
+            L, = pl.plot(c1, c2, label=comp, )
+
     pl.axis(axlims);
 
     return a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb
 
 if __name__ == "__main__":
+
     color1= ['F182M', 'F212N']
     color2= ['F410M', 'F466N']
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=np.arange(8))
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=np.arange(8), icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance, max_column=2e20)
     pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
+    pl.title(f"{percent_ice}% of CO in ice, N(CO)$_{{max}}$=$2\\times10^{{20}}$ cm$^{{-2}}$")# , dots show N(H$_2$O)=$10^{19}$ cm$^{-2}$")
 
     color1= ['F182M', 'F212N']
     color2= ['F212N', 'F466N']
     pl.figure()
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4], molids=np.arange(8))
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4], molids=np.arange(8), icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance)
+    pl.title(f"{percent_ice}% of CO in ice, N(CO)$_{{max}}$=$2\\times10^{{20}}$ cm$^{{-2}}$")# , dots show N(H$_2$O)=$10^{19}$ cm$^{-2}$")
     pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
+
+    
+    
+    # Search for models that can explain the wide-band filters
+    percent = 25
+
+    for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                 (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                 (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
+                                ):
+        pl.figure();
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[0,1,2,3,4,5,18,24,25,26,27,28],
+                                                                                        abundance=(percent/100.)*carbon_abundance,
+                                                                                        max_column=2e20)
+        pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+        pl.title(f"{percent}% of CO in ice");
+        pl.axis(lims);

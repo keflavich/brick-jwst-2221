@@ -16,9 +16,20 @@ from icemodels.core import composition_to_molweight, retrieve_gerakines_co, opti
 
 from brick2221.analysis.analysis_setup import basepath
 
+import unicodedata
+
 from astroquery.svo_fps import SvoFps
 jfilts = SvoFps.get_filter_list('JWST')
 jfilts.add_index('filterID')
+
+
+def unicode_to_ascii(text):
+    return ''.join(
+        c if unicodedata.category(c) != 'No' else str(ord(c) - 8320)
+        if '₀' <= c <= '₉' else unicodedata.normalize('NFKD', c).encode('ascii', 'ignore').decode('ascii')
+        for c in text
+    )
+
 
 def load_tables(cache):
     # load tables
@@ -60,9 +71,45 @@ def load_tables(cache):
                     pass
                     #print(f'{key} -> {tb.meta} had no k₁')
 
+    cotbs[('ocdb', 63, 25)] = retrieve_gerakines_co(resolution='low')
+    cotbs[('ocdb', 64, 25)] = retrieve_gerakines_co(resolution='high')
+
     return cotbs, h2otbs, co2tbs
 
-cotbs, h2otbs, co2tbs = load_tables(cache=locals())
+
+def tryfloat(x):
+    try:
+        return float(x)
+    except ValueError:
+        return np.nan
+
+
+def read_table_file(fn):
+    try:
+        tb = read_lida_file(fn)
+        tb.meta['database'] = 'lida'
+    except Exception as ex:
+        try:
+            tb = read_ocdb_file(fn)
+            tb.meta['database'] = 'ocdb'
+            if 'index' not in tb.meta:
+                tb.meta['index'] = int(os.path.basename(fn).split('_')[0])
+        except Exception as ex:
+            return None
+
+    try:
+        tb['k'] = tb['k'].astype(float)
+    except ValueError:
+        try:
+            kk = [tryfloat(x) for x in tb['k']]
+            keep = ~np.isnan(kk)
+            tb = tb[keep]
+            tb['k'] = tb['k'].astype(float)
+        except Exception as ex:
+            print(f"Error reading table {fn}: {ex}")
+            return None
+
+    return tb
 
 
 def make_mymix_tables():
@@ -70,15 +117,12 @@ def make_mymix_tables():
     # 3-1 comes from Brandt's models plus the McClure 2023 paper
     mymix_tables = {}
 
-    water_mastrapa = h2otbs[('ocdb', 242, 25)]
-    co2_gerakines = co2tbs[('ocdb', 55, 8)]
-    ethanol = read_lida_file(f'{basepath}/tables/87_CH3CH2OH_1_885_30.0K.txt')
-    methanol = read_lida_file(f'{basepath}/tables/58_CH3OH_1_499_25.0K.txt')
+    water_mastrapa = read_ocdb_file(f'{optical_constants_cache_dir}/242_H2O (1)_25K_Mastrapa.txt') # h2otbs[('ocdb', 242, 25)]
+    co2_gerakines = read_ocdb_file(f'{optical_constants_cache_dir}/55_CO2 (1)_8K_Gerakines.txt') # co2tbs[('ocdb', 55, 8)]
+    ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_886_30.0K.txt')
+    methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_503_25.0K.txt')
 
     co_gerakines = gerakines = retrieve_gerakines_co()
-
-    cotbs[('ocdb', 63, 25)] = retrieve_gerakines_co(resolution='low')
-    cotbs[('ocdb', 64, 25)] = retrieve_gerakines_co(resolution='high')
 
     grid = co_gerakines['Wavelength']
 
@@ -106,7 +150,12 @@ def make_mymix_tables():
                                             ('H2O', 'H2O 1'),
                                             ('CO2', 'CO2 1'),
                                             ('COplusH2OplusCO2plusCH3OH', 'H2O:CO:CO2:CH3OH (1:1:0.1:0.1)'),
+                                            ('COplusH2OplusCO2plusCH3OH', 'H2O:CO:CO2:CH3OH (1:1:0.1:1)'),
+                                            ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:1:0.1)'),
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:0.1:0.1)'),
+                                            ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.1:1:0.1:1:0.1)'),
+                                            ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)'),
+                                            ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)'),
                                             ]):
         compspl = composition.split(' ')[1].strip('()').split(':')
         if len(compspl) == 1:
@@ -141,13 +190,27 @@ def make_mymix_tables():
 mymix_tables = make_mymix_tables()
 
 
-xarr = np.linspace(3.1*u.um, 4.9*u.um, 10000)
+xarr = np.linspace(3.0*u.um, 5.0*u.um, 10000)
 phx4000 = atmo_model(4000, xarr=xarr)
 #xarr = phx4000['nu'].quantity.to(u.um, u.spectral())
 cols = np.geomspace(1e15, 1e21, 25)
 
 def process_table(args):
-    mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath = args
+    if len(args) == 9:
+        mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath = args
+        molfn = None
+    else:
+        molfn, xarr, phx4000, cols, filter_data, transdata, basepath = args
+        consts = tb = read_table_file(molfn)
+        if tb is None:
+            return []
+
+
+    mol = tb.meta['molecule']
+    database = tb.meta['database']
+    mol_id = tb.meta['index']
+    temperature = tb.meta['temperature']
+
     dmag_rows = []
 
     if 'k' not in consts.colnames:
@@ -161,10 +224,16 @@ def process_table(args):
 
     molecule = mol.lower()
     try:
-        molwt = u.Quantity(composition_to_molweight(consts.meta['composition'].replace("^", "")), u.Da)
+        compstr = unicode_to_ascii(consts.meta['composition'].replace("^", "").replace('c-', '').replace("Helium", "He"))
+        molwt = u.Quantity(composition_to_molweight(compstr), u.Da)
     except ValueError:
-        print(f"Molecule {mol} with composition {consts.meta['composition']} failed to convert to molwt")
-        return []
+        if molecule == 'HCOOH' or molecule.split()[0].lower() == 'hcooh':
+            molwt = 46*u.Da
+        elif molecule == 'H2CO' or molecule.split()[0].lower() == 'h2co':
+            molwt = 30*u.Da
+        else:
+            print(f"Molecule {mol} with composition {consts.meta['composition']} failed to convert to molwt")
+            return []
 
     cmd_x = ('JWST/NIRCam.F410M',
              'JWST/NIRCam.F466N',
@@ -176,11 +245,18 @@ def process_table(args):
 
     author = consts.meta['author'] if 'author' in consts.meta else ''
 
+    print(f"Processing file {molfn}: {mol} with composition {consts.meta['composition']} and molwt {molwt}")
+
     for col in cols:
-        spec = absorbed_spectrum(col*u.cm**-2, consts, molecular_weight=molwt,
-                                  spectrum=phx4000['fnu'].quantity,
-                                  xarr=xarr,
-                                 )
+        try:
+            spec = absorbed_spectrum(col*u.cm**-2, consts, molecular_weight=molwt,
+                                    spectrum=phx4000['fnu'].quantity,
+                                    xarr=xarr,
+                                    )
+        except Exception as ex:
+            print(f"Error processing file {molfn}: {ex}")
+            print(consts)
+            raise
         flxd = fluxes_in_filters(xarr, spec, filterids=cmd_x, transdata=transdata)
         
         # Calculate magnitudes
@@ -194,12 +270,6 @@ def process_table(args):
         dmags356.append(mags_x[2]-mags_x_star[2])
         dmags466.append(mags_x[1]-mags_x_star[1])
         dmags410.append(mags_x[0]-mags_x_star[0])
-
-        try:
-            database, mol_id, temperature = key
-        except TypeError:
-            mol_id = key
-            database = 'ocdb'
 
             
         dmag_rows.append({
@@ -222,7 +292,11 @@ def process_table(args):
     return dmag_rows
 
 if __name__ == '__main__':
-    molecules = {'H2O': h2otbs, 'CO': cotbs, 'CO2': co2tbs, 'H2O+CO': mymix_tables}
+
+
+    #cotbs, h2otbs, co2tbs = load_tables(cache=locals())
+
+    #molecules = {'H2O': h2otbs, 'CO': cotbs, 'CO2': co2tbs, 'H2O+CO': mymix_tables}
     
     # Create a dictionary of filter zero points
     filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W', 
@@ -232,16 +306,22 @@ if __name__ == '__main__':
 
     # Create list of all tables to process
     all_tables = []
-    for mol, tbs in molecules.items():
-        for key, consts in tbs.items():
-            all_tables.append((mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
+    #for mol, tbs in molecules.items():
+    #    for key, consts in tbs.items():
+    #        all_tables.append((mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
+    
+    for fn in glob.glob(f'{optical_constants_cache_dir}/*txt'):
+        #all_tables.append((tb.meta['molecule'], (db, int(tb.meta['index']), tb.meta['temperature']), tb, xarr, phx4000, cols, filter_data, transdata, basepath))
+        all_tables.append((fn, xarr, phx4000, cols, filter_data, transdata, basepath))
+    for key, consts in mymix_tables.items():
+        all_tables.append(('H2O+CO', key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
 
     # Process all tables in parallel
     results = process_map(process_table, 
-                        all_tables,
-                        max_workers=mp.cpu_count(),
-                        desc="Processing tables",
-                        unit="table")
+                          all_tables,
+                          max_workers=mp.cpu_count(),
+                          desc="Processing tables",
+                          unit="table")
 
     # Combine results and write tables for each molecule
     for mol in molecules:

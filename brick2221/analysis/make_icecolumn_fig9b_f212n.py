@@ -149,38 +149,41 @@ def main():
     dmag_co.add_index('temperature')
     dmag_co.add_index('mol_id')
 
+    carbon_abundance = 10**(8.7-12)
+    oxygen_abundance = 10**(9.3-12)
+
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=carbon_abundance*0.5,
              title='CO',
              dereddened=True,
              dmag_tbl=dmag_co.loc['mol_id', 64].loc['composition', 'CO'])
 
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=carbon_abundance*0.5,
              title='H2O:CO:CO2 (5:1:0.5)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='H2O', abundance=10**-3.31,
+             icemol='H2O', abundance=oxygen_abundance*0.5,
              title='H2O:CO:CO2 (5:1:0.5)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
 
 
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=carbon_abundance*0.5,
              title='H2O:CO (10:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='H2O', abundance=10**-3.31,
+             icemol='H2O', abundance=oxygen_abundance*0.5,
              title='H2O:CO (10:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
 
 
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=carbon_abundance*0.5,
              title='H2O:CO:CO2 (10:1:2)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='H2O', abundance=10**-3.31,
+             icemol='H2O', abundance=oxygen_abundance*0.5,
              title='H2O:CO:CO2 (10:1:2)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
 
@@ -203,14 +206,14 @@ def main():
     dmag_h2o.add_index('mol_id')
 
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='H2O', abundance=4.89e-4,
+             icemol='H2O', abundance=oxygen_abundance*0.5,
              title='H2O',
              dmag_tbl=dmag_h2o.loc['H2O (1)'].loc['temperature', '25K'].loc['mol_id', 240])
 
              
     dmag_tbl_this = dmag_co.loc['mol_id', 36].loc['composition', 'CO CO2 (100 70)']
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=carbon_abundance*0.5,
              title=dmag_tbl_this['composition'][0],
              dmag_tbl=dmag_tbl_this)
 
