@@ -17,6 +17,9 @@ from icemodels.core import composition_to_molweight
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
 from cycler import cycler
+from tqdm.auto import tqdm
+
+from brick2221.analysis.iceage_fluxes import iceage_flxd, iceage_mags
 
 pl.rcParams['axes.prop_cycle'] = cycler(color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'], ) * cycler(linestyle=['-', '--', ':', '-.'])
 
@@ -88,6 +91,8 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             dmag_tbl=dmag_all,
                             temperature_id=0,
                             exclude=~ok,
+                            iceage=True,
+                            pure_ice_no_dust=False,
                             ):
     """
     """
@@ -97,6 +102,17 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                    extvec_scale=30,
                    head_width=0.1,
                    exclude=exclude)
+
+    if iceage:
+        # av_iceage = 60
+        # ext_iceage = G21_MWAvg()
+        # av_iceage1 = ext_iceage(wavelength_of_filter(color1[0])) - ext_iceage(wavelength_of_filter(color1[1]))
+        # av_iceage2 = ext_iceage(wavelength_of_filter(color2[0])) - ext_iceage(wavelength_of_filter(color2[1]))
+        c1iceage = iceage_mags['JWST/NIRCam.'+color1[0]] - iceage_mags['JWST/NIRCam.'+color1[1]]
+        c2iceage = iceage_mags['JWST/NIRCam.'+color2[0]] - iceage_mags['JWST/NIRCam.'+color2[1]]
+        pl.scatter(c1iceage,
+                   c2iceage,
+                   s=25, c='r', marker='x')
 
     def wavelength_of_filter(filtername):
         return u.Quantity(int(filtername[1:-1])/100, u.um).to(u.um, u.spectral())
@@ -108,7 +124,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         molids = np.unique(dmag_tbl.loc['composition', molcomps]['mol_id'])
         
     dcol = 2
-    for mol_id in molids:
+    for mol_id in tqdm(molids):
         if isinstance(mol_id, tuple):
             mol_id, database = mol_id
             tb = dmag_tbl.loc[mol_id].loc['database', database]
@@ -120,8 +136,12 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
 
         sel = tb['column'] < max_column
 
-        molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-        mols, comps = molscomps(comp)
+        try:
+            molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+            mols, comps = molscomps(comp)
+        except ValueError as ex:
+            print(f'Error converting composition {comp} to molwt: {ex}')
+            continue
         if icemol in mols:
             mol_massfrac = comps[mols.index(icemol)] / sum(comps)
         else:
@@ -137,8 +157,8 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         a_color2 = h2col / nh2_to_av * E_V_color2 + av_start * E_V_color2
 
         # DEBUG. print(f'color {color1[0]} in colnames: {color1[0] in tb.colnames}.  color {color1[1]} in colnames: {color1[1] in tb.colnames}.  color {color2[0]} in colnames: {color2[0] in tb.colnames}.  color {color2[1]} in colnames: {color2[1] in tb.colnames}.')
-        c1 = (tb[color1[0]][sel] if color1[0] in tb.colnames else 0) - (tb[color1[1]][sel] if color1[1] in tb.colnames else 0) + a_color1
-        c2 = (tb[color2[0]][sel] if color2[0] in tb.colnames else 0) - (tb[color2[1]][sel] if color2[1] in tb.colnames else 0) + a_color2
+        c1 = (tb[color1[0]][sel] if color1[0] in tb.colnames else 0) - (tb[color1[1]][sel] if color1[1] in tb.colnames else 0) + a_color1 * (not pure_ice_no_dust)
+        c2 = (tb[color2[0]][sel] if color2[0] in tb.colnames else 0) - (tb[color2[1]][sel] if color2[1] in tb.colnames else 0) + a_color2 * (not pure_ice_no_dust)
 
         #pl.scatter(tb['F410M'][sel][::dcol] - tb['F466N'][sel][::dcol], tb['F356W'][sel][::dcol] - tb['F444W'][sel][::dcol],
         #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
@@ -199,6 +219,7 @@ if __name__ == "__main__":
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                 (['F356W', 'F466N'], ['F466N', 'F444W'], (-0.75, 1, -0.5, 1.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
                                 ):
         pl.figure();

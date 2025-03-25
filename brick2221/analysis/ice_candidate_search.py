@@ -20,6 +20,7 @@ dmag_all.add_index('temperature')
 dmag_all.add_index('database')
 dmag_all.add_index('column')
 
+print('loaded dmag_all')
 N19 = dmag_all.loc['column', 1e19]
 ice_candidate_selection = (((N19['F410M'] - N19['F466N']) < -0.5) &
                            (( - N19['F466N']) < -0.5) &
@@ -38,6 +39,7 @@ for ii, (color1, color2, lims) in enumerate(((['F182M', 'F212N'], ['F410M', 'F46
                                              (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                              (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
                                             )):
+    print(color1, color2)
     ax = fig.add_subplot(2, 2, ii+1)
     a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
                                                                                           molcomps=N19[ice_candidate_selection]['composition'],
