@@ -9,6 +9,7 @@ import astropy.units as u
 from astropy.table import Table
 from tqdm.auto import tqdm
 from tqdm.contrib.concurrent import process_map
+import molmass
 
 import icemodels
 from icemodels import absorbed_spectrum, absorbed_spectrum_Gaussians, convsum, fluxes_in_filters, load_molecule, load_molecule_ocdb, atmo_model, molecule_data
@@ -117,12 +118,14 @@ def make_mymix_tables():
     # 3-1 comes from Brandt's models plus the McClure 2023 paper
     mymix_tables = {}
 
-    water_mastrapa = read_ocdb_file(f'{optical_constants_cache_dir}/242_H2O_(1)_25K_Mastrapa.txt') # h2otbs[('ocdb', 242, 25)]
+    water_mastrapa = read_ocdb_file(f'{optical_constants_cache_dir}/240_H2O_(1)_25K_Mastrapa.txt') # h2otbs[('ocdb', 242, 25)] 242 is 50K....
     co2_gerakines = read_ocdb_file(f'{optical_constants_cache_dir}/55_CO2_(1)_8K_Gerakines.txt') # co2tbs[('ocdb', 55, 8)]
-    ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_886_30.0K.txt')
-    methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_503_25.0K.txt')
+    ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_30.0K.txt')
+    methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
+    ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
 
     co_gerakines = gerakines = retrieve_gerakines_co()
+    moltbls = {'CO': co_gerakines, 'H2O': water_mastrapa, 'CO2': co2_gerakines, 'CH3OH': methanol, 'CH3CH2OH': ethanol, 'OCN': ocn}
 
     grid = co_gerakines['Wavelength']
 
@@ -156,32 +159,32 @@ def make_mymix_tables():
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.1:1:0.1:1:0.1)'),
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)'),
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)'),
+                                            ('COplusOCN', 'CO:OCN (1:1)'),
+                                            ('COplusH2OplusOCN', 'H2O:CO:OCN (1:1:1)'),
                                             ]):
+        molspl = composition.split(' ')[0].split(':')
         compspl = composition.split(' ')[1].strip('()').split(':')
-        if len(compspl) == 1:
-            co_mult = 1
-            ch3oh_mult = h2o_mult = co2_mult = ch3ch2oh_mult = 0
-        else:
-            h2o_mult = float(compspl[0])
-            co_mult = float(compspl[1])
-            co2_mult = float(compspl[2] if len(compspl) > 2 else 0)
-            ch3oh_mult = float(compspl[3] if len(compspl) > 3 else 0)
-            ch3ch2oh_mult = float(compspl[4] if len(compspl) > 4 else 0)
 
-        inds = np.argsort(water_mastrapa['Wavelength'])
-        co_plus_co2_plus_water_k = (co_mult * gerakines['k'] +
-                                    h2o_mult * np.interp(grid, water_mastrapa['Wavelength'][inds], water_mastrapa['k'][inds],) +
-                                    co2_mult * np.interp(grid, co2_gerakines['Wavelength'], co2_gerakines['k']) +
-                                    ch3oh_mult * np.interp(grid, methanol['Wavelength'], methanol['k']) +
-                                    ch3ch2oh_mult * np.interp(grid, ethanol['Wavelength'], ethanol['k'])
-                                    ) / (
-                                        co_mult + h2o_mult + co2_mult + ch3oh_mult + ch3ch2oh_mult
-                                        )
+        mults = {key: float(mul) for key, mul in zip(molspl, compspl, )}
+
+        co_plus_co2_plus_water_k = np.sum([
+            (mult * np.interp(grid,
+                              moltbls[mol]['Wavelength'][np.argsort(moltbls[mol]['Wavelength'])],
+                              moltbls[mol]['k'][np.argsort(moltbls[mol]['Wavelength'])])) for mol, mult in mults.items()
+        ], axis=0) / np.sum(mults.values())
+        # co_plus_co2_plus_water_k = (co_mult * gerakines['k'] +
+        #                             h2o_mult * np.interp(grid, water_mastrapa['Wavelength'][inds], water_mastrapa['k'][inds],) +
+        #                             co2_mult * np.interp(grid, co2_gerakines['Wavelength'], co2_gerakines['k']) +
+        #                             ch3oh_mult * np.interp(grid, methanol['Wavelength'], methanol['k']) +
+        #                             ch3ch2oh_mult * np.interp(grid, ethanol['Wavelength'], ethanol['k'])
+        #                             ) / (
+        #                                 co_mult + h2o_mult + co2_mult + ch3oh_mult + ch3ch2oh_mult
+        #                                 )
 
         tbl = Table({'Wavelength': grid, 'k': co_plus_co2_plus_water_k})
         tbl.meta['composition'] = composition
         tbl.meta['density'] = 1*u.g/u.cm**3 # everything is close to 1 g/cm^3.... so this is just a close-enough guess
-        tbl.meta['temperature'] = 25*u.K
+        tbl.meta['temperature'] = 25*u.K # really 8-25 K depending on molecule
         tbl.meta['index'] = ii
         tbl.meta['molecule'] = mol
         tbl.meta['database'] = 'mymix'
@@ -232,6 +235,9 @@ def process_table(args):
     try:
         compstr = unicode_to_ascii(consts.meta['composition'].replace("^", "").replace('c-', '').replace("Helium", "He"))
         molwt = u.Quantity(composition_to_molweight(compstr), u.Da)
+    except molmass.molmass.FormulaError:
+        print(f"Molecule {mol} with composition {consts.meta['composition']} failed to convert to molwt")
+        return []
     except ValueError:
         if molecule == 'HCOOH' or molecule.split()[0].lower() == 'hcooh':
             molwt = 46*u.Da
@@ -306,7 +312,10 @@ if __name__ == '__main__':
     
     # Create a dictionary of filter zero points
     filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W', 
-                 'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N']
+                  'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N', 'JWST/NIRCam.F300M',
+                  'JWST/NIRCam.F335M', 'JWST/NIRCam.F360M', 'JWST/NIRCam.F212N',
+                  'JWST/NIRCam.F430M', 'JWST/NIRCam.F460M', 'JWST/NIRCam.F460M',
+                  ]
     filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
     transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 

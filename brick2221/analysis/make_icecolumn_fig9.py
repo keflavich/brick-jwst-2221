@@ -114,7 +114,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     unextincted_466m410 = measured_466m410 + E_V_410_466 * av
 
 
-    inferred_molecular_column = compute_molecular_column(unextincted_466m410=unextincted_466m410, av=av, dmag_tbl=dmag_tbl, basetable=basetable, ext=ext)
+    inferred_molecular_column = compute_molecular_column(unextincted_466m410=unextincted_466m410, av=av, dmag_tbl=dmag_tbl, basetable=basetable, ext=ext, icemol=icemol)
 
     fig = pl.gcf()
     pl.scatter(np.array(av[sel & ok]),
@@ -140,7 +140,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     # b = np.log10(y1 / 10**(m * x1))
     # pl.plot([x1, x2], np.array([x1*m+b, x2*m+b]), 'k--', label=f'log N = {m:0.2f} A$_V$ + {b:0.1f}')
     #pl.plot([7, 23], 10**(np.array([7,23]) * m + b))
-    pl.legend(loc='lower right')
+    #pl.legend(loc='lower right')
     pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
     pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$]")
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
