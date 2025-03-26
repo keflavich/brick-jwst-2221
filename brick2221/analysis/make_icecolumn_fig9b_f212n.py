@@ -72,13 +72,13 @@ def makeplot(avfilts=['F182M', 'F212N'],
     comp = np.unique(dmag_tbl['composition'])[0]
     molwt = u.Quantity(composition_to_molweight(comp), u.Da)
     mols, comps = molscomps(comp)
-    mol_massfrac = comps[mols.index(icemol)] / sum(comps)
+    mol_frac = comps[mols.index(icemol)] / sum(comps)
 
-    mol_wt_tgtmol = Formula(icemol).mass * u.Da
-    print(f'icemol={icemol}, molwt={molwt}, mol_wt_tgtmol={mol_wt_tgtmol}, comps={comps}, mols={mols}, massfrac={mol_massfrac}')
+    # mol_wt_tgtmol = Formula(icemol).mass * u.Da
+    # print(f'icemol={icemol}, molwt={molwt}, mol_wt_tgtmol={mol_wt_tgtmol}, comps={comps}, mols={mols}, massfrac={mol_massfrac}')
 
     # cols are .... column density of the selected ice species
-    cols = dmag_tbl['column'] * molwt * mol_massfrac / (mol_wt_tgtmol)
+    cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
 
     # there is no ice effect on 212
     dmag_466m212 = np.array(dmags466)

@@ -79,12 +79,12 @@ def compute_molecular_column(unextincted_466m410, av, dmag_tbl, basetable, ext, 
     comp = np.unique(dmag_tbl['composition'])[0]
     molwt = u.Quantity(composition_to_molweight(comp), u.Da)
     mols, comps = molscomps(comp)
-    mol_massfrac = comps[mols.index(icemol)] / sum(comps)
+    mol_frac = comps[mols.index(icemol)] / sum(comps)
 
-    mol_wt_tgtmol = Formula(icemol).mass * u.Da
-    print(f'icemol={icemol}, molwt={molwt}, mol_wt_tgtmol={mol_wt_tgtmol}, comps={comps}, mols={mols}, massfrac={mol_massfrac}')
+    #mol_wt_tgtmol = Formula(icemol).mass * u.Da
+    #print(f'icemol={icemol}, molwt={molwt}, mol_wt_tgtmol={mol_wt_tgtmol}, comps={comps}, mols={mols}, massfrac={mol_massfrac}')
 
-    cols = dmag_tbl['column'] * molwt * mol_massfrac / (mol_wt_tgtmol)
+    cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
 
     dmag_466m410 = np.array(dmags466) - np.array(dmags410) 
     inferred_molecular_column = np.interp(unextincted_466m410, dmag_466m410[cols<1e21], cols[cols<1e21])

@@ -143,13 +143,13 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
             print(f'Error converting composition {comp} to molwt: {ex}')
             continue
         if icemol in mols:
-            mol_massfrac = comps[mols.index(icemol)] / sum(comps)
+            mol_frac = comps[mols.index(icemol)] / sum(comps)
         else:
             continue
 
-        mol_wt_tgtmol = Formula(icemol).mass * u.Da
+        #mol_wt_tgtmol = Formula(icemol).mass * u.Da
 
-        col = tb['column'][sel] * molwt * mol_massfrac / (mol_wt_tgtmol)
+        col = tb['column'][sel] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
         # print(f'comp={comp}, mol_massfrac={mol_massfrac}, mol_wt_tgtmol={mol_wt_tgtmol}, molwt={molwt}, abundance={abundance}, col[0]={col[0]:0.1e}, col[-1]={col[-1]:0.1e}')
 
         h2col = col / abundance
@@ -164,9 +164,9 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
 
         if icemol2 is not None and icemol2 in mols and icemol2_col is not None:
-            mol_massfrac2 = comps[mols.index(icemol2)] / sum(comps)
-            mol_wt_tgtmol2 = Formula(icemol2).mass * u.Da
-            ind_icemol2 = np.argmin(np.abs(tb['column'][sel] * molwt * mol_massfrac2 / (mol_wt_tgtmol2) - icemol2_col))
+            mol_frac2 = comps[mols.index(icemol2)] / sum(comps)
+            # mol_wt_tgtmol2 = Formula(icemol2).mass * u.Da
+            ind_icemol2 = np.argmin(np.abs(tb['column'][sel] * mol_frac2 - icemol2_col))
             #print(f'icemol2={icemol2}, icemol2_col={icemol2_col}, ind_icemol2={ind_icemol2} c1[ind_icemol2]={c1[ind_icemol2]}, c2[ind_icemol2]={c2[ind_icemol2]}')
             L, = pl.plot(c1, c2, label=f'{comp} (X$_{{{icemol2}}}$ = {icemol2_col / h2col[ind_icemol2]:0.1e})', )
             #L, = pl.plot(c1[ind_icemol2], c2[ind_icemol2], 'o', color=L.get_color())
@@ -217,8 +217,10 @@ if __name__ == "__main__":
     percent = 25
 
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                 (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                 (['F356W', 'F405N'], ['F405N', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F356W', 'F466N'], ['F466N', 'F444W'], (-0.75, 1, -0.5, 1.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
                                 ):

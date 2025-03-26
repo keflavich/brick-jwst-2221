@@ -117,8 +117,8 @@ def make_mymix_tables():
     # 3-1 comes from Brandt's models plus the McClure 2023 paper
     mymix_tables = {}
 
-    water_mastrapa = read_ocdb_file(f'{optical_constants_cache_dir}/242_H2O (1)_25K_Mastrapa.txt') # h2otbs[('ocdb', 242, 25)]
-    co2_gerakines = read_ocdb_file(f'{optical_constants_cache_dir}/55_CO2 (1)_8K_Gerakines.txt') # co2tbs[('ocdb', 55, 8)]
+    water_mastrapa = read_ocdb_file(f'{optical_constants_cache_dir}/242_H2O_(1)_25K_Mastrapa.txt') # h2otbs[('ocdb', 242, 25)]
+    co2_gerakines = read_ocdb_file(f'{optical_constants_cache_dir}/55_CO2_(1)_8K_Gerakines.txt') # co2tbs[('ocdb', 55, 8)]
     ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_886_30.0K.txt')
     methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_503_25.0K.txt')
 
@@ -180,7 +180,7 @@ def make_mymix_tables():
 
         tbl = Table({'Wavelength': grid, 'k': co_plus_co2_plus_water_k})
         tbl.meta['composition'] = composition
-        tbl.meta['density'] = 1*u.g/u.cm**3
+        tbl.meta['density'] = 1*u.g/u.cm**3 # everything is close to 1 g/cm^3.... so this is just a close-enough guess
         tbl.meta['temperature'] = 25*u.K
         tbl.meta['index'] = ii
         tbl.meta['molecule'] = mol
