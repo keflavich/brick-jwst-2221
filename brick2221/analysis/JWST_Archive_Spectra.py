@@ -114,10 +114,11 @@ if __name__ == '__main__':
                 mag = tbl.loc[obj][key]
                 if hasattr(mag, '__len__') and len(mag) > 1:
                     mag = mag[0]
+                if pl.ylim()[0] < 0:
+                    pl.ylim(0, pl.ylim()[1])
                 mid = np.array(pl.ylim()).mean()
                 pl.plot(transdata[key]['Wavelength']/1e4, transdata[key]['Transmission'] * mid, linewidth=0.5,
                         label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
                     )
             pl.legend(loc='best');
             pl.savefig(f'{nirspec_dir}/{obj}.png', dpi=150)
-            pl.close()
