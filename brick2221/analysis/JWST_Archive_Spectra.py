@@ -1,4 +1,5 @@
 
+import warnings
 import os
 import pyspeckit
 from astropy.io import fits
@@ -25,22 +26,28 @@ from astropy.table import Table
 
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
 
-if os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
+if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
     tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
 else:
     nirspec_data = []
-    for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
-        fh = fits.open(fn)
-        spectable = Table.read(fn, hdu=1)
-        nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                         spectable['FLUX'].quantity,
-                                         filterids=filter_ids, transdata=transdata)
-        nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key]) for key in nirspec_flxd}
-        nirspec_mags['Object'] = fh[0].header['TARGNAME']
-        nirspec_data.append(nirspec_mags)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
+            fh = fits.open(fn)
+            spectable = Table.read(fn, hdu=1)
+            nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
+                                            spectable['FLUX'].quantity,
+                                            filterids=filter_ids, transdata=transdata)
+            nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key]) for key in nirspec_flxd}
+            nirspec_mags['Object'] = fh[0].header['TARGNAME']
+            if nirspec_mags['Object'] == '':
+                nirspec_mags['Object'] = fh[0].header['TARGPROP']
+            if nirspec_mags['Object'] is None or nirspec_mags['Object'] == '':
+                nirspec_mags['Object'] = os.path.basename(fn).split('x1d')[0]
+            nirspec_data.append(nirspec_mags)
 
     tbl = Table(nirspec_data)
-    tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
+    tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits', overwrite=True)
 
 
 
@@ -83,3 +90,34 @@ if __name__ == '__main__':
     pl.xlabel(r'F356W - F410M')
     pl.ylabel(r'F410M - F444W')
 
+
+    tbl.add_index('Object')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
+            fh = fits.open(fn)
+            obj = fh[0].header["TARGNAME"]
+            if obj == '':
+                obj = fh[0].header['TARGPROP']
+            if obj is None or obj == '':
+                obj = os.path.basename(fn).split('x1d')[0]
+                continue
+            spectable = Table.read(fn, hdu=1)
+            sp = pyspeckit.Spectrum(xarr=spectable['WAVELENGTH'].quantity,
+                                    data=spectable['FLUX'].quantity,
+                                    header=fh[0].header
+                                )
+            sp.specname = obj
+            sp.plotter()
+            for key in ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F405N', 'JWST/NIRCam.F444W', 'JWST/NIRCam.F356W']:
+                mag = tbl.loc[obj][key]
+                if hasattr(mag, '__len__') and len(mag) > 1:
+                    mag = mag[0]
+                mid = np.array(pl.ylim()).mean()
+                pl.plot(transdata[key]['Wavelength']/1e4, transdata[key]['Transmission'] * mid, linewidth=0.5,
+                        label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
+                    )
+            pl.legend(loc='best');
+            pl.savefig(f'{nirspec_dir}/{obj}.png', dpi=150)
+            pl.close()

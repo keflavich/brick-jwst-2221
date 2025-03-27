@@ -171,7 +171,7 @@ def make_mymix_tables():
             (mult * np.interp(grid,
                               moltbls[mol]['Wavelength'][np.argsort(moltbls[mol]['Wavelength'])],
                               moltbls[mol]['k'][np.argsort(moltbls[mol]['Wavelength'])])) for mol, mult in mults.items()
-        ], axis=0) / np.sum(mults.values())
+        ], axis=0) / np.sum(list(mults.values()))
         # co_plus_co2_plus_water_k = (co_mult * gerakines['k'] +
         #                             h2o_mult * np.interp(grid, water_mastrapa['Wavelength'][inds], water_mastrapa['k'][inds],) +
         #                             co2_mult * np.interp(grid, co2_gerakines['Wavelength'], co2_gerakines['k']) +
