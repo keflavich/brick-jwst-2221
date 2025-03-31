@@ -122,14 +122,17 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         
     if molcomps is not None:
         molids = np.unique(dmag_tbl.loc['composition', molcomps]['mol_id'])
+        print(f"molcomps {molcomps} resolved to {list(molids)}")
+    else:
+        molcomps = np.unique(dmag_tbl.loc[molids]['composition'])
         
     dcol = 2
-    for mol_id in tqdm(molids):
+    for mol_id, molcomp in tqdm(zip(molids, molcomps)):
         if isinstance(mol_id, tuple):
             mol_id, database = mol_id
-            tb = dmag_tbl.loc[mol_id].loc['database', database]
+            tb = dmag_tbl.loc[mol_id].loc['database', database].loc['composition', molcomp]
         else:
-            tb = dmag_tbl.loc[mol_id]
+            tb = dmag_tbl.loc[mol_id].loc['composition', molcomp]
         comp = np.unique(tb['composition'])[0]
         temp = np.unique(tb['temperature'])[temperature_id]
         tb = tb.loc['temperature', temp]
@@ -145,6 +148,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         if icemol in mols:
             mol_frac = comps[mols.index(icemol)] / sum(comps)
         else:
+            print(f"icemol {icemol} not in {mols} for {comp}.  tb.meta={tb.meta}")
             continue
 
         #mol_wt_tgtmol = Formula(icemol).mass * u.Da
@@ -242,7 +246,7 @@ if __name__ == "__main__":
                                                                                               abundance=(percent/100.)*carbon_abundance,
                                                                                               max_column=2e20)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-        pl.title(f"{percent}% of CO in ice");
+        pl.title(f"{percent}% of C in ice");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.png', bbox_inches='tight', dpi=150)
 
@@ -261,14 +265,24 @@ if __name__ == "__main__":
                                                                                     abundance=0.5*carbon_abundance,
                                                                                     max_column=2e20)
     pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-    pl.title("50% of CO in ice")
+    pl.title("50% of C in ice")
     pl.close('all')
 
     pl.figure()
     color1= ['F115W', 'F200W']
     color2= ['F356W', 'F444W']
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[0,1,2,3,4,5,6,7],#4,5,6,7,8,9,10,11,12,13,14],
-                                                                                    #abundance=3e-4,
+    molcomps = [
+                                            'H2O:CO (0.5:1)',
+                                            'H2O:CO (1:1)',
+                                            'H2O:CO (3:1)',
+                                            'H2O:CO (5:1)',
+                                            'H2O:CO (7:1)',
+                                            'H2O:CO (10:1)',
+                                            'H2O:CO (15:1)',
+                                            'H2O:CO (20:1)',
+    ]
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, 
+                                                                                    molcomps=molcomps,
                                                                                     #nh2_to_av=1e22,
                                                                                     abundance=0.5*carbon_abundance,
                                                                                     max_column=2e20)
@@ -280,15 +294,24 @@ if __name__ == "__main__":
     pl.figure()
     color1= ['F115W', 'F200W']
     color2= ['F356W', 'F444W']
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[57, (64, 'lida'), 66, 67, 68, 69, 84, 86, 91, 94, 96],
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                        #molids=[57, (64, 'lida'), 66, 67, 68, 69, 84, 86, 91, 94, 96],
+                                                                                        molcomps=['CO:CH3OH 1:1',
+                                                                                                  'CO:HCOOH 1:1',
+                                                                                                  'CO:CH3CHO (20:1)',
+                                                                                                  'CO:CH3OH:CH3CHO (20:20:1)',
+                                                                                                  'CO:CH3OH:CH3CH2OH (20:20:1)',
+                                                                                                  'CO:CH3OCH3 (20:1)',
+                                                                                                  'CO:CH3OH:CH3OCH3 (20:20:1)',
+                                                                                        ],
                                                                                         #abundance=3e-4,
                                                                                         #nh2_to_av=1e22,
-                                                                                        dmag_tbl=dmag_co,
+                                                                                        #dmag_tbl=dmag_co,
                                                                                         abundance=0.25*carbon_abundance,
                                                                                         max_column=2e20)
     pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
     pl.axis((0, 15, -0.5, 1.5));
-    pl.title("25% of CO in ice")
+    pl.title("25% of C in ice")
     pl.close('all')
 
 
@@ -314,13 +337,30 @@ if __name__ == "__main__":
                                 (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
                                 ):
         pl.figure();
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[0,1,2,3,4,5,18,24,25,26,27],
+        molcomps = [
+                                            'H2O:CO (0.5:1)',
+                                            'H2O:CO (1:1)',
+                                            'H2O:CO (3:1)',
+                                            'H2O:CO (5:1)',
+                                            'H2O:CO (7:1)',
+                                            'H2O:CO (10:1)',
+                                            'H2O:CO:CO2:CH3OH (1:1:0.1:0.1)',
+                                            'H2O:CO:CO2:CH3OH (1:1:0.1:1)',
+                                            'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:1:0.1)',
+                                            'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:0.1:0.1)',
+                                            'H2O:CO:CO2:CH3OH:CH3CH2OH (0.1:1:0.1:1:0.1)',
+                                            'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)',
+                                            'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)',
+        ]
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                              molcomps=molcomps,
+        # molids=[0,1,2,3,4,5,18,24,25,26,27],
                                                                                         #abundance=3e-4,
                                                                                         #nh2_to_av=1e22,
                                                                                         abundance=(percent/100.)*carbon_abundance,
                                                                                         max_column=2e20)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-        pl.title(f"{percent}% of CO in ice");
+        pl.title(f"{percent}% of C in ice");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1.png', bbox_inches='tight', dpi=150)
 
@@ -332,13 +372,10 @@ if __name__ == "__main__":
                                 (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
                                 ):
         pl.figure();
+        molcomps = ['CO:OCN (1:1)', 'H2O:CO:OCN (1:1:1)', 'H2O:CO:OCN (1:1:0.02)',
+                    'H2O:CO:OCN (2:1:0.1)', 'H2O:CO:OCN (2:1:0.5)', ]
         a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                            molcomps=['CO:OCN (1:1)',
-                                                                                                      'H2O:CO:OCN (1:1:1)',
-                                                                                                      'H2O:CO:OCN (1:1:0.02)',
-                                                                                                      'H2O:CO:OCN (2:1:0.1)',
-                                                                                                      'H2O:CO:OCN (2:1:0.5)',
-                                                                                            ],
+                                                                                            molcomps=molcomps,
                                                                                         #abundance=3e-4,
                                                                                         #nh2_to_av=1e22,
                                                                                         abundance=(percent/100.)*carbon_abundance,
@@ -347,3 +384,4 @@ if __name__ == "__main__":
         pl.title(f"{percent}% of C in ice");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes.png', bbox_inches='tight', dpi=150)
+        print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
