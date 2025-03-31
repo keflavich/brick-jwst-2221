@@ -161,6 +161,9 @@ def make_mymix_tables():
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)'),
                                             ('COplusOCN', 'CO:OCN (1:1)'),
                                             ('COplusH2OplusOCN', 'H2O:CO:OCN (1:1:1)'),
+                                            ('COplusH2OplusOCN', 'H2O:CO:OCN (1:1:0.02)'),
+                                            ('COplusH2OplusOCN', 'H2O:CO:OCN (2:1:0.1)'),
+                                            ('COplusH2OplusOCN', 'H2O:CO:OCN (2:1:0.5)'),
                                             ]):
         molspl = composition.split(' ')[0].split(':')
         compspl = composition.split(' ')[1].strip('()').split(':')
@@ -192,7 +195,7 @@ def make_mymix_tables():
 
 
         mymix_tables[(mol, ii, 25)] = tbl
-        tbl.write(f'{optical_constants_cache_dir}/mymixes/{composition}.replace(" ","_").ecsv', overwrite=True)
+        tbl.write(f'{optical_constants_cache_dir}/mymixes/{composition.replace(" ","_")}.ecsv', overwrite=True)
 
     return mymix_tables
 

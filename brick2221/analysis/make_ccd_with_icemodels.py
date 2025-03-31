@@ -245,3 +245,105 @@ if __name__ == "__main__":
         pl.title(f"{percent}% of CO in ice");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.png', bbox_inches='tight', dpi=150)
+
+
+
+    pl.figure()
+    color1= ['F182M', 'F212N']
+    color2= ['F410M', 'F466N']
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, 
+                                                                                        molids=None,
+    molcomps=['H2O:CO (0.5:1)', 'H2O:CO (1:1)', 'H2O:CO (3:1)', 'H2O:CO (5:1)', 'H2O:CO (7:1)', 'H2O:CO (10:1)', 'H2O:CO (15:1)', 'H2O:CO (20:1)',],
+    dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                        pure_ice_no_dust=False,
+                                                                                    #abundance=3e-4,
+                                                                                    #nh2_to_av=1e22,
+                                                                                    abundance=0.5*carbon_abundance,
+                                                                                    max_column=2e20)
+    pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+    pl.title("50% of CO in ice")
+    pl.close('all')
+
+    pl.figure()
+    color1= ['F115W', 'F200W']
+    color2= ['F356W', 'F444W']
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[0,1,2,3,4,5,6,7],#4,5,6,7,8,9,10,11,12,13,14],
+                                                                                    #abundance=3e-4,
+                                                                                    #nh2_to_av=1e22,
+                                                                                    abundance=0.5*carbon_abundance,
+                                                                                    max_column=2e20)
+    pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+    pl.axis((0, 10, -0.5, 1.5));
+    pl.title("50% of CO in ice");
+    pl.close('all')
+
+    pl.figure()
+    color1= ['F115W', 'F200W']
+    color2= ['F356W', 'F444W']
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[57, (64, 'lida'), 66, 67, 68, 69, 84, 86, 91, 94, 96],
+                                                                                        #abundance=3e-4,
+                                                                                        #nh2_to_av=1e22,
+                                                                                        dmag_tbl=dmag_co,
+                                                                                        abundance=0.25*carbon_abundance,
+                                                                                        max_column=2e20)
+    pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+    pl.axis((0, 15, -0.5, 1.5));
+    pl.title("25% of CO in ice")
+    pl.close('all')
+
+
+
+    pl.figure()
+    color1= ['F115W', 'F200W']
+    color2= ['F356W', 'F444W']
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[57, (64, 'lida'), 66, 67, 68, 69, 84, 86, 91, 94, 96],
+                                                                                        #abundance=3e-4,
+                                                                                        #nh2_to_av=1e22,
+                                                                                        dmag_tbl=dmag_co,
+                                                                                        abundance=0.25*carbon_abundance,
+                                                                                        max_column=2e20)
+    pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+    pl.axis((0, 15, -0.5, 1.5));
+    pl.title("25% of CO in ice")
+
+    percent = 25
+
+    for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
+                                ):
+        pl.figure();
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, molids=[0,1,2,3,4,5,18,24,25,26,27],
+                                                                                        #abundance=3e-4,
+                                                                                        #nh2_to_av=1e22,
+                                                                                        abundance=(percent/100.)*carbon_abundance,
+                                                                                        max_column=2e20)
+        pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+        pl.title(f"{percent}% of CO in ice");
+        pl.axis(lims);
+        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1.png', bbox_inches='tight', dpi=150)
+
+    percent = 25
+
+    for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 2.5)),
+                                ):
+        pl.figure();
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                            molcomps=['CO:OCN (1:1)',
+                                                                                                      'H2O:CO:OCN (1:1:1)',
+                                                                                                      'H2O:CO:OCN (1:1:0.02)',
+                                                                                                      'H2O:CO:OCN (2:1:0.1)',
+                                                                                                      'H2O:CO:OCN (2:1:0.5)',
+                                                                                            ],
+                                                                                        #abundance=3e-4,
+                                                                                        #nh2_to_av=1e22,
+                                                                                        abundance=(percent/100.)*carbon_abundance,
+                                                                                        max_column=5e19)
+        pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+        pl.title(f"{percent}% of C in ice");
+        pl.axis(lims);
+        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes.png', bbox_inches='tight', dpi=150)

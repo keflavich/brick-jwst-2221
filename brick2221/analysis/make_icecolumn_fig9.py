@@ -148,7 +148,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
     
-    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * 1e-4
+    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
     logN = int(np.log10(NtoAV))
     pl.plot(np.linspace(0.1, 100, 1000), np.log10(NMolofAV),
             label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
@@ -202,13 +202,15 @@ def main():
     dmag_co.add_index('temperature')
     dmag_co.add_index('mol_id')
 
+    c_abundance = 10**(8.7-12)
+
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=c_abundance,
              title='CO',
              dmag_tbl=dmag_co.loc['mol_id', 64].loc['composition', 'CO'])
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=c_abundance,
              title='CO:OCN (1:1)',
              dmag_tbl=dmag_tbl.loc['CO:OCN (1:1)'])
 
@@ -219,7 +221,7 @@ def main():
 
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=c_abundance,
              title='H2O:CO (10:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
@@ -228,7 +230,7 @@ def main():
              dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'])
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=c_abundance,
              title='H2O:CO:CO2 (10:1:2)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:2)'])
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
@@ -261,7 +263,7 @@ def main():
              
     dmag_tbl_this = dmag_co.loc['mol_id', 36].loc['composition', 'CO CO2 (100 70)']
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
-             icemol='CO', abundance=1e-4,
+             icemol='CO', abundance=c_abundance,
              title=dmag_tbl_this['composition'][0],
              dmag_tbl=dmag_tbl_this)
 

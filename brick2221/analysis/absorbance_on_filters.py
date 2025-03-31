@@ -18,6 +18,8 @@ from icemodels.core import (absorbed_spectrum, absorbed_spectrum_Gaussians, conv
 
 from brick2221.analysis.analysis_setup import basepath
 
+from astropy.table import Table
+
 from astroquery.svo_fps import SvoFps
 instrument = 'NIRCam'
 telescope = 'JWST'
@@ -83,3 +85,11 @@ if __name__ == "__main__":
     plot_opacity_tables()
     plot_filters(filternames=['F356W', 'F444W', 'F466N', 'F410M'])
     pl.xlim(3.00, 5.05);
+
+    ocn_mix1 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:1).ecsv')
+    ocn_mix2 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(2:1:0.1).ecsv')
+    ocn_mix3 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:0.02).ecsv')
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(ocn_mix1, ocn_mix2, ocn_mix3))
+    plot_filters()
+    pl.xlim(3.71, 4.75);
