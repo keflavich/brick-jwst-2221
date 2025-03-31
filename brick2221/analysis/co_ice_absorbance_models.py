@@ -192,6 +192,7 @@ def make_mymix_tables():
 
 
         mymix_tables[(mol, ii, 25)] = tbl
+        tbl.write(f'{optical_constants_cache_dir}/mymixes/{composition}.replace(" ","_").ecsv', overwrite=True)
 
     return mymix_tables
 

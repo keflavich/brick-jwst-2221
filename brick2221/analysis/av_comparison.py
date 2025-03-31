@@ -12,6 +12,13 @@ basepath = '/orange/adamginsburg/jwst/brick/'
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
 
+def ext(x):
+    try:
+        return CT06_MWGC()(x)
+    except:
+        return G21_MWAvg()(x)
+
+
 def make_av_comparison(basetable, color1, color2, color3, color4, color5, color6, color7, axlims1=(0.0, 2, -0.5, 4), axlims2=(0,3,-2.5,2), suffix=''):
     pl.figure(figsize=(20,10))
     ax = pl.subplot(2,1,1, adjustable='box', aspect=0.88)
@@ -71,7 +78,7 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, color6
                     )
     # A_V=30 roughly corresponds to 1 mag color excess in 182-212
     # 1/(CT06_MWGC()(1.82*u.um) - CT06_MWGC()(2.12*u.um))
-    plot_extvec_ccd(ax2, color1, color2, start=(1, 0,), color='k', extvec_scale=30, head_width=0.1)
+    plot_extvec_ccd(ax2, color1, color2, start=(1, 0,), color='k', extvec_scale=30, head_width=0.1, ext=ext)
     ax2.set_xlabel(f"[{color1[0].upper()}] - [{color1[1].upper()}]")
     ax2.set_ylabel(f"[{color2[0].upper()}] - [{color2[1].upper()}]");
     ax2.axis(axlims1);
@@ -85,7 +92,7 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, color6
                 c=colorby[sel],
                 norm=colornorm, cmap=cmap
             )
-    plot_extvec_ccd(ax3, color3, color4, start=(0.5,1,), color='k', extvec_scale=30, head_width=0.1)
+    plot_extvec_ccd(ax3, color3, color4, start=(0.5,1,), color='k', extvec_scale=30, head_width=0.1, ext=ext)
 
 
     ax3.set_xlabel(f"[{color3[0].upper()}] - [{color3[1].upper()}]")
@@ -118,31 +125,35 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, color6
               ('f182m', 'f212n'), ('f182m', 'f405n'), ('f182m', 'f410m'), ('f182m', 'f466n'),
               ('f212n', 'f405n'), ('f212n', 'f410m'), ('f212n', 'f466n'),
               ('f410m', 'f466n'), ('f405n', 'f466n'),
+              ('f115w', 'f200w'), ('f115w', 'f212n'), ('f182m', 'f200w'),
     ]
 
     for ii, color in enumerate(colors):
-        av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in color]
-        av = (basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}']) / (CT06_MWGC()(av_wavelengths[0]) - CT06_MWGC()(av_wavelengths[1]))
-        av1 = np.array(av[sel])
-        av1 = av1[np.isfinite(av1)]
-        linestyle = '-'
-        ax = pl.subplot(2, 1, 1)
-        if 'f410m' in color:
-            linestyle = '--'
-        if 'f187n' in color:
-            linestyle = ':'
-        if 'f466n' in color:
-            ax = pl.subplot(2, 1, 2)
-        if len(av1) > 0:
-            ax.hist(av1, bins=np.linspace(0 + np.random.randn(), 100 + np.random.randn(), 100),
-                    label=f"[{color[0].upper()}] - [{color[1].upper()}]", histtype='step', linestyle=linestyle,
-                    alpha=0.5 if linestyle == '-' else 1,
-                    )
+        try:
+            av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in color]
+            av = (basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}']) / (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
+            av1 = np.array(av[sel])
+            av1 = av1[np.isfinite(av1)]
+            linestyle = '-'
+            ax = pl.subplot(2, 1, 1)
+            if 'f410m' in color:
+                linestyle = '--'
+            if 'f187n' in color:
+                linestyle = ':'
+            if 'f466n' in color:
+                ax = pl.subplot(2, 1, 2)
+            if len(av1) > 0:
+                ax.hist(av1, bins=np.linspace(0 + np.random.randn(), 100 + np.random.randn(), 100),
+                        label=f"[{color[0].upper()}] - [{color[1].upper()}]", histtype='step', linestyle=linestyle,
+                        alpha=0.5 if linestyle == '-' else 1,
+                        )
+        except KeyError:
+            continue
 
 
     color = ('f182m', 'f212n')
     av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in color]
-    av = (basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}']) / (CT06_MWGC()(av_wavelengths[0]) - CT06_MWGC()(av_wavelengths[1]))
+    av = (basetable[f'mag_ab_{color[0]}'] - basetable[f'mag_ab_{color[1]}']) / (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
     av1 = np.array(av[sel])
     av1 = av1[np.isfinite(av1)]
     pl.subplot(2, 1, 2).hist(av1, bins=np.linspace(0 + np.random.randn(), 100 + np.random.randn(), 100), label=f"[{color[0].upper()}] - [{color[1].upper()}]", color='k', alpha=0.25, zorder=-5)
@@ -161,6 +172,7 @@ def make_av_comparison(basetable, color1, color2, color3, color4, color5, color6
     histname = os.path.basename(fn).replace('.fits', f'{suffix}_hist_av.png')
     pl.savefig(f"{basepath}/figures/{histname}", dpi=150, bbox_inches='tight')
 
+
 if __name__ == "__main__":
 
     for fn in glob.glob(f'{basepath}/catalogs/basic*merged*fits') + glob.glob(f'{basepath}/catalogs/crowd*merged*fits') + glob.glob(f"{basepath}/catalogs/iter*merged*fits"):
@@ -168,4 +180,5 @@ if __name__ == "__main__":
         make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f410m'], color3=['f182m', 'f212n'], color4=['f410m', 'f466n'], color5=['f187n', 'f405n'], color6=['f212n', 'f466n'], color7=['f182m', 'f410m'],  suffix='_410466_color187405')
         make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f410m', 'f466n'], color5=['f182m', 'f410m'], color6=['f212n', 'f466n'], color7=['f187n', 'f405n'],  suffix='_410466')
         make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f212n', 'f405n'], color3=['f182m', 'f212n'], color4=['f212n', 'f466n'], color5=['f182m', 'f410m'], color6=['f410m', 'f466n'], color7=['f187n', 'f405n'],  suffix='_212466', axlims2=(-0.1, 2.5, -0.1, 2.5), axlims1=(-0.1, 2.5, -0.1, 3.5))
+        make_av_comparison(basetable, color1=['f182m', 'f212n'], color2=['f115w', 'f200w'], color3=['f115w', 'f212n'], color4=['f182m', 'f200w'], color5=['f182m', 'f410m'], color6=['f410m', 'f466n'], color7=['f187n', 'f405n'],  suffix='_f115wf200w', axlims2=(-0.1, 2.5, -0.1, 2.5), axlims1=(-0.1, 2.5, -0.1, 3.5))
         pl.close('all')

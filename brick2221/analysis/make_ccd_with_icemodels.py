@@ -244,3 +244,4 @@ if __name__ == "__main__":
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
         pl.title(f"{percent}% of CO in ice");
         pl.axis(lims);
+        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.png', bbox_inches='tight', dpi=150)

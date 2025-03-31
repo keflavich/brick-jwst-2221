@@ -40,7 +40,7 @@ measured_466m410 = basetable['mag_ab_f466n'] - basetable['mag_ab_f410m']
 sel = ok = ok2221 = np.ones(len(basetable), dtype=bool)
 
 mol = 'COplusH2O'
-dmag_tbl = Table.read(f'{basepath}/tables/H2O+CO_ice_absorption_tables.ecsv')
+dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
 dmag_tbl.add_index('composition')
 
 
@@ -96,8 +96,8 @@ def makeplot(avfilts=['F182M', 'F410M'],
              ax=None, sel=ok2221, ok=ok2221, alpha=0.5,
              icemol='CO',
              abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
-             title='H2O:CO (3:1)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO (3:1)'],
+             title='H2O:CO:OCN (1:1:1)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO:OCN (1:1:1)'],
              plot_brandt=True,
              NtoAV=2.21e21,
              av_start=20,
@@ -142,27 +142,28 @@ def makeplot(avfilts=['F182M', 'F410M'],
     #pl.plot([7, 23], 10**(np.array([7,23]) * m + b))
     #pl.legend(loc='lower right')
     pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
-    pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$]")
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
+    pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
     
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
     
     NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * 1e-4
+    logN = int(np.log10(NtoAV))
     pl.plot(np.linspace(0.1, 100, 1000), np.log10(NMolofAV),
-            label=f'100% of {icemol} in ice if N(H$_2$)=2.2$\\times10^{{21}}$ A$_V$', color='r', linestyle=':')
+            label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
     
     pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
     #pl.ylabel("N(CO) ice\nfrom Palumbo 2006 constants,\n4000K Phoenix atmosphere")
-    pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$]")
+    pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
     pl.legend(loc='upper left')
     pl.title(title)
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
 
     if plot_brandt:
         plot_brandt_model(ax, molecule=icemol, nh_to_av=NtoAV, av_start=av_start)
-        fig.savefig(f"{basepath}/paper_co/figures/N{icemol}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182_Brandt.png", dpi=250, bbox_inches='tight')
+        fig.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182_Brandt.png", dpi=250, bbox_inches='tight')
 
     return av, inferred_molecular_column, ax
 
@@ -208,13 +209,13 @@ def main():
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='CO', abundance=1e-4,
-             title='H2O:CO:CO2 (5:1:0.5)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
+             title='CO:OCN (1:1)',
+             dmag_tbl=dmag_tbl.loc['CO:OCN (1:1)'])
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='H2O', abundance=10**-3.31,
-             title='H2O:CO:CO2 (5:1:0.5)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
+             title='H2O:CO:OCN (1:1:1)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO:OCN (1:1:1)'])
 
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
