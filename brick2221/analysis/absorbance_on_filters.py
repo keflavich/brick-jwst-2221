@@ -37,6 +37,7 @@ from astropy import units as u
 import numpy as np
 
 import pylab as pl
+from cycler import cycler
 
 
 # Load mix bases
@@ -46,10 +47,16 @@ ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_30.0K.txt
 methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
 ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
 co_gerakines = gerakines = retrieve_gerakines_co()
+#nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/273_NH3_(1)_40K_Roser.txt')
+#nh3 = read_lida_file(f'{optical_constants_cache_dir}/116_NH3_1_27.0K.txt')
+nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
+co_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/85_CO_(1)_10K_Hudgins.txt')
 
 
-def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines, ethanol, methanol, ocn)):
-    for tb in opacity_tables:
+def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, ),
+                        colors=None,
+                        ylim=(1e-21, 6e-18)):
+    for ii, tb in enumerate(opacity_tables):
 
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
         
@@ -60,14 +67,16 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_geraki
                 label=f'{tb.meta["author"]} {tb.meta["composition"]} {tb.meta["temperature"]}'
                         if 'author' in tb.meta else
                     f'{tb.meta["index"]} {tb.meta["molecule"]} {tb.meta["ratio"]} {tb.meta["temperature"]}',
-                linestyle='-')
+                linestyle='-',
+                color=colors[ii] if colors is not None else None,
+                )
     pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
     pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
     pl.semilogy();
-    pl.ylim(1e-21, 6e-18);
+    pl.ylim(ylim);
 
-def plot_filters(filternames=['F466N', 'F410M'], ymax=6e-18):
+def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18):
     for filtername in filternames:
         wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
         xarr = wavelength_table['Wavelength'].quantity.to(u.um)
@@ -76,15 +85,41 @@ def plot_filters(filternames=['F466N', 'F410M'], ymax=6e-18):
 
 
 if __name__ == "__main__":
-    pl.figure()
-    plot_opacity_tables()
-    plot_filters()
-    pl.xlim(3.71, 4.75);
 
     pl.figure()
-    plot_opacity_tables()
-    plot_filters(filternames=['F356W', 'F444W', 'F466N', 'F410M'])
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa))
+    plot_filters()
+    pl.xlim(4.55, 4.75);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466.png', dpi=150, bbox_inches='tight')
+
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins))
+    plot_filters()
+    pl.xlim(4.55, 4.75);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withhudgins.png', dpi=150, bbox_inches='tight')
+
+    default_colors = list(pl.rcParams['axes.prop_cycle'].by_key()['color'])
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, ocn),
+                       colors=[default_colors[ii] for ii  in [0,1,3]]
+    )
+    plot_filters()
+    pl.xlim(4.55, 4.75);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.png', dpi=150, bbox_inches='tight')
+
+
+
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
+    plot_filters()
+    pl.xlim(3.71, 4.75);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_and_f410.png', dpi=150, bbox_inches='tight')
+
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol ))
+    plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
     pl.xlim(3.00, 5.05);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f356_and_f444.png', dpi=150, bbox_inches='tight')
 
     ocn_mix1 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:1).ecsv')
     ocn_mix2 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(2:1:0.1).ecsv')
@@ -93,6 +128,6 @@ if __name__ == "__main__":
     ocn_mix5 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/CO:OCN_(1:1).ecsv')
 
     pl.figure()
-    plot_opacity_tables(opacity_tables=(ocn_mix1, ocn_mix2, ocn_mix3, ocn_mix4, ocn_mix5))
+    plot_opacity_tables(opacity_tables=(ocn_mix1, ocn_mix2, ocn_mix3, ocn_mix4, ocn_mix5,))
     plot_filters()
     pl.xlim(3.71, 4.75);

@@ -96,11 +96,11 @@ def makeplot(avfilts=['F182M', 'F410M'],
              ax=None, sel=ok2221, ok=ok2221, alpha=0.5,
              icemol='CO',
              abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
-             title='H2O:CO:OCN (1:1:1)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO:OCN (1:1:1)'],
+             title='H2O:CO (10:1)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'],
              plot_brandt=True,
              NtoAV=2.21e21,
-             av_start=20,
+             av_start=15,
              ):
 
     if ax is None:
@@ -150,7 +150,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     
     NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
     logN = int(np.log10(NtoAV))
-    pl.plot(np.linspace(0.1, 100, 1000), np.log10(NMolofAV),
+    pl.plot(np.linspace(0.1, 100, 1000) + av_start, np.log10(NMolofAV),
             label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
     
     pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")

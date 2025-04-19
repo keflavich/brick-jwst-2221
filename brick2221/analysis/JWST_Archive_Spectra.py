@@ -36,9 +36,11 @@ else:
             fh = fits.open(fn)
             spectable = Table.read(fn, hdu=1)
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                            spectable['FLUX'].quantity,
-                                            filterids=filter_ids, transdata=transdata)
-            nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key]) for key in nirspec_flxd}
+                                             spectable['FLUX'].quantity,
+                                             filterids=filter_ids, transdata=transdata)
+            nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
+                                 if nirspec_flxd[key] > 0 else np.nan
+                            for key in nirspec_flxd}
             nirspec_mags['Object'] = fh[0].header['TARGNAME']
             if nirspec_mags['Object'] == '':
                 nirspec_mags['Object'] = fh[0].header['TARGPROP']

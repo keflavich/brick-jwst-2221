@@ -136,8 +136,8 @@ def ccd(basetable,
         include = ~exclude
         sel = sel & include
 
-    ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized)
-    ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized)
+    ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
+    ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
     ax.set_xlabel(f"{color1[0]} - {color1[1]}")
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)

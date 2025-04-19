@@ -123,6 +123,10 @@ def make_mymix_tables():
     ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_30.0K.txt')
     methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
     ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
+    #nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/65_NH3_(1)_100K_Gerakines.txt')
+    
+    # modify OCN to get rid of the non-OCN contributions
+    ocn['k'][(ocn['Wavelength'] < 4.5*u.um) | (ocn['Wavelength'] > 4.75*u.um)] = 0
 
     co_gerakines = gerakines = retrieve_gerakines_co()
     moltbls = {'CO': co_gerakines, 'H2O': water_mastrapa, 'CO2': co2_gerakines, 'CH3OH': methanol, 'CH3CH2OH': ethanol, 'OCN': ocn}
