@@ -16,9 +16,11 @@ from brick2221.analysis.analysis_setup import basepath
 
 from icemodels.core import composition_to_molweight
 
-from make_icecolumn_fig9 import plot_brandt_model, molscomps
+from brick2221.analysis.make_icecolumn_fig9 import plot_brandt_model, molscomps
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
+
+from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps
 
 if 'basetable_merged1182_daophot' not in globals():
     basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
@@ -39,7 +41,7 @@ mol = 'COplusH2O'
 dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
 dmag_tbl.add_index('composition')
 
-def makeplot(avfilts=['F182M', 'F212N'], 
+def makeplot(avfilts=['F182M', 'F212N'],
              ax=None, sel=ok2221, ok=ok2221, alpha=0.5,
              icemol='CO',
              abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
@@ -67,23 +69,24 @@ def makeplot(avfilts=['F182M', 'F212N'],
 
     unextincted_466m212 = measured_466m212 + E_V_212_466 * av
 
-    dmags466 = dmag_tbl['F466N']
+    # dmags466 = dmag_tbl['F466N']
 
-    comp = np.unique(dmag_tbl['composition'])[0]
-    molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-    mols, comps = molscomps(comp)
-    mol_frac = comps[mols.index(icemol)] / sum(comps)
+    # comp = np.unique(dmag_tbl['composition'])[0]
+    # molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+    # mols, comps = molscomps(comp)
+    # mol_frac = comps[mols.index(icemol)] / sum(comps)
 
     # mol_wt_tgtmol = Formula(icemol).mass * u.Da
     # print(f'icemol={icemol}, molwt={molwt}, mol_wt_tgtmol={mol_wt_tgtmol}, comps={comps}, mols={mols}, massfrac={mol_massfrac}')
 
     # cols are .... column density of the selected ice species
-    cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
+    # cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
 
     # there is no ice effect on 212
-    dmag_466m212 = np.array(dmags466)
+    #dmag_466m212 = np.array(dmags466)
 
-    inferred_molecular_column = np.interp(unextincted_466m212, dmag_466m212[cols<1e21], cols[cols<1e21])
+    # inferred_molecular_column = np.interp(unextincted_466m212, dmag_466m212[cols<1e21], cols[cols<1e21])
+    inferred_molecular_column = compute_molecular_column(unextincted_1m2=unextincted_466m212, dmag_tbl=dmag_tbl, icemol=icemol, filter1='F466N', filter2='F212N')
 
     fig = ax.get_figure()
     ax.scatter(np.array(av[sel & ok]),
@@ -97,7 +100,7 @@ def makeplot(avfilts=['F182M', 'F212N'],
                                     cmap='Spectral_r',
                                     marker=',',
                                             )
-    
+
     #pl.semilogy(av182b[selb], inferred_co_column_av182410b[selb], marker=',', linestyle='none')
     pl.xlim(-5, 105)
     pl.ylim(np.log10(2e15), np.log10(5e20))
@@ -114,15 +117,15 @@ def makeplot(avfilts=['F182M', 'F212N'],
     pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F212N-F466N color")
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_from212vs466_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_from212vs466_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
-    
+
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
-    
+
     # Liszt value: 5.8e21 * 3.1
     NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
     logN = int(np.log10(NtoAV))
     pl.plot(np.linspace(0.1, 100, 1000) + av_start, np.log10(NMolofAV),
             label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
-    
+
     pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
     #pl.ylabel("N(CO) ice\nfrom Palumbo 2006 constants,\n4000K Phoenix atmosphere")
     pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F212N-F466N color")
@@ -230,7 +233,7 @@ def main():
              title='H2O',
              dmag_tbl=dmag_h2o.loc['H2O (1)'].loc['temperature', '25K'].loc['mol_id', 240])
 
-             
+
     dmag_tbl_this = dmag_co.loc['mol_id', 36].loc['composition', 'CO CO2 (100 70)']
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='CO', abundance=carbon_abundance*0.5,

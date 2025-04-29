@@ -16,6 +16,7 @@ from astropy.visualization import simple_norm
 from astropy import wcs
 from astropy import table
 from astropy import units as u
+import re
 
 try:
     from photutils.aperture import CircularAnnulus, CircularAperture
@@ -31,15 +32,17 @@ import dust_extinction
 from dust_extinction.parameter_averages import CCM89
 from dust_extinction.averages import RRP89_MWGC, CT06_MWGC, F11_MWGC
 
+from icemodels.core import composition_to_molweight
+
 import PIL
 import pyavm
 
 import pylab as pl
 pl.rcParams['figure.facecolor'] = 'w'
 pl.rcParams['image.origin'] = 'lower'
-pl.rcParams['figure.figsize'] = (10,8)
-pl.rcParams['figure.dpi'] = 100
-pl.rcParams['font.size'] = 16
+# pl.rcParams['figure.figsize'] = (10,8)
+# pl.rcParams['figure.dpi'] = 100
+# pl.rcParams['font.size'] = 16
 
 
 try:
@@ -117,3 +120,36 @@ def getmtime(x):
 # for module in ('merged', 'merged-reproject'):
 #     fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
 #     print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
+
+
+def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F466N', filter2='F410M'):
+    dmags1 = dmag_tbl[filter1]
+    dmags2 = dmag_tbl[filter2]
+
+    comp = np.unique(dmag_tbl['composition'])[0]
+    molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+    mols, comps = molscomps(comp)
+    mol_frac = comps[mols.index(icemol)] / sum(comps)
+
+    cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
+
+    dmag_1m2 = np.array(dmags1) - np.array(dmags2)
+    inferred_molecular_column = np.interp(unextincted_1m2, dmag_1m2[cols<1e21], cols[cols<1e21])
+
+    return inferred_molecular_column
+
+
+def molscomps(comp):
+    if len(comp.split(" ")) == 2:
+        mols, comps = comp.split(" ")
+        comps = list(map(float, re.split("[: ]", comps.strip("()"))))
+        mols = re.split("[: ]", mols)
+    elif len(comp.split(" (")) == 1:
+        mols = [comp]
+        comps = [1]
+    else:
+        mols, comps = comp.split(" (")
+        comps = list(map(float, re.split("[: ]", comps.strip(")"))))
+        mols = re.split("[: ]", mols)
+
+    return mols, comps
