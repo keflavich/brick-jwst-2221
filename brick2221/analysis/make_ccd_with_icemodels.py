@@ -144,7 +144,11 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         ok = ((nirspecarchive_mags['JWST/NIRCam.'+color1[0]] != 0) &
               (nirspecarchive_mags['JWST/NIRCam.'+color1[1]] != 0) &
               (nirspecarchive_mags['JWST/NIRCam.'+color2[0]] != 0) &
-              (nirspecarchive_mags['JWST/NIRCam.'+color2[1]] != 0))
+              (nirspecarchive_mags['JWST/NIRCam.'+color2[1]] != 0) &
+              ~(nirspecarchive_mags['JWST/NIRCam.'+color1[0]].mask) &
+              ~(nirspecarchive_mags['JWST/NIRCam.'+color1[1]].mask) &
+              ~(nirspecarchive_mags['JWST/NIRCam.'+color2[0]].mask) &
+              ~(nirspecarchive_mags['JWST/NIRCam.'+color2[1]].mask))
         pl.scatter(c1nirspecarchive[ok],
                    c2nirspecarchive[ok],
                    s=25, c='g', marker='x', label='NIRSpec')
@@ -274,6 +278,8 @@ if __name__ == "__main__":
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                 (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                 (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F356W', 'F405N'], ['F405N', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F356W', 'F466N'], ['F466N', 'F444W'], (-0.75, 1, -0.5, 1.5)),
@@ -366,6 +372,8 @@ if __name__ == "__main__":
 
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                 (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                 (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
                                  (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
@@ -404,6 +412,7 @@ if __name__ == "__main__":
 
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                 (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
                                  (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
@@ -455,15 +464,10 @@ if __name__ == "__main__":
         print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
 
 
-    if True:
-        """
-        Needs refactoring
-
-        there are multiple molids per molcomp
-        """
+    for color1, color2, lims in ((['F115W', 'F200W'], ['F356W', 'F444W'], (0, 15, -0.5, 1.5)),
+                                 (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 15, -0.5, 1.5)),
+                                 ):
         pl.figure()
-        color1= ['F115W', 'F200W']
-        color2= ['F356W', 'F444W']
 
         molcomps=[('CO:CH3OH 1:1', 15.0),
                   ('CO:HCOOH 1:1', 14.0),

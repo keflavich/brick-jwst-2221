@@ -11,7 +11,7 @@ from astroquery.svo_fps import SvoFps
 jfilts = SvoFps.get_filter_list('JWST')
 jfilts.add_index('filterID')
 
-# filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W', 
+# filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W',
 #              'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N']
 filter_ids = [fid for fid in jfilts['filterID'] if fid.startswith('JWST/NIRCam')]
 filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
@@ -36,7 +36,7 @@ else:
             fh = fits.open(fn)
             spectable = Table.read(fn, hdu=1)
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                             spectable['FLUX'].quantity,
+                                             np.nan_to_num(spectable['FLUX'].quantity),
                                              filterids=filter_ids, transdata=transdata)
             nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
                                  if nirspec_flxd[key] > 0 else np.nan
