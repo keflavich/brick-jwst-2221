@@ -154,6 +154,13 @@ def plot_brandt_model(ax, nh_to_av=2.21e21*2, molecule='CO', av_start=0):
     ax.contourf(x_centers, y_centers, hh, cmap='gray_r', zorder=-10)
 
 
+def compare_freezeout_abundance_models():
+
+    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
+    logN = int(np.log10(NtoAV))
+    pl.plot(np.linspace(0.1, 100, 1000) + av_start, np.log10(NMolofAV),
+            label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
+
 
 def main():
 

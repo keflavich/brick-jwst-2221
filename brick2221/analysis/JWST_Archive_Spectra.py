@@ -1,10 +1,13 @@
-
+from tqdm.auto import tqdm
+import glob
+import numpy as np
 import warnings
 import os
 import pyspeckit
 from astropy.io import fits
 from astropy import units as u
-
+from astropy.table import Table
+from astropy import table
 from icemodels import fluxes_in_filters
 
 from astroquery.svo_fps import SvoFps
@@ -18,15 +21,9 @@ filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
 transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 
 
-from tqdm.auto import tqdm
-import glob
-import numpy as np
-from astropy.table import Table
-
-
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
 
-if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
+if False or os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
     tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
 else:
     nirspec_data = []
@@ -41,16 +38,31 @@ else:
             nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
                                  if nirspec_flxd[key] > 0 else np.nan
                             for key in nirspec_flxd}
-            nirspec_mags['Object'] = fh[0].header['TARGNAME']
-            if nirspec_mags['Object'] == '':
-                nirspec_mags['Object'] = fh[0].header['TARGPROP']
-            if nirspec_mags['Object'] is None or nirspec_mags['Object'] == '':
-                nirspec_mags['Object'] = os.path.basename(fn).split('x1d')[0]
+
+            # filter out measurements that are implausibly faint
+            nirspec_mags = {key: np.nan if (nirspec_mags[key] > 25) or (nirspec_mags[key] < 2) else nirspec_mags[key]
+                            for key in nirspec_mags}
+
+            nirspec_mags['Target'] = fh[0].header['TARGNAME']
+            if nirspec_mags['Target'] == '':
+                nirspec_mags['Target'] = fh[0].header['TARGPROP']
+            if nirspec_mags['Target'] is None or nirspec_mags['Target'] == '':
+                nirspec_mags['Target'] = os.path.basename(fn).split('x1d')[0]
+
+            try:
+                nirspec_mags['Object'] = fh[1].header['SRCNAME']
+            except KeyError:
+                try:
+                    nirspec_mags['Object'] = fh[1].header['SRCALIAS']
+                except KeyError:
+                    if nirspec_mags['Target'] == 'Serpens_Targets':
+                        raise ValueError(f'Serpens_Targets has no SRCNAME or SRCALIAS: {fn}')
+                    nirspec_mags['Object'] = nirspec_mags['Target']
+            nirspec_mags['grating'] = fh[0].header['GRATING']
             nirspec_data.append(nirspec_mags)
 
     tbl = Table(nirspec_data)
     tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits', overwrite=True)
-
 
 
 if __name__ == '__main__':
@@ -94,28 +106,42 @@ if __name__ == '__main__':
 
 
     tbl.add_index('Object')
+    tbl.add_index('grating')
+    tbl.add_index('Target')
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
             fh = fits.open(fn)
-            obj = fh[0].header["TARGNAME"]
-            if obj == '':
-                obj = fh[0].header['TARGPROP']
-            if obj is None or obj == '':
-                obj = os.path.basename(fn).split('x1d')[0]
+            targ = fh[0].header["TARGNAME"]
+            if targ == '':
+                targ = fh[0].header['TARGPROP']
+            if targ is None or targ == '':
+                targ = os.path.basename(fn).split('x1d')[0]
                 continue
+            grating = fh[0].header['GRATING']
+            srcname = fh[1].header.get('SRCNAME', targ)
             spectable = Table.read(fn, hdu=1)
             sp = pyspeckit.Spectrum(xarr=spectable['WAVELENGTH'].quantity,
                                     data=spectable['FLUX'].quantity,
                                     header=fh[0].header
                                 )
-            sp.specname = obj
+            sp.specname = f'{targ} {grating}'
             sp.plotter()
-            for key in ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F405N', 'JWST/NIRCam.F444W', 'JWST/NIRCam.F356W']:
-                mag = tbl.loc[obj][key]
-                if hasattr(mag, '__len__') and len(mag) > 1:
-                    mag = mag[0]
+            row = tbl.loc[('Target', targ)]
+            if isinstance(row, Table) and len(row) > 0:
+                row = row.loc[('grating', grating)]
+            if isinstance(row, Table) and len(row) > 0:
+                row = row.loc[('Object', srcname)]
+
+            for key in ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F212N', 'JWST/NIRCam.F182M']:
+                # 'JWST/NIRCam.F405N', 'JWST/NIRCam.F444W', 'JWST/NIRCam.F356W']:
+                mag = row[key]
+                if isinstance(row, Table) and len(row) > 1: # and hasattr(mag, '__len__') and len(mag) > 1:
+                    # print(row['Object', 'Target', 'grating'])
+                    # print(f'{targ} {srcname} {grating} {key} has multiple values: {mag}')
+                    # raise ValueError('multiple values')
+                    mag = row[key].max()
                 if pl.ylim()[0] < 0:
                     pl.ylim(0, pl.ylim()[1])
                 mid = np.array(pl.ylim()).mean()
@@ -123,4 +149,4 @@ if __name__ == '__main__':
                         label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
                     )
             pl.legend(loc='best');
-            pl.savefig(f'{nirspec_dir}/{obj}.png', dpi=150)
+            pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}.png', dpi=150)
