@@ -15,7 +15,8 @@ from brick2221.analysis.selections import load_table
 from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
 from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps
 
-from dust_extinction.averages import CT06_MWGC, G21_MWAvg
+from dust_extinction.averages import CT06_MWGC, G21_MWAvg, F11_MWGC
+from dust_extinction.parameter_averages import G23
 
 
 basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
@@ -155,12 +156,46 @@ def plot_brandt_model(ax, nh_to_av=2.21e21*2, molecule='CO', av_start=0):
 
 
 def compare_freezeout_abundance_models():
+    # oxygen abundance at r=0 is 12-9.4 = 2.6
+    # solar oxygen abundance is 8.9
+    # carbon abundance at r=0 is 8.7-12 = -3.3
+    # solar carbon is 8.5 - 12 = -3.5
+    # solar neighborhood is 8.2 - 12 = -3.8
 
-    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
-    logN = int(np.log10(NtoAV))
-    pl.plot(np.linspace(0.1, 100, 1000) + av_start, np.log10(NMolofAV),
-            label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
+    NtoAV=2.21e21
+    av_start=0
 
+    color = np.linspace(0.0, 3, 1000)
+    co_to_c = 0.5
+
+    for abundance, linestyle in zip((10**(8.7-12), 10**(8.2-12)), ('-', '--')):
+        for avfilts in (['F182M', 'F212N'],): # ['F182M', 'F410M'], ['F115W', 'F200W']):
+            for ext, extname, plotcolor in zip((CT06_MWGC(), G23(Rv=2.5), G23(Rv=5.5), F11_MWGC()),
+                                           ('CT06', 'G23 $R_V=2.5$', 'G23 $R_V=5.5$', 'F11'),
+                                           ('r', 'g', 'b', 'k')):
+                av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
+                E_V = (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
+
+                NMolofAV = NtoAV * color / E_V * abundance * co_to_c
+                logN = int(np.log10(NtoAV))
+
+                abundance_str = f"{abundance * co_to_c/10**(int(np.log10(abundance * co_to_c))-1):.1f}\\times10^{{{int(np.log10(abundance * co_to_c))-1}}}"
+
+                pl.plot(color + av_start * E_V, np.log10(NMolofAV),
+                        label=f'$X_{{CO}} = {co_to_c:0.1f} X_C = {abundance_str}$; {extname}',
+                        color=plotcolor,
+                        linestyle=linestyle)
+    # for av_start, linestyle in zip((0, 15, 30), ('-', '--', ':')):
+    #     av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
+    #     E_V = (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
+
+    #     NMolofAV = NtoAV * color / E_V * abundance
+    #     logN = int(np.log10(NtoAV))
+    #     pl.plot(color + av_start * E_V, np.log10(NMolofAV),
+    #             label=f'X=10$^{{{np.log10(abundance):.1f}}}$',
+    #             linestyle=linestyle)
+    pl.legend(loc='best')
+    pl.savefig(f"{basepath}/paper_co/figures/freezeout_abundance_models.pdf", dpi=150, bbox_inches='tight')
 
 def main():
 
