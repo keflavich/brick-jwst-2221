@@ -7,8 +7,11 @@ import astropy.units as u
 import matplotlib.pyplot as pl
 import mpl_plot_templates
 from molmass import Formula
+import regions
 import re
 from astropy.io import fits
+import matplotlib.colors as mcolors
+from matplotlib.colors import LinearSegmentedColormap
 
 from brick2221.analysis.analysis_setup import filternames
 from brick2221.analysis.selections import load_table
@@ -18,6 +21,39 @@ from brick2221.analysis.analysis_setup import basepath, compute_molecular_column
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg, F11_MWGC
 from dust_extinction.parameter_averages import G23
 
+from astropy.wcs import WCS
+
+# Create custom colormaps that go from colors to black instead of white
+def create_color_to_black_cmap(color_name, name_suffix='_to_black', reverse=False):
+    """Creates a colormap that goes from black to a specified color."""
+    # Define the target colors
+    color_dict = {
+        'Greens': (0, 0.5, 0),    # Green
+        'Blues': (0, 0, 0.8),     # Blue
+        'Oranges': (1, 0.5, 0)    # Orange
+    }
+
+    # Get the target color or use green as default
+    color = color_dict.get(color_name, (0, 0.5, 0))
+
+    # Create color array from black to the target color
+    black = np.array([0, 0, 0, 1])
+    target_color = np.array([color[0], color[1], color[2], 1])
+    if reverse:
+        black, target_color = target_color, black
+
+    # Create gradient
+    color_array = np.zeros((256, 4))
+    for i in range(256):
+        t = i / 255.0
+        color_array[i, :] = t * target_color + (1 - t) * black
+
+    return LinearSegmentedColormap.from_list(f"black_to_{color_name.lower()}", color_array)
+
+# Create the custom colormaps
+Greens_to_black = create_color_to_black_cmap('Greens', reverse=True)
+Blues_to_black = create_color_to_black_cmap('Blues', reverse=True)
+Oranges_to_black = create_color_to_black_cmap('Oranges', reverse=True)
 
 basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
 result = load_table(basetable_merged1182_daophot, ww=ww)
@@ -43,16 +79,24 @@ dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
 dmag_tbl.add_index('composition')
 
 
-def calc_av(avfilts=['F182M', 'F410M'], basetable=basetable, ext=CT06_MWGC()):
+def ev(avfilts, ext=G21_MWAvg()):
     av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
+    return (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
+
+
+def calc_av(avfilts=['F182M', 'F410M'], basetable=basetable, ext=CT06_MWGC(), return_av=True):
     try:
-        E_V = (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
+        E_V = ev(avfilts, ext)
     except ValueError:
-        E_V = (G21_MWAvg()(av_wavelengths[0]) - ext(av_wavelengths[1]))
+        E_V = ev(avfilts, G21_MWAvg())
 
-    av = (basetable[f'mag_ab_{avfilts[0].lower()}'] - basetable[f'mag_ab_{avfilts[1].lower()}']) / E_V
+    if return_av:
+        av = (basetable[f'mag_ab_{avfilts[0].lower()}'] - basetable[f'mag_ab_{avfilts[1].lower()}']) / E_V
+        return av
+    else:
+        color = (basetable[f'mag_ab_{avfilts[0].lower()}'] - basetable[f'mag_ab_{avfilts[1].lower()}'])
+        return color
 
-    return av
 
 
 def makeplot(avfilts=['F182M', 'F410M'],
@@ -64,36 +108,105 @@ def makeplot(avfilts=['F182M', 'F410M'],
              plot_brandt=True,
              NtoAV=2.21e21,
              av_start=15,
+             xax='AV',
+             cloudccat=None,
+             scatter=True,
+             contour=True,
+             ext=CT06_MWGC(),
+             xlim=(-5, 105),
+             ylim=(np.log10(2e15), np.log10(5e20)),
              ):
 
     if ax is None:
         ax = pl.gca()
 
-    ext = CT06_MWGC()
-    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext)
+    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext, return_av=(xax == 'AV'))
 
     E_V_410_466 = (ext(4.10*u.um) - ext(4.66*u.um))
 
     unextincted_466m410 = measured_466m410 + E_V_410_466 * av
 
-    inferred_molecular_column = compute_molecular_column(unextincted_466m410=unextincted_466m410, dmag_tbl=dmag_tbl, icemol=icemol)
+    inferred_molecular_column = compute_molecular_column(unextincted_466m410, dmag_tbl=dmag_tbl, icemol=icemol)
 
     fig = pl.gcf()
-    pl.scatter(np.array(av[sel & ok]),
-               np.log10(inferred_molecular_column[sel & ok]),
-               marker='.', s=0.5, alpha=alpha)
-    _,_,H,_,_,levels = mpl_plot_templates.adaptive_param_plot(np.array(av[sel & ok]),
-                                    np.log10(inferred_molecular_column[sel & ok]),
-                                    bins=50,
-                                    threshold=15,
-                                    #linewidths=[0.5]*5,
-                                    cmap='Spectral_r',
-                                    marker=',',
-                                            )
+    if scatter:
+        pl.scatter(np.array(av[sel & ok]),
+                   np.log10(inferred_molecular_column[sel & ok]),
+                   color='k',
+                   marker='.', s=0.5, alpha=alpha)
+    if contour:
+        _,_,H,_,_,levels, cnt = mpl_plot_templates.adaptive_param_plot(np.array(av[sel & ok]),
+                                            np.log10(inferred_molecular_column[sel & ok]),
+                                            bins=50,
+                                            threshold=15,
+                                            #linewidths=[0.5]*5,
+                                            cmap=None,
+                                            colors=[(0,0.5,0,0.5)]*50,
+                                            marker='None',
+                                            levels=4,
+                                            fill=True,
+                                                    )
+        artists, labels = cnt.legend_elements()
+        if cloudccat is None:
+            pl.legend(artists, ['Brick'])
 
-    #pl.semilogy(av182b[selb], inferred_co_column_av182410b[selb], marker=',', linestyle='none')
-    pl.xlim(-5, 105)
-    pl.ylim(np.log10(2e15), np.log10(5e20))
+
+    if cloudccat is not None:
+        ww = WCS(fits.getheader('/orange/adamginsburg/jwst/cloudc/images/F182_reproj_merged-fortricolor.fits'))
+        crds_cloudc = cloudccat['skycoord_ref']
+        cloudc_regions = [y for x in [
+            '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc1.region',
+            '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc2.region',
+            '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudd.region']
+                    for y in regions.Regions.read(x)
+        ]
+        cloudc_sel = np.any([reg.contains(crds_cloudc, ww) for reg in cloudc_regions], axis=0)
+        lactea_filament_regions = regions.Regions.read('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_long.region')[0]
+        lactea_sel = lactea_filament_regions.contains(crds_cloudc, ww)
+
+        av_cloudc = calc_av(avfilts=avfilts, basetable=cloudccat, ext=ext, return_av=(xax == 'AV'))
+        measured_466m410_cloudc = cloudccat['mag_ab_f466n'] - cloudccat['mag_ab_f410m']
+        unextincted_466m410_cloudc = measured_466m410_cloudc + E_V_410_466 * av_cloudc
+        inferred_molecular_column_cloudc = compute_molecular_column(unextincted_466m410_cloudc, dmag_tbl=dmag_tbl, icemol=icemol)
+        if scatter:
+            pl.scatter(np.array(av_cloudc[cloudc_sel]),
+                       np.log10(inferred_molecular_column_cloudc[cloudc_sel]),
+                       marker='.', s=0.5, alpha=alpha, color='b')
+            pl.scatter(np.array(av_cloudc[lactea_sel]),
+                       np.log10(inferred_molecular_column_cloudc[lactea_sel]),
+                       marker='.', s=0.5, alpha=alpha, color='orange')
+        if contour:
+            _,_,H,_,_,levels,cnt = mpl_plot_templates.adaptive_param_plot(np.array(av_cloudc[cloudc_sel]),
+                                        np.log10(inferred_molecular_column_cloudc[cloudc_sel]),
+                                        bins=50,
+                                        threshold=15,
+                                        cmap=None,
+                                        colors=[(0,0,0,0.5)]*50,
+                                        marker='None',
+                                        levels=4,
+                                        fill=True,
+                                        )
+            artists, labels = cnt.legend_elements()
+            pl.legend(artists, ['Cloud C'])
+            _,_,H,_,_,levels = mpl_plot_templates.adaptive_param_plot(np.array(av_cloudc[lactea_sel]),
+                                        np.log10(inferred_molecular_column_cloudc[lactea_sel]),
+                                        bins=50,
+                                        threshold=15,
+                                        cmap=None,
+                                        colors=[(1,0.5,0,0.5)]*50,
+                                        marker='None',
+                                        levels=4,
+                                        fill=True,
+                                        )
+            artists, labels = cnt.legend_elements()
+            pl.legend(artists, ['3 kpc arm filament'])
+
+        suffix = '_cloudc'
+    else:
+        suffix = '_with1182'
+
+    pl.xlim(*xlim)
+    pl.ylim(*ylim)
     #pl.plot([10, 35], [1e17, 1e20], 'k--', label='log N = 0.12 A$_V$ + 15.8');
     # by-eye fit
     # x1,y1 = 33,8e16
@@ -105,27 +218,33 @@ def makeplot(avfilts=['F182M', 'F410M'],
     #pl.legend(loc='lower right')
     pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
     pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.pdf", dpi=150, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.png", dpi=250, bbox_inches='tight')
 
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
 
     NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
     logN = int(np.log10(NtoAV))
-    pl.plot(np.linspace(0.1, 100, 1000) + av_start, np.log10(NMolofAV),
-            label=f'100% of {icemol} in ice if N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
+    xax_toplot = np.linspace(0.1, 100, 1000) + av_start
+    if xax != 'AV':
+        xax_toplot = xax_toplot * ev(avfilts, ext)
+    pl.plot(xax_toplot, np.log10(NMolofAV),
+            label=f'100% of {icemol} in ice \nif N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$', color='r', linestyle=':')
 
-    pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
+    if xax == 'AV':
+        pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
+    else:
+        pl.xlabel(f"{avfilts[0]}-{avfilts[1]} (mag)")
     #pl.ylabel("N(CO) ice\nfrom Palumbo 2006 constants,\n4000K Phoenix atmosphere")
     pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
     pl.legend(loc='upper left')
     pl.title(title)
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.pdf", dpi=150, bbox_inches='tight')
-    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182.png", dpi=250, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.pdf", dpi=150, bbox_inches='tight')
+    pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.png", dpi=250, bbox_inches='tight')
 
     if plot_brandt:
         plot_brandt_model(ax, molecule=icemol, nh_to_av=NtoAV, av_start=av_start)
-        fig.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_AV_{avfilts[0]}-{avfilts[1]}_contour_with1182_Brandt.png", dpi=250, bbox_inches='tight')
+        fig.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour_Brandt{suffix}.png", dpi=250, bbox_inches='tight')
 
     return av, inferred_molecular_column, ax
 
@@ -195,10 +314,12 @@ def compare_freezeout_abundance_models():
     #             label=f'X=10$^{{{np.log10(abundance):.1f}}}$',
     #             linestyle=linestyle)
     pl.legend(loc='best')
+    pl.xlabel('[F182M]-[F212N] (mag)')
+    pl.ylabel('log N(CO) [cm$^{-2}$]')
     pl.savefig(f"{basepath}/paper_co/figures/freezeout_abundance_models.pdf", dpi=150, bbox_inches='tight')
 
-def main():
 
+def main():
 
     dmag_co = Table.read(f'{basepath}/tables/CO_ice_absorption_tables.ecsv')
     dmag_co.add_index('composition')
@@ -269,6 +390,37 @@ def main():
              icemol='CO', abundance=c_abundance,
              title=dmag_tbl_this['composition'][0],
              dmag_tbl=dmag_tbl_this)
+
+
+    import sys
+    sys.path.append('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament')
+    import jwst_plots
+
+    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+             icemol='CO', abundance=c_abundance,
+             title='H2O:CO (10:1)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'],
+             ext=G23(Rv=5.5),
+             plot_brandt=False,
+             scatter=False,
+             cloudccat=jwst_plots.make_cat_use().catalog,
+             xlim=(-5, 60),
+             ylim=(16.5, 20),
+             av_start=10,
+             )
+
+    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+             icemol='CO', abundance=c_abundance,
+             title='H2O:CO (10:1)',
+             dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'],
+             ext=G23(Rv=5.5),
+             xax='color',
+             plot_brandt=False,
+             scatter=False,
+             xlim=(-0.1, 3),
+             ylim=(16.5, 20),
+             av_start=10,
+             cloudccat=jwst_plots.make_cat_use().catalog)
 
 
 if __name__ == "__main__":
