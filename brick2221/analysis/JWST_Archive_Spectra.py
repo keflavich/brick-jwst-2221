@@ -23,7 +23,7 @@ transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
 
-if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
+if False or os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
     tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
 else:
     nirspec_data = []
@@ -40,7 +40,7 @@ else:
                             for key in nirspec_flxd}
 
             # filter out measurements that are implausibly faint
-            nirspec_mags = {key: np.nan if (nirspec_mags[key] > 25) or (nirspec_mags[key] < 2) else nirspec_mags[key]
+            nirspec_mags = {key: np.nan if (nirspec_mags[key] > 26) or (nirspec_mags[key] < 2) else nirspec_mags[key]
                             for key in nirspec_mags}
 
             nirspec_mags['Target'] = fh[0].header['TARGNAME']
@@ -63,7 +63,23 @@ else:
                     if nirspec_mags['Target'] == 'Serpens_Targets':
                         raise ValueError(f'Serpens_Targets has no SRCNAME or SRCALIAS: {fn}')
                     nirspec_mags['Object'] = nirspec_mags['Target']
-            nirspec_mags['grating'] = fh[0].header['GRATING']
+
+            slitid = fn.split("_")[-4]
+            if slitid.startswith('s'):
+                nirspec_mags['SlitID'] = slitid
+            else:
+                nirspec_mags['SlitID'] = ''
+
+            if nirspec_mags['Object'] == '':
+                nirspec_mags['Object'] = slitid
+
+            nirspec_mags['Observation'] = fh[0].header['OBSERVTN']
+            nirspec_mags['Visit'] = fh[0].header['VISIT']
+            nirspec_mags['VisitGroup'] = fh[0].header['VISITGRP']
+
+            nirspec_mags['Filename'] = fn
+
+            nirspec_mags['Grating'] = fh[0].header['GRATING']
             nirspec_data.append(nirspec_mags)
 
     tbl = Table(nirspec_data)
@@ -111,9 +127,13 @@ if __name__ == '__main__':
 
 
     tbl.add_index('Object')
-    tbl.add_index('grating')
+    tbl.add_index('Grating')
     tbl.add_index('Target')
-
+    tbl.add_index('SlitID')
+    tbl.add_index('Observation')
+    tbl.add_index('Visit')
+    tbl.add_index('VisitGroup')
+    tbl.add_index('Filename')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         for filters, setname in ((['JWST/NIRCam.F182M',
@@ -134,7 +154,6 @@ if __name__ == '__main__':
                     targ = fh[0].header['TARGPROP']
                 if targ is None or targ == '':
                     targ = os.path.basename(fn).split('x1d')[0]
-                    continue
                 grating = fh[0].header['GRATING']
                 srcname = fh[1].header.get('SRCNAME', targ)
                 spectable = Table.read(fn, hdu=1)
@@ -146,9 +165,31 @@ if __name__ == '__main__':
                 sp.plotter()
                 row = tbl.loc[('Target', targ)]
                 if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('grating', grating)]
+                    row = row.loc[('Grating', grating)]
                 if isinstance(row, Table) and len(row) > 0:
                     row = row.loc[('Object', srcname)]
+
+
+                obsid = fh[0].header['OBSERVTN']
+                visitid = fh[0].header['VISIT']
+                visitgroupid = fh[0].header['VISITGRP']
+                if isinstance(row, Table) and len(row) > 0:
+                    row = row.loc[('Observation', obsid)]
+                if isinstance(row, Table) and len(row) > 0:
+                    row = row.loc[('Visit', visitid)]
+                if isinstance(row, Table) and len(row) > 0:
+                    row = row.loc[('VisitGroup', visitgroupid)]
+                if isinstance(row, Table) and len(row) > 0:
+                    row = row.loc[('Filename', fn)]
+
+                slitid = fn.split("_")[-4]
+                if isinstance(row, Table) and len(row) > 0:
+                    if slitid.startswith('s'):
+                        row = row.loc[('SlitID', slitid)]
+                    else:
+                        print(fn)
+                        print(row)
+                        raise ValueError(f"There are multiple rows matching target={targ}, grating={grating}, object={srcname}.  There was no slitid {slitid} to distinguish them.")
 
                 mags = {}
                 for key in filters:
@@ -174,4 +215,4 @@ if __name__ == '__main__':
                     pl.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}')
                     pl.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}')
                 pl.legend(loc='best');
-                pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}_{setname}.png', dpi=150)
+                pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}.png', dpi=150)
