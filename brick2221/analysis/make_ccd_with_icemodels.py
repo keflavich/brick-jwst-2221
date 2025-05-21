@@ -105,13 +105,17 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             ):
     """
     """
-    plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
-                   color2=[x.lower() for x in color2], sel=False,
-                   markersize=2,
-                   ext=ext,
-                   extvec_scale=30,
-                   head_width=0.1,
-                   exclude=exclude)
+    try:
+        plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
+                    color2=[x.lower() for x in color2], sel=False,
+                    markersize=2,
+                    ext=ext,
+                    extvec_scale=30,
+                    head_width=0.1,
+                    exclude=exclude)
+    except Exception as ex:
+        print(f"Error plotting CCD: {ex}")
+
     if cloudc and cloudccat is not None:
         plot_tools.ccd(Table(cloudccat), ax=pl.gca(), color1=[x.lower() for x in color1],
                        color2=[x.lower() for x in color2], sel=False,
@@ -421,6 +425,8 @@ if __name__ == "__main__":
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
                                  (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
+                                 (['F150W', 'F444W'], ['F444W', 'F466N'], (0, 5, -0.5, 1.5)),
+                                 (['F150W', 'F212N'], ['F277W', 'F323N'], (0, 5, -0.5, 1.5)),
                                 ):
         pl.figure();
         molcomps = [

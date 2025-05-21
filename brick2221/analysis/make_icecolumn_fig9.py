@@ -505,5 +505,27 @@ def main():
     pl.savefig(f"{basepath}/paper_co/figures/NCO_vs_color_withBrickCloudCandArm.pdf", dpi=150, bbox_inches='tight')
 
 
+    sgrb2cat = Table.read('/orange/adamginsburg/jwst/sgrb2/NB/crowdsource_nsky0_merged_photometry_tables_merged_11matches.fits')
+    sgrb2cat = sgrb2cat[(sgrb2cat['emag_ab_f212n'] < 0.05) &
+                        (sgrb2cat['emag_ab_f182m'] < 0.05) &
+                        (sgrb2cat['emag_ab_f410m'] < 0.05) &
+                        (sgrb2cat['emag_ab_f466n'] < 0.05)]
+    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+            icemol='CO', abundance=c_abundance,
+            title='H2O:CO:CO2 (10:1:0.5)',
+            dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:0.5)'],
+            ext=G23(Rv=5.5),
+            xax='color',
+            plot_brandt=False,
+            scatter=True,
+            xlim=(-0.1, 2.5),
+            ylim=(17, 19.5),
+            av_start=13,
+            nbins=46,
+            nlevels=2,
+            legend_kwargs={'loc': 'lower right', 'bbox_to_anchor': (1.2, 0,)},
+            sgrb2cat=sgrb2cat);
+    pl.savefig(f"{basepath}/paper_co/figures/NCO_vs_color_withSgrB2.pdf", dpi=150, bbox_inches='tight')
+
 if __name__ == "__main__":
     main()
