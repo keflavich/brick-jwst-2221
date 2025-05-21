@@ -124,7 +124,7 @@ def make_mymix_tables():
     methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
     ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
     #nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/65_NH3_(1)_100K_Gerakines.txt')
-    
+
     # modify OCN to get rid of the non-OCN contributions
     ocn['k'][(ocn['Wavelength'] < 4.5*u.um) | (ocn['Wavelength'] > 4.75*u.um)] = 0
 
@@ -142,6 +142,7 @@ def make_mymix_tables():
                                             ('COplusH2O', 'H2O:CO (10:1)'),
                                             ('COplusH2O', 'H2O:CO (15:1)'),
                                             ('COplusH2O', 'H2O:CO (20:1)'),
+                                            ('COplusH2OplusCO2', 'H2O:CO:CO2 (1:1:1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (1:1:0.1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (3:1:0.1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (5:1:0.5)'),
@@ -151,11 +152,15 @@ def make_mymix_tables():
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (5:1:1)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (5:1:2)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (10:1:2)'),
+                                            ('COplusH2OplusCO2', 'H2O:CO:CO2 (10:1:1)'),
+                                            ('COplusH2OplusCO2', 'H2O:CO:CO2 (10:1:0.5)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (10:1:10)'),
                                             ('COplusH2OplusCO2', 'H2O:CO:CO2 (1:1:10)'),
+                                            ('COplusH2OplusCO2', 'H2O:CO:CO2 (3:1:0.8)'),
                                             ('CO', 'CO 1'),
                                             ('H2O', 'H2O 1'),
                                             ('CO2', 'CO2 1'),
+                                            ('COplusH2OplusCO2plusCH3OH', 'H2O:CO:CO2:CH3OH (1:1:1:1)'),
                                             ('COplusH2OplusCO2plusCH3OH', 'H2O:CO:CO2:CH3OH (1:1:0.1:0.1)'),
                                             ('COplusH2OplusCO2plusCH3OH', 'H2O:CO:CO2:CH3OH (1:1:0.1:1)'),
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:1:0.1)'),
@@ -163,6 +168,7 @@ def make_mymix_tables():
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.1:1:0.1:1:0.1)'),
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)'),
                                             ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)'),
+                                            ('COplusH2OplusCO2plusCH3OHplusCH3CH2OH', 'H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:1:1:1)'),
                                             ('COplusOCN', 'CO:OCN (1:1)'),
                                             ('COplusH2OplusOCN', 'H2O:CO:OCN (1:1:1)'),
                                             ('COplusH2OplusOCN', 'H2O:CO:OCN (1:1:0.02)'),
@@ -236,7 +242,7 @@ def process_table(args):
     # if the wavelength range doesn't match, it just extrapolates.
     if u.Quantity(consts['Wavelength'].min(), u.um) > 5.0*u.um:
         return []
-    
+
     dmags410, dmags466, dmags444, dmags356, dmags405 = [], [], [], [], []
 
     molecule = mol.lower()
@@ -278,20 +284,20 @@ def process_table(args):
             print(consts)
             raise
         flxd = fluxes_in_filters(xarr, spec, filterids=cmd_x, transdata=transdata)
-        
+
         # Calculate magnitudes
         mags_x_star = tuple(-2.5*np.log10(flxd_ref[cmd] / u.Quantity(filter_data[cmd], u.Jy))
                            for cmd in cmd_x)
         mags_x = tuple(-2.5*np.log10(flxd[cmd] / u.Quantity(filter_data[cmd], u.Jy))
                        for cmd in cmd_x)
-        
+
         dmags405.append(mags_x[4]-mags_x_star[4])
         dmags444.append(mags_x[3]-mags_x_star[3])
         dmags356.append(mags_x[2]-mags_x_star[2])
         dmags466.append(mags_x[1]-mags_x_star[1])
         dmags410.append(mags_x[0]-mags_x_star[0])
 
-            
+
         dmag_rows.append({
             'molecule': molecule,
             'mol_id': mol_id,
@@ -317,9 +323,9 @@ if __name__ == '__main__':
     #cotbs, h2otbs, co2tbs = load_tables(cache=locals())
 
     #molecules = {'H2O': h2otbs, 'CO': cotbs, 'CO2': co2tbs, 'H2O+CO': mymix_tables}
-    
+
     # Create a dictionary of filter zero points
-    filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W', 
+    filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W',
                   'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N', 'JWST/NIRCam.F300M',
                   'JWST/NIRCam.F335M', 'JWST/NIRCam.F360M', 'JWST/NIRCam.F212N',
                   'JWST/NIRCam.F430M', 'JWST/NIRCam.F460M', 'JWST/NIRCam.F460M',
@@ -332,7 +338,7 @@ if __name__ == '__main__':
     #for mol, tbs in molecules.items():
     #    for key, consts in tbs.items():
     #        all_tables.append((mol, key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
-    
+
     for key, consts in mymix_tables.items():
         all_tables.append(('H2O+CO', key, consts, xarr, phx4000, cols, filter_data, transdata, basepath))
     for fn in glob.glob(f'{optical_constants_cache_dir}/*txt'):
@@ -340,7 +346,7 @@ if __name__ == '__main__':
         all_tables.append((fn, xarr, phx4000, cols, filter_data, transdata, basepath))
 
     # Process all tables in parallel
-    results = process_map(process_table, 
+    results = process_map(process_table,
                           all_tables,
                           max_workers=mp.cpu_count(),
                           desc="Processing tables",
@@ -351,7 +357,7 @@ if __name__ == '__main__':
     for result in results:
         if result:
             mol_rows.extend(result)
-                
+
     dmag_tbl = Table(mol_rows)
     dmag_tbl.write(f'{basepath}/tables/combined_ice_absorption_tables.ecsv', overwrite=True)
     dmag_tbl.add_index('database')

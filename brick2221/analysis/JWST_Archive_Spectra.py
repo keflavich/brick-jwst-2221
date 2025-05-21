@@ -23,7 +23,7 @@ transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
 
-if False or os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
+if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
     tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
 else:
     nirspec_data = []
@@ -32,6 +32,19 @@ else:
         for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
             fh = fits.open(fn)
             spectable = Table.read(fn, hdu=1)
+
+            namestart = "_".join(os.path.basename(fn).split("_")[:-3])
+            other_gratings = glob.glob(f'{nirspec_dir}/{namestart}*/*x1d.fits')
+            if len(other_gratings) > 0:
+                grating_ids = [os.path.basename(fn).split("_")[-2] for fn in other_gratings]
+                if len(other_gratings) > 2 and len(other_gratings) != len(set(grating_ids)):
+                    raise ValueError(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
+                #print(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
+                fn2 = other_gratings[0]
+                spectable2 = Table.read(fn2, hdu=1)
+                spectable = table.vstack([spectable, spectable2])
+                spectable.sort('WAVELENGTH')
+
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
                                              np.nan_to_num(spectable['FLUX'].quantity),
                                              filterids=filter_ids, transdata=transdata)
@@ -80,6 +93,9 @@ else:
             nirspec_mags['Filename'] = fn
 
             nirspec_mags['Grating'] = fh[0].header['GRATING']
+            if 'SLIT_RA' in fh[0].header:
+                nirspec_mags['RA'] = fh[0].header['SLIT_RA']
+                nirspec_mags['Dec'] = fh[0].header['SLIT_DEC']
             nirspec_data.append(nirspec_mags)
 
     tbl = Table(nirspec_data)
@@ -149,6 +165,7 @@ if __name__ == '__main__':
                                 ):
             for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
                 fh = fits.open(fn)
+
                 targ = fh[0].header["TARGNAME"]
                 if targ == '':
                     targ = fh[0].header['TARGPROP']
@@ -157,12 +174,23 @@ if __name__ == '__main__':
                 grating = fh[0].header['GRATING']
                 srcname = fh[1].header.get('SRCNAME', targ)
                 spectable = Table.read(fn, hdu=1)
+
+                namestart = "_".join(os.path.basename(fn).split("_")[:-3])
+                other_gratings = glob.glob(f'{nirspec_dir}/{namestart}*/*x1d.fits')
+                if len(other_gratings) > 0:
+                    grating_ids = [os.path.basename(fn).split("_")[-2] for fn in other_gratings]
+                    if len(other_gratings) > 2 and len(other_gratings) != len(set(grating_ids)):
+                        raise ValueError(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
+                    #print(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
+                    fn2 = other_gratings[0]
+                    spectable2 = Table.read(fn2, hdu=1)
+                    spectable = table.vstack([spectable, spectable2])
+                    spectable.sort('WAVELENGTH')
+
                 sp = pyspeckit.Spectrum(xarr=spectable['WAVELENGTH'].quantity,
                                         data=spectable['FLUX'].quantity,
                                         header=fh[0].header
                                     )
-                sp.specname = f'{targ} {grating}'
-                sp.plotter()
                 row = tbl.loc[('Target', targ)]
                 if isinstance(row, Table) and len(row) > 0:
                     row = row.loc[('Grating', grating)]
@@ -190,6 +218,13 @@ if __name__ == '__main__':
                         print(fn)
                         print(row)
                         raise ValueError(f"There are multiple rows matching target={targ}, grating={grating}, object={srcname}.  There was no slitid {slitid} to distinguish them.")
+
+                if 'MSA_Cat' in targ:
+                    sp.specname = f'{slitid} {grating}'
+                else:
+                    sp.specname = f'{targ} {grating}'
+                sp.plotter()
+                sp.plotter.axis.set_xlabel("Wavelength [$\\mu m$]")
 
                 mags = {}
                 for key in filters:
