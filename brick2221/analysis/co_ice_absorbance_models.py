@@ -132,6 +132,7 @@ def make_mymix_tables():
     moltbls = {'CO': co_gerakines, 'H2O': water_mastrapa, 'CO2': co2_gerakines, 'CH3OH': methanol, 'CH3CH2OH': ethanol, 'OCN': ocn}
 
     grid = co_gerakines['Wavelength']
+    grid = np.linspace(2.5*u.um, 5.0*u.um, 20000)
 
     for ii, (mol, composition) in enumerate([
                                             ('COplusH2O', 'H2O:CO (0.5:1)'),
@@ -212,7 +213,7 @@ def make_mymix_tables():
 mymix_tables = make_mymix_tables()
 
 
-xarr = np.linspace(3.0*u.um, 5.0*u.um, 10000)
+xarr = np.linspace(2.5*u.um, 5.0*u.um, 10000)
 phx4000 = atmo_model(4000, xarr=xarr)
 #xarr = phx4000['nu'].quantity.to(u.um, u.spectral())
 cols = np.geomspace(1e15, 1e21, 25)
@@ -243,7 +244,7 @@ def process_table(args):
     if u.Quantity(consts['Wavelength'].min(), u.um) > 5.0*u.um:
         return []
 
-    dmags410, dmags466, dmags444, dmags356, dmags405 = [], [], [], [], []
+    dmags410, dmags466, dmags444, dmags356, dmags405, dmags323, dmags277, dmags300, dmags250, dmags335, dmags360, dmags480 = [], [], [], [], [], [], [], [], [], [], [], []
 
     molecule = mol.lower()
     try:
@@ -261,11 +262,18 @@ def process_table(args):
             print(f"Molecule {mol} with composition {consts.meta['composition']} failed to convert to molwt")
             return []
 
-    cmd_x = ('JWST/NIRCam.F410M',
-             'JWST/NIRCam.F466N',
-             'JWST/NIRCam.F356W',
-             'JWST/NIRCam.F444W',
-             'JWST/NIRCam.F405N',
+    cmd_x = ('JWST/NIRCam.F410M', # 0
+             'JWST/NIRCam.F466N', # 1
+             'JWST/NIRCam.F356W', # 2
+             'JWST/NIRCam.F444W', # 3
+             'JWST/NIRCam.F405N', # 4
+             'JWST/NIRCam.F323N', # 5
+             'JWST/NIRCam.F277W', # 6
+             'JWST/NIRCam.F300M', # 7
+             'JWST/NIRCam.F250M', # 8
+             'JWST/NIRCam.F335M', # 9
+             'JWST/NIRCam.F360M', # 10
+             'JWST/NIRCam.F480M', # 11
              )
     flxd_ref = fluxes_in_filters(xarr, phx4000['fnu'].quantity, filterids=cmd_x, transdata=transdata)
 
@@ -296,7 +304,13 @@ def process_table(args):
         dmags356.append(mags_x[2]-mags_x_star[2])
         dmags466.append(mags_x[1]-mags_x_star[1])
         dmags410.append(mags_x[0]-mags_x_star[0])
-
+        dmags323.append(mags_x[5]-mags_x_star[5])
+        dmags277.append(mags_x[6]-mags_x_star[6])
+        dmags300.append(mags_x[7]-mags_x_star[7])
+        dmags250.append(mags_x[8]-mags_x_star[8])
+        dmags335.append(mags_x[9]-mags_x_star[9])
+        dmags360.append(mags_x[10]-mags_x_star[10])
+        dmags480.append(mags_x[11]-mags_x_star[11])
 
         dmag_rows.append({
             'molecule': molecule,
@@ -312,7 +326,14 @@ def process_table(args):
             'F410M': dmags410[-1],
             'F444W': dmags444[-1],
             'F466N': dmags466[-1],
-            'F405N': dmags405[-1]
+            'F405N': dmags405[-1],
+            'F323N': dmags323[-1],
+            'F277W': dmags277[-1],
+            'F300M': dmags300[-1],
+            'F250M': dmags250[-1],
+            'F335M': dmags335[-1],
+            'F360M': dmags360[-1],
+            'F480M': dmags480[-1],
         })
 
     return dmag_rows
@@ -328,7 +349,10 @@ if __name__ == '__main__':
     filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W',
                   'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N', 'JWST/NIRCam.F300M',
                   'JWST/NIRCam.F335M', 'JWST/NIRCam.F360M', 'JWST/NIRCam.F212N',
-                  'JWST/NIRCam.F430M', 'JWST/NIRCam.F460M', 'JWST/NIRCam.F460M',
+                  'JWST/NIRCam.F430M', 'JWST/NIRCam.F460M', 'JWST/NIRCam.F480M',
+                  'JWST/NIRCam.F323N', 'JWST/NIRCam.F277W', 'JWST/NIRCam.F300M',
+                  'JWST/NIRCam.F250M', 'JWST/NIRCam.F335M', 'JWST/NIRCam.F360M',
+                  'JWST/NIRCam.F182M',
                   ]
     filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
     transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}

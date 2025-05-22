@@ -67,6 +67,8 @@ dmag_all.add_index('composition')
 dmag_all.add_index('temperature')
 dmag_all.add_index('database')
 
+assert 'F277W' in dmag_all.colnames, f'F277W not in dmag_all.colnames'
+
 x = np.linspace(1.24*u.um, 5*u.um, 1000)
 pp_ct06 = np.polyfit(x, CT06_MWGC()(x), 7)
 
@@ -105,16 +107,15 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             ):
     """
     """
-    try:
-        plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
-                    color2=[x.lower() for x in color2], sel=False,
-                    markersize=2,
-                    ext=ext,
-                    extvec_scale=30,
-                    head_width=0.1,
-                    exclude=exclude)
-    except Exception as ex:
-        print(f"Error plotting CCD: {ex}")
+    plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
+                color2=[x.lower() for x in color2], sel=False,
+                markersize=2,
+                ext=ext,
+                extvec_scale=30,
+                head_width=0.1,
+                allow_missing=True,
+                exclude=exclude)
+
 
     if cloudc and cloudccat is not None:
         plot_tools.ccd(Table(cloudccat), ax=pl.gca(), color1=[x.lower() for x in color1],
@@ -200,6 +201,8 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
 
         sel = tb['column'] < max_column
 
+        assert sel.sum() > 0, f'No valid data for {comp} at temperature {temp} and column {max_column}'
+
         try:
             molwt = u.Quantity(composition_to_molweight(comp), u.Da)
             mols, comps = molscomps(comp)
@@ -224,6 +227,14 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         # DEBUG. print(f'color {color1[0]} in colnames: {color1[0] in tb.colnames}.  color {color1[1]} in colnames: {color1[1] in tb.colnames}.  color {color2[0]} in colnames: {color2[0] in tb.colnames}.  color {color2[1]} in colnames: {color2[1] in tb.colnames}.')
         c1 = (tb[color1[0]][sel] if color1[0] in tb.colnames else 0) - (tb[color1[1]][sel] if color1[1] in tb.colnames else 0) + a_color1 * (not pure_ice_no_dust)
         c2 = (tb[color2[0]][sel] if color2[0] in tb.colnames else 0) - (tb[color2[1]][sel] if color2[1] in tb.colnames else 0) + a_color2 * (not pure_ice_no_dust)
+        # if color1[0] not in tb.colnames:
+        #     print(f'color1[0] {color1[0]} not in tb.colnames')
+        # if color2[0] not in tb.colnames:
+        #     print(f'color2[0] {color2[0]} not in tb.colnames')
+        # if color1[1] not in tb.colnames:
+        #     print(f'color1[1] {color1[1]} not in tb.colnames')
+        # if color2[1] not in tb.colnames:
+        #     print(f'color2[1] {color2[1]} not in tb.colnames')
 
         #pl.scatter(tb['F410M'][sel][::dcol] - tb['F466N'][sel][::dcol], tb['F356W'][sel][::dcol] - tb['F444W'][sel][::dcol],
         #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
@@ -425,8 +436,9 @@ if __name__ == "__main__":
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
                                  (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
-                                 (['F150W', 'F444W'], ['F444W', 'F466N'], (0, 5, -0.5, 1.5)),
-                                 (['F150W', 'F212N'], ['F277W', 'F323N'], (0, 5, -0.5, 1.5)),
+                                 (['F150W', 'F444W'], ['F444W', 'F466N'], (-0.5, 12, -2.0, 0.3)),
+                                 (['F150W', 'F212N'], ['F277W', 'F323N'], (-0.5, 13, -1.5, 1.0)),
+                                 (['F150W', 'F212N'], ['F212N', 'F323N'], (-0.5, 13, -1.5, 2.0)),
                                 ):
         pl.figure();
         molcomps = [

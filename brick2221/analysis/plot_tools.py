@@ -115,29 +115,35 @@ def ccd(basetable,
         markersize=5,
         head_width=0.1,
         extvec_start=(0, 0),
+        allow_missing=False,
         **kwargs
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
     keys2 = [f'mag_ab_{col}' for col in color2]
-    colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
-    colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
 
-    if max_uncertainty is not None:
-        reject_1 = (basetable['e'+keys1[0]] > max_uncertainty) | (basetable['e'+keys1[1]] > max_uncertainty)
-        reject_2 = (basetable['e'+keys2[0]] > max_uncertainty) | (basetable['e'+keys2[1]] > max_uncertainty)
+    try:
+        colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
+        colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
+
+        if max_uncertainty is not None:
+            reject_1 = (basetable['e'+keys1[0]] > max_uncertainty) | (basetable['e'+keys1[1]] > max_uncertainty)
+            reject_2 = (basetable['e'+keys2[0]] > max_uncertainty) | (basetable['e'+keys2[1]] > max_uncertainty)
+            if exclude is None:
+                exclude = reject_1 | reject_2
+            else:
+                exclude = exclude | reject_1 | reject_2
+
         if exclude is None:
-            exclude = reject_1 | reject_2
+            include = slice(None)
         else:
-            exclude = exclude | reject_1 | reject_2
+            include = ~exclude
+            sel = sel & include
 
-    if exclude is None:
-        include = slice(None)
-    else:
-        include = ~exclude
-        sel = sel & include
-
-    ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
-    ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
+        ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
+        ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
+    except Exception as ex:
+        if not allow_missing:
+            raise ex
     ax.set_xlabel(f"{color1[0]} - {color1[1]}")
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)
@@ -1161,7 +1167,7 @@ def star_density_color(crd, ww, dx=1*u.arcsec, blur=False, fig=None):
     if blur:
         blurred = gaussian_filter(hh, blur)
         hh = blurred
-    
+
     im = ax.imshow(hh.swapaxes(0,1))
     pl.colorbar(im)
     return hh
