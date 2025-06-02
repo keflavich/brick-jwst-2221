@@ -1,3 +1,7 @@
+"""
+Superceded by icemodels/absorbance_in_filters.py
+"""
+raise Exception("This file is superceded by icemodels/absorbance_in_filters.py")
 import glob
 import os
 import time
