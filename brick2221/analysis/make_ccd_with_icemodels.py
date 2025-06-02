@@ -6,20 +6,21 @@ import mpl_plot_templates
 from molmass import Formula
 import re
 
-from brick2221.analysis.analysis_setup import filternames
-from brick2221.analysis.selections import load_table
-from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-from brick2221.analysis.analysis_setup import basepath
-from brick2221.analysis import plot_tools
-from brick2221.analysis.make_icecolumn_fig9 import molscomps
-from icemodels.core import composition_to_molweight
-
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
 from cycler import cycler
 from tqdm.auto import tqdm
 
+from icemodels.colorcolordiagrams import plot_ccd_icemodels
+from icemodels.core import composition_to_molweight
+
+from brick2221.analysis.analysis_setup import filternames
+from brick2221.analysis.selections import load_table
+from brick2221.analysis import plot_tools
+from brick2221.analysis.make_icecolumn_fig9 import molscomps
 from brick2221.analysis.iceage_fluxes import iceage_flxd, iceage_mags
+from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+from brick2221.analysis.analysis_setup import basepath
 
 pl.rcParams['axes.prop_cycle'] = cycler(color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'], ) * cycler(linestyle=['-', '--', ':', '-.'])
 
@@ -116,7 +117,6 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                 allow_missing=True,
                 exclude=exclude)
 
-
     if cloudc and cloudccat is not None:
         plot_tools.ccd(Table(cloudccat), ax=pl.gca(), color1=[x.lower() for x in color1],
                        color2=[x.lower() for x in color2], sel=False,
@@ -174,84 +174,26 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                        c2isoarchive,
                        s=25, c='b', marker='x', label='ISO')
 
-    def wavelength_of_filter(filtername):
-        return u.Quantity(int(filtername[1:-1])/100, u.um).to(u.um, u.spectral())
-
-    E_V_color1 = (ext(wavelength_of_filter(color1[0])) - ext(wavelength_of_filter(color1[1])))
-    E_V_color2 = (ext(wavelength_of_filter(color2[0])) - ext(wavelength_of_filter(color2[1])))
-
-    if molcomps is not None:
-        molids = [np.unique(dmag_tbl.loc['composition', mc].loc['temperature', str(tem)]['mol_id']) for mc, tem in molcomps]
-        #print(f"molcomps {molcomps} resolved to {list(molids)}")
-    else:
-        molcomps = np.unique(dmag_tbl.loc[molids]['composition'])
-
-    assert len(molcomps) == len(molids)
-
-    dcol = 2
-    for mol_id, (molcomp, temperature) in tqdm(zip(molids, molcomps)):
-        if isinstance(mol_id, tuple):
-            mol_id, database = mol_id
-            tb = dmag_tbl.loc[mol_id].loc['database', database].loc['composition', molcomp]
-        else:
-            tb = dmag_tbl.loc[mol_id].loc['composition', molcomp]
-        comp = np.unique(tb['composition'])[0]
-        temp = np.unique(tb['temperature'])[temperature_id]
-        tb = tb.loc['temperature', temp]
-
-        sel = tb['column'] < max_column
-
-        assert sel.sum() > 0, f'No valid data for {comp} at temperature {temp} and column {max_column}'
-
-        try:
-            molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-            mols, comps = molscomps(comp)
-        except ValueError as ex:
-            print(f'Error converting composition {comp} to molwt: {ex}')
-            continue
-        if icemol in mols:
-            mol_frac = comps[mols.index(icemol)] / sum(comps)
-        else:
-            print(f"icemol {icemol} not in {mols} for {comp}.  tb.meta={tb.meta}")
-            continue
-
-        #mol_wt_tgtmol = Formula(icemol).mass * u.Da
-
-        col = tb['column'][sel] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
-        # print(f'comp={comp}, mol_massfrac={mol_massfrac}, mol_wt_tgtmol={mol_wt_tgtmol}, molwt={molwt}, abundance={abundance}, col[0]={col[0]:0.1e}, col[-1]={col[-1]:0.1e}')
-
-        h2col = col / abundance
-        a_color1 = h2col / nh2_to_av * E_V_color1 + av_start * E_V_color1
-        a_color2 = h2col / nh2_to_av * E_V_color2 + av_start * E_V_color2
-
-        # DEBUG. print(f'color {color1[0]} in colnames: {color1[0] in tb.colnames}.  color {color1[1]} in colnames: {color1[1] in tb.colnames}.  color {color2[0]} in colnames: {color2[0] in tb.colnames}.  color {color2[1]} in colnames: {color2[1] in tb.colnames}.')
-        c1 = (tb[color1[0]][sel] if color1[0] in tb.colnames else 0) - (tb[color1[1]][sel] if color1[1] in tb.colnames else 0) + a_color1 * (not pure_ice_no_dust)
-        c2 = (tb[color2[0]][sel] if color2[0] in tb.colnames else 0) - (tb[color2[1]][sel] if color2[1] in tb.colnames else 0) + a_color2 * (not pure_ice_no_dust)
-        # if color1[0] not in tb.colnames:
-        #     print(f'color1[0] {color1[0]} not in tb.colnames')
-        # if color2[0] not in tb.colnames:
-        #     print(f'color2[0] {color2[0]} not in tb.colnames')
-        # if color1[1] not in tb.colnames:
-        #     print(f'color1[1] {color1[1]} not in tb.colnames')
-        # if color2[1] not in tb.colnames:
-        #     print(f'color2[1] {color2[1]} not in tb.colnames')
-
-        #pl.scatter(tb['F410M'][sel][::dcol] - tb['F466N'][sel][::dcol], tb['F356W'][sel][::dcol] - tb['F444W'][sel][::dcol],
-        #           s=(np.log10(tb['column'][sel][::dcol])-14.9)*20, c=L.get_color())
-
-        if icemol2 is not None and icemol2 in mols and icemol2_col is not None:
-            mol_frac2 = comps[mols.index(icemol2)] / sum(comps)
-            # mol_wt_tgtmol2 = Formula(icemol2).mass * u.Da
-            ind_icemol2 = np.argmin(np.abs(tb['column'][sel] * mol_frac2 - icemol2_col))
-            #print(f'icemol2={icemol2}, icemol2_col={icemol2_col}, ind_icemol2={ind_icemol2} c1[ind_icemol2]={c1[ind_icemol2]}, c2[ind_icemol2]={c2[ind_icemol2]}')
-            L, = pl.plot(c1, c2, label=f'{comp} (X$_{{{icemol2}}}$ = {icemol2_col / h2col[ind_icemol2]:0.1e})', )
-            #L, = pl.plot(c1[ind_icemol2], c2[ind_icemol2], 'o', color=L.get_color())
-        else:
-            L, = pl.plot(c1, c2, label=comp, )
-
-    pl.axis(axlims);
-
-    return a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb
+    # Now use the model plotting from colorcolordiagrams
+    return plot_ccd_icemodels(
+        color1=color1,
+        color2=color2,
+        dmag_tbl=dmag_tbl,
+        molcomps=molcomps,
+        molids=molids,
+        axlims=axlims,
+        nh2_to_av=nh2_to_av,
+        abundance=abundance,
+        av_start=av_start,
+        max_column=max_column,
+        icemol=icemol,
+        icemol2=icemol2,
+        icemol2_col=icemol2_col,
+        icemol2_abund=icemol2_abund,
+        ext=ext,
+        temperature_id=temperature_id,
+        pure_ice_no_dust=pure_ice_no_dust,
+    )
 
 if __name__ == "__main__":
 

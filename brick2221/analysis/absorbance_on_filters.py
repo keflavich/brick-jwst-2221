@@ -1,5 +1,5 @@
 """
-Absorbance on Filters
+Overeplot absorbance profiles on JWST Filter transmission profiles
 """
 
 
@@ -59,10 +59,10 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
     for ii, tb in enumerate(opacity_tables):
 
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
-        
+
         kk = tb['k₁'] if 'k₁' in tb.colnames else tb['k']
         opacity = ((kk.quantity * tb['Wavelength'].to(u.cm**-1, u.spectral()) * 4 * np.pi / (1*u.g/u.cm**3 / (molwt)))).to(u.cm**2)
-        pl.plot(tb['Wavelength'], 
+        pl.plot(tb['Wavelength'],
                 opacity,
                 label=f'{tb.meta["author"]} {tb.meta["composition"]} {tb.meta["temperature"]}'
                         if 'author' in tb.meta else
