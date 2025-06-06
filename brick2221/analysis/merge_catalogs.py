@@ -754,7 +754,7 @@ def merge_crowdsource(module='nrca', suffix="", desat=False, bgsub=False,
             print("imgfns:", imgfns)
             print("catfns:", catfns)
             print(dict(zip(imgfns, catfns)))
-            # raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
+            raise ValueError(f"{basepath}/catalogs/FILTER*{module}*obs*indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_crowdsource{suffix}.fits had different n(imgs) than n(cats)")
     else:
         catfns = [x
                   for filn in filternames
@@ -929,6 +929,14 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         tbl.add_column(abmag, name='mag_ab')
         tbl.add_column(eflux_jy, name='eflux_jy')
         tbl.add_column(abmag_err, name='emag_ab')
+
+    for tbl in tbls:
+        try:
+            sanity_check_individual_table(tbl)
+        except Exception as ex:
+            print(ex)
+            print(tbl.meta)
+            raise ex
 
     merge_catalogs(tbls, catalog_type=daophot_type, module=module, bgsub=bgsub, desat=desat, epsf=epsf, target=target,
                    blur=blur, indivexp=indivexp,
@@ -1223,7 +1231,7 @@ def main():
                                 except Exception as ex:
                                     print(f"Living with this error: {ex}, {type(ex)}, {str(ex)}")
                                 try:
-                                    for suffix in ("_nsky0", ):#"_nsky15"): "_nsky1", 
+                                    for suffix in ("_nsky0", ):#"_nsky15"): "_nsky1",
                                         print(f'crowdsource {suffix} {module}')
                                         merge_crowdsource(module=module, suffix=suffix, desat=desat, bgsub=bgsub, epsf=epsf,
                                                           fitpsf=fitpsf, target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
