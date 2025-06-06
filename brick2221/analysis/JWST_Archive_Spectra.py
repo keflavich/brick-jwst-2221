@@ -46,15 +46,26 @@ else:
                 spectable.sort('WAVELENGTH')
 
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                             np.nan_to_num(spectable['FLUX'].quantity),
+                                             spectable['FLUX'].quantity,
                                              filterids=filter_ids, transdata=transdata)
             nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
                                  if nirspec_flxd[key] > 0 else np.nan
                             for key in nirspec_flxd}
 
+            nirspec_flxd_nonan = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
+                                             np.nan_to_num(spectable['FLUX'].quantity),
+                                             filterids=filter_ids, transdata=transdata)
+            nirspec_mags_nonan = {key: -2.5*np.log10(nirspec_flxd_nonan[key].to(u.Jy).value / filter_data[key])
+                                 if nirspec_flxd_nonan[key] > 0 else np.nan
+                            for key in nirspec_flxd_nonan}
+            for key in nirspec_mags_nonan:
+                nirspec_mags[key+"_nonan"] = nirspec_mags_nonan[key]
+
             # filter out measurements that are implausibly faint
             nirspec_mags = {key: np.nan if (nirspec_mags[key] > 26) or (nirspec_mags[key] < 2) else nirspec_mags[key]
                             for key in nirspec_mags}
+            nirspec_mags_nonan = {key: np.nan if (nirspec_mags_nonan[key] > 26) or (nirspec_mags_nonan[key] < 2) else nirspec_mags_nonan[key]
+                            for key in nirspec_mags_nonan}
 
             nirspec_mags['Target'] = fh[0].header['TARGNAME']
             if nirspec_mags['Target'] == '':

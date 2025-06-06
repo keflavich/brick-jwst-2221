@@ -99,23 +99,28 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             dmag_tbl=dmag_all,
                             temperature_id=0,
                             exclude=~ok,
-                            iceage=True,
+                            iceage=False,
                             nirspec_archive=True,
                             iso_archive=True,
                             pure_ice_no_dust=False,
                             cloudc=False,
                             cloudccat=None,
+                            plot_brick=True,
                             ):
     """
     """
-    plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
-                color2=[x.lower() for x in color2], sel=False,
-                markersize=2,
-                ext=ext,
-                extvec_scale=30,
-                head_width=0.1,
-                allow_missing=True,
-                exclude=exclude)
+    if plot_brick:
+        plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
+                    color2=[x.lower() for x in color2], sel=False,
+                    markersize=2,
+                    ext=ext,
+                    extvec_scale=30,
+                    head_width=0.1,
+                    allow_missing=True,
+                    exclude=exclude)
+    else:
+        pl.xlabel(f"{color1[0]} - {color1[1]}")
+        pl.ylabel(f"{color2[0]} - {color2[1]}")
 
     if cloudc and cloudccat is not None:
         plot_tools.ccd(Table(cloudccat), ax=pl.gca(), color1=[x.lower() for x in color1],
@@ -247,7 +252,7 @@ if __name__ == "__main__":
                                  (['F356W', 'F405N'], ['F405N', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F356W', 'F466N'], ['F466N', 'F444W'], (-0.75, 1, -0.5, 1.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
                                 ):
@@ -372,7 +377,7 @@ if __name__ == "__main__":
                                                                                         abundance=(percent/100.)*carbon_abundance,
                                                                                         max_column=2e20)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{-2}$");
+        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1.png', bbox_inches='tight', dpi=150)
 
@@ -432,10 +437,11 @@ if __name__ == "__main__":
                                                                                               av_start=10,
                                                                                               ext=G21_MWAvg(),
                                                                                               iceage=False,
+                                                                                              plot_brick=False,
                                                                                               abundance=(percent/100.)*carbon_abundance,
-                                                                                        max_column=5e19)
+                                                                                        max_column=1e19)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {5e19:.2e} cm$^{{-2}}$");
+        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {1e19:.2e} cm$^{{-2}}$");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_Wd1.png', bbox_inches='tight', dpi=150)
 
@@ -491,7 +497,7 @@ if __name__ == "__main__":
                                                                                         cloudccat=cloudccat.catalog,
                                                                                         max_column=5e19)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {5e19:.2e} cm$^{-2}$");
+        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {5e19:.2e} cm$^{{-2}}$");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes_withCloudC.png', bbox_inches='tight', dpi=150)
         print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
@@ -523,5 +529,5 @@ if __name__ == "__main__":
                                                                                             max_column=2e20)
         pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
         pl.axis((0, 15, -0.5, 1.5));
-        pl.title(f"25% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{-2}$");
+        pl.title(f"25% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
         pl.close('all')
