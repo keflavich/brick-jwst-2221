@@ -78,12 +78,18 @@ def sanity_check_individual_table(tbl):
 
     abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
 
+    print(f'Units of abmag columns are: abmag={abmag.unit}, abmag_tbl={abmag_tbl.unit}')
+    assert abmag.unit == u.mag
+    assert abmag_tbl.unit == u.mag
+    assert flux_jy.unit == u.Jy
+
     # there are negative fluxes -> nan mags
     # print(f"Maximum difference between the two tables: {np.abs(abmag-abmag_tbl).max()}")
     print(f"Nanmax difference between the two tables: {np.nanmax(np.abs(abmag-abmag_tbl))}")
     # print("NaNs: (mag, flux) ", abmag_tbl[np.isnan(abmag_tbl)], flux_jy[np.isnan(abmag_tbl)])
 
-    print(f"Max flux in tbl for {wl}: {tbl['flux'].max()};"
+    fluxcolname = 'flux' if 'flux' in tbl.colnames else 'flux_fit'
+    print(f"Max flux in tbl for {wl}: {tbl[fluxcolname].max()};"
           f" in jy={flux_jy.max()}; magmin={abmag_tbl.min()}={np.nanmin(abmag_tbl)}, magmax={abmag_tbl.max()}={np.nanmax(abmag_tbl)}")
     print(f"100th brightest flux={flux_jy[-100]} abmag={abmag[-100]} abmag_tbl={abmag_tbl[-100]}")
 
@@ -919,16 +925,16 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
-            abmag = -2.5 * np.log10(flux_jy / zeropoint)
+            abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
             try:
                 eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             except KeyError:
                 eflux_jy = (tbl['flux_err'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
-            abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy
-        tbl.add_column(flux_jy, name='flux_jy')
-        tbl.add_column(abmag, name='mag_ab')
-        tbl.add_column(eflux_jy, name='eflux_jy')
-        tbl.add_column(abmag_err, name='emag_ab')
+            abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy * u.mag
+        tbl.add_column(Column(flux_jy, name='flux_jy', unit=u.Jy))
+        tbl.add_column(Column(abmag, name='mag_ab', unit=u.mag))
+        tbl.add_column(Column(eflux_jy, name='eflux_jy', unit=u.Jy))
+        tbl.add_column(Column(abmag_err, name='emag_ab', unit=u.mag))
 
     for tbl in tbls:
         try:
@@ -1009,8 +1015,8 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
     except KeyError:
         eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    abmag = -2.5*np.log10(flux_jy / zeropoint)
-    abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy)
+    abmag = -2.5*np.log10(flux_jy / zeropoint) * u.mag
+    abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
     satstar_cat['mag_ab'] = abmag
     satstar_cat['emag_ab'] = abmag_err
 
@@ -1261,10 +1267,12 @@ def main():
                                     merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                                   target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
-                                    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                    print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}")
                                     exc_tb = sys.exc_info()[2]
                                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                                     print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
+                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}")
+                                    raise ex
                                 try:
                                     print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
                                     merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
@@ -1276,6 +1284,11 @@ def main():
                                     print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
                                 print(f'dao phase done.  time elapsed={time.time()-t0}')
                                 print()
+
+                            if os.getenv('SLURM_ARRAY_TASK_ID') is None:
+                                if options.make_refcat:
+                                    raise Exception("make_refcat is not supported with SLURM_ARRAY_TASK_ID")
+                                return
 
     if options.make_refcat:
         import make_reftable
