@@ -8,6 +8,7 @@ import matplotlib.pyplot as pl
 import mpl_plot_templates
 from molmass import Formula
 import re
+import os
 
 from brick2221.analysis.analysis_setup import filternames
 from brick2221.analysis.selections import load_table
@@ -22,7 +23,11 @@ from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
 from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps
 
-if 'basetable_merged1182_daophot' not in globals():
+
+if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits'):
+    basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits')
+    print("Loaded merged1182_daophot_basic_indivexp (2025-03-24 version)")
+else:
     basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
     result = load_table(basetable_merged1182_daophot, ww=ww)
     ok2221 = result['ok2221']
@@ -86,20 +91,24 @@ def makeplot(avfilts=['F182M', 'F212N'],
     #dmag_466m212 = np.array(dmags466)
 
     # inferred_molecular_column = np.interp(unextincted_466m212, dmag_466m212[cols<1e21], cols[cols<1e21])
-    inferred_molecular_column = compute_molecular_column(unextincted_1m2=unextincted_466m212, dmag_tbl=dmag_tbl, icemol=icemol, filter1='F466N', filter2='F212N')
+    inferred_molecular_column = compute_molecular_column(unextincted_1m2=unextincted_466m212,
+                                                         dmag_tbl=dmag_tbl,
+                                                         icemol=icemol,
+                                                         filter1='F466N',
+                                                         filter2='F212N')
 
     fig = ax.get_figure()
     ax.scatter(np.array(av[sel & ok]),
                np.log10(inferred_molecular_column[sel & ok]),
                marker='.', s=0.5, alpha=alpha)
-    _,_,H,_,_,levels = mpl_plot_templates.adaptive_param_plot(np.array(av[sel & ok]),
-                                    np.log10(inferred_molecular_column[sel & ok]),
-                                    bins=50,
-                                    threshold=15,
-                                    #linewidths=[0.5]*5,
-                                    cmap='Spectral_r',
-                                    marker=',',
-                                            )
+    cx,cy,H,_,_,levels, cnt  = mpl_plot_templates.adaptive_param_plot(np.array(av[sel & ok]),
+                                                                      np.log10(inferred_molecular_column[sel & ok]),
+                                                                      bins=50,
+                                                                      threshold=15,
+                                                                      #linewidths=[0.5]*5,
+                                                                      cmap='Spectral_r',
+                                                                      marker=',',
+                                                                      )
 
     #pl.semilogy(av182b[selb], inferred_co_column_av182410b[selb], marker=',', linestyle='none')
     pl.xlim(-5, 105)
@@ -152,10 +161,7 @@ def makeplot(avfilts=['F182M', 'F212N'],
 
 def main():
 
-    dmag_co = Table.read(f'{basepath}/tables/CO_ice_absorption_tables.ecsv')
-    dmag_co.add_index('composition')
-    dmag_co.add_index('temperature')
-    dmag_co.add_index('mol_id')
+    dmag_co = dmag_tbl.loc['CO 1']
 
     carbon_abundance = 10**(8.7-12)
     oxygen_abundance = 10**(9.3-12)
@@ -164,7 +170,8 @@ def main():
              icemol='CO', abundance=carbon_abundance*0.5,
              title='CO',
              dereddened=True,
-             dmag_tbl=dmag_co.loc['mol_id', 64].loc['composition', 'CO'])
+             dmag_tbl=dmag_co,
+    )
     plot_brandt_model(ax)
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
@@ -220,7 +227,8 @@ def main():
     makeplot(avfilts=['F115W', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
     makeplot(avfilts=['F115W', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
 
-    dmag_h2o = Table.read(f'{basepath}/tables/H2O_ice_absorption_tables.ecsv')
+    dmag_h2o = dmag_tbl.loc['H2O 1']
+    #dmag_h2o = Table.read(f'{basepath}/tables/H2O_ice_absorption_tables.ecsv')
     #dmag_co2 = Table.read(f'{basepath}/tables/CO2_ice_absorption_tables.ecsv')
     #dmag_mine = Table.read(f'{basepath}/tables/H2O+CO_ice_absorption_tables.ecsv')
 
@@ -231,7 +239,7 @@ def main():
     makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
              icemol='H2O', abundance=oxygen_abundance*0.5,
              title='H2O',
-             dmag_tbl=dmag_h2o.loc['H2O (1)'].loc['temperature', '25K'].loc['mol_id', 240])
+             dmag_tbl=dmag_h2o.loc['temperature', '25K'].loc['mol_id', 240])
 
 
     dmag_tbl_this = dmag_co.loc['mol_id', 36].loc['composition', 'CO CO2 (100 70)']

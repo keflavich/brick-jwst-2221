@@ -1,6 +1,7 @@
 """
 Created 2025-03-19, long after publication
 """
+import os
 from astropy.table import Table
 import numpy as np
 import astropy.units as u
@@ -56,20 +57,25 @@ Greens_to_black = create_color_to_black_cmap('Greens', reverse=True)
 Blues_to_black = create_color_to_black_cmap('Blues', reverse=True)
 Oranges_to_black = create_color_to_black_cmap('Oranges', reverse=True)
 
-basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
-result = load_table(basetable_merged1182_daophot, ww=ww)
-ok2221 = result['ok2221']
-ok1182 = result['ok1182']
-#globals().update(result)
-basetable = basetable_merged1182_daophot[ok2221]
-ok1182 = ok1182[ok2221]
-del result
-print("Loaded merged1182_daophot_basic_indivexp")
+if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits'):
+    basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits')
+    print("Loaded merged1182_daophot_basic_indivexp (2025-03-24 version)")
+else:
 
-try:
-    basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits', overwrite=False)
-except:
-    pass
+    basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+    result = load_table(basetable_merged1182_daophot, ww=ww)
+    ok2221 = result['ok2221']
+    ok1182 = result['ok1182']
+    #globals().update(result)
+    basetable = basetable_merged1182_daophot[ok2221]
+    ok1182 = ok1182[ok2221]
+    del result
+    print("Loaded merged1182_daophot_basic_indivexp")
+
+    try:
+        basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits', overwrite=False)
+    except:
+        pass
 
 measured_466m410 = basetable['mag_ab_f466n'] - basetable['mag_ab_f410m']
 
@@ -107,7 +113,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
              title='H2O:CO:CO2 (10:1:0.5)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:0.5)'],
              plot_brandt=True,
-             NtoAV=2.21e21,
+             NHtoAV=2.21e21,
              av_start=15,
              xax='AV',
              cloudccat=None,
@@ -122,8 +128,13 @@ def makeplot(avfilts=['F182M', 'F410M'],
              show_25_percent=True,
              legend_kwargs={'loc': 'upper left'},
              threshold=5,
+             clear=True
              ):
 
+    if clear:
+        pl.clf()
+
+    fig = pl.gcf()
     if ax is None:
         ax = pl.gca()
 
@@ -137,7 +148,6 @@ def makeplot(avfilts=['F182M', 'F410M'],
 
     artists_and_labels = {}
 
-    fig = pl.gcf()
     if scatter:
         pl.scatter(np.array(av[sel & ok]),
                    np.log10(inferred_molecular_column[sel & ok]),
@@ -271,20 +281,25 @@ def makeplot(avfilts=['F182M', 'F410M'],
     # pl.plot([x1, x2], np.array([x1*m+b, x2*m+b]), 'k--', label=f'log N = {m:0.2f} A$_V$ + {b:0.1f}')
     #pl.plot([7, 23], 10**(np.array([7,23]) * m + b))
     #pl.legend(loc='lower right')
-    pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
-    pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
+    ax.set_xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
+    ax.set_ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
+
+    ax2 = ax.twiny()
+    ax2.set_xlim(np.array(xlim) * NHtoAV / 2 * 1e-22)
+    ax2.set_xlabel('N(H$_2$) [10$^{22}$ cm$^{-2}$]')
+
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.pdf", dpi=150, bbox_inches='tight')
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.png", dpi=250, bbox_inches='tight')
 
     #pl.plot([7, 23], np.log10([0.5e17, 7e17]), 'g', label='log N = 0.07 A$_V$ + 16.2 [BGW 2015]', linewidth=2)
 
-    NMolofAV = NtoAV * np.linspace(0.1, 100, 1000) * abundance
-    logN = int(np.log10(NtoAV))
+    NMolofAV = NHtoAV * np.linspace(0.1, 100, 1000) * abundance
+    logN = int(np.log10(NHtoAV))
     xax_toplot = np.linspace(0.1, 100, 1000) + av_start
     if xax != 'AV':
         xax_toplot = xax_toplot * ev(avfilts, ext)
     co_av_line, = pl.plot(xax_toplot, np.log10(NMolofAV),
-            label=f'100% of {icemol} in ice \nif N(H)={NtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$\nand X(C)=$10^{{{np.log10(abundance):0.1f}}}$\nand $E({avfilts[0]}-{avfilts[1]})={ev(avfilts, ext):0.2f}$\nand $A_{{V,fg}}={av_start}$', color='r', linestyle=':')
+            label=f'100% of {icemol} in ice \nif N(H)={NHtoAV/10**logN}$\\times10^{{{logN}}}$ A$_V$\nand X(C)=$10^{{{np.log10(abundance):0.1f}}}$\nand $E({avfilts[0]}-{avfilts[1]})={ev(avfilts, ext):0.2f}$\nand $A_{{V,fg}}={av_start}$', color='r', linestyle=':')
     artists_and_labels[co_av_line.get_label()] = co_av_line
     if show_25_percent:
         co_av_line_25, = pl.plot(xax_toplot, np.log10(NMolofAV * 0.25),
@@ -293,11 +308,11 @@ def makeplot(avfilts=['F182M', 'F410M'],
         artists_and_labels[co_av_line_25.get_label()] = co_av_line_25
 
     if xax == 'AV':
-        pl.xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
+        ax.set_xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
     else:
-        pl.xlabel(f"{avfilts[0]}-{avfilts[1]} (mag)")
+        ax.set_xlabel(f"{avfilts[0]}-{avfilts[1]} (mag)")
     #pl.ylabel("N(CO) ice\nfrom Palumbo 2006 constants,\n4000K Phoenix atmosphere")
-    pl.ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
+    ax.set_ylabel(f"log N({icemol} ice) [cm$^{{-2}}$] using F410M-F466N color")
     # print(artists_and_labels)
     pl.legend(handles=list(artists_and_labels.values()),
               labels=list(artists_and_labels.keys()),
@@ -307,13 +322,13 @@ def makeplot(avfilts=['F182M', 'F410M'],
     pl.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour{suffix}.png", dpi=250, bbox_inches='tight')
 
     if plot_brandt:
-        plot_brandt_model(ax, molecule=icemol, nh_to_av=NtoAV, av_start=av_start)
+        plot_brandt_model(ax, molecule=icemol, nh_to_av=NHtoAV, av_start=av_start)
         fig.savefig(f"{basepath}/paper_co/figures/N{icemol}_{title.replace(' ','_')}_vs_{xax}_{avfilts[0]}-{avfilts[1]}_contour_Brandt{suffix}.png", dpi=250, bbox_inches='tight')
 
     return av, inferred_molecular_column, ax
 
 
-def plot_brandt_model(ax, nh_to_av=2.21e21*2, molecule='CO', av_start=0):
+def plot_brandt_model(ax, nh_to_av=2.21e21, molecule='CO', av_start=0):
     column = fits.getdata(f'{basepath}/brandt_ice/brick.dust_column_density_cf.fits')
     if molecule == 'CO':
         molcol = np.load(f'{basepath}/brandt_ice/COIceMap_0.npy')
@@ -327,7 +342,8 @@ def plot_brandt_model(ax, nh_to_av=2.21e21*2, molecule='CO', av_start=0):
         lims = (0, 100, 15, 21)
     ok = np.isfinite(column) & np.isfinite(molcol) & (column>0) & (molcol>0)
 
-    av = column / nh_to_av + av_start
+    # multiply by 2 to go from H2->H
+    av = column * 2 / nh_to_av + av_start
 
     nbins = 100
     hh, x_edges, y_edges = np.histogram2d(av[ok], np.log10(molcol[ok]),
@@ -345,7 +361,7 @@ def compare_freezeout_abundance_models():
     # solar carbon is 8.5 - 12 = -3.5
     # solar neighborhood is 8.2 - 12 = -3.8
 
-    NtoAV=2.21e21
+    NHtoAV=2.21e21
     av_start=0
 
     color = np.linspace(0.0, 3, 1000)
@@ -359,8 +375,8 @@ def compare_freezeout_abundance_models():
                 av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
                 E_V = (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
 
-                NMolofAV = NtoAV * color / E_V * abundance * co_to_c
-                logN = int(np.log10(NtoAV))
+                NMolofAV = NHtoAV * color / E_V * abundance * co_to_c
+                logN = int(np.log10(NHtoAV))
 
                 abundance_str = f"{abundance * co_to_c/10**(int(np.log10(abundance * co_to_c))-1):.1f}\\times10^{{{int(np.log10(abundance * co_to_c))-1}}}"
 
@@ -372,8 +388,8 @@ def compare_freezeout_abundance_models():
     #     av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
     #     E_V = (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
 
-    #     NMolofAV = NtoAV * color / E_V * abundance
-    #     logN = int(np.log10(NtoAV))
+    #     NMolofAV = NHtoAV * color / E_V * abundance
+    #     logN = int(np.log10(NHtoAV))
     #     pl.plot(color + av_start * E_V, np.log10(NMolofAV),
     #             label=f'X=10$^{{{np.log10(abundance):.1f}}}$',
     #             linestyle=linestyle)
@@ -406,6 +422,7 @@ def main():
              icemol='H2O', abundance=10**-3.31,
              title='H2O:CO:OCN (1:1:1)',
              dmag_tbl=dmag_tbl.loc['H2O:CO:OCN (1:1:1)'])
+    assert ax.get_xlabel() == f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)"
 
 
     av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
@@ -432,8 +449,10 @@ def main():
     makeplot(avfilts=['F187N', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
     makeplot(avfilts=['F187N', 'F405N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
     makeplot(avfilts=['F182M', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
-    makeplot(avfilts=['F115W', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
-    makeplot(avfilts=['F115W', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca())
+
+    # CT06 doesn't apply to F115W
+    makeplot(avfilts=['F115W', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ext=G23(Rv=5.5))
+    makeplot(avfilts=['F115W', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ext=G23(Rv=5.5))
 
     dmag_h2o = Table.read(f'{basepath}/tables/H2O_ice_absorption_tables.ecsv')
     #dmag_co2 = Table.read(f'{basepath}/tables/CO2_ice_absorption_tables.ecsv')

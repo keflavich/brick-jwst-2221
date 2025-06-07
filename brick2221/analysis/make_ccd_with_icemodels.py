@@ -79,6 +79,9 @@ def ext(x, model=CT06_MWGC()):
     else:
         return np.polyval(pp_ct06, x.value)
 
+# local (solar neighborhood) values
+# Asplund 2009 or https://ui.adsabs.harvard.edu/abs/2012A%26A...539A.143N/abstract
+# uses HII region values
 oxygen_abundance = 10**(9.3-12)
 carbon_abundance = 10**(8.7-12)
 
