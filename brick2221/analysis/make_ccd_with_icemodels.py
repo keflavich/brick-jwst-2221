@@ -475,6 +475,14 @@ if __name__ == "__main__":
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2.png', bbox_inches='tight', dpi=150)
 
+        pl.figure()
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                              molcomps=[],)
+        pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+        #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+        pl.axis(lims);
+        pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.png', bbox_inches='tight', dpi=150)
+
         try:
             pl.figure()
             a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
@@ -490,6 +498,17 @@ if __name__ == "__main__":
             pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
             pl.axis(lims);
             pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC.png', bbox_inches='tight', dpi=150)
+
+            pl.figure()
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=[],
+                                                                                                cloudc=True,
+                                                                                                cloudccat=cloudccat.catalog,)
+            pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+            #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_withCloudC.png', bbox_inches='tight', dpi=150)
+
         except KeyError:
             print(f"No cloudc for {color1} {color2}")
             continue
