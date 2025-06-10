@@ -122,7 +122,7 @@ def getmtime(x):
 #     print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
 
 
-def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F466N', filter2='F410M'):
+def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F410M', filter2='F466N'):
     dmags1 = dmag_tbl[filter1]
     dmags2 = dmag_tbl[filter2]
 
@@ -134,7 +134,10 @@ def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F4
     cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
 
     dmag_1m2 = np.array(dmags1) - np.array(dmags2)
-    inferred_molecular_column = np.interp(unextincted_1m2, dmag_1m2[cols<1e21], cols[cols<1e21])
+    sortorder = np.argsort(dmag_1m2)
+    inferred_molecular_column = np.interp(unextincted_1m2,
+                                          xp=dmag_1m2[sortorder][cols<1e21],
+                                          fp=cols[sortorder][cols<1e21])
 
     return inferred_molecular_column
 

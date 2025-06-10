@@ -140,16 +140,18 @@ def ccd(basetable,
             sel = sel & include
 
         ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
-        ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
+        if selcolor is not None:
+            ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
     except Exception as ex:
         if not allow_missing:
             raise ex
     ax.set_xlabel(f"{color1[0]} - {color1[1]}")
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)
-    if ext is not None:
+    if ext is not None and extvec_scale > 0:
         try:
-            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale, head_width=head_width, start=extvec_start)
+            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale,
+                            head_width=head_width, start=extvec_start)
         except Exception as ex:
             print(ex)
 

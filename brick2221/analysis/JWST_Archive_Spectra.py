@@ -8,6 +8,7 @@ from astropy.io import fits
 from astropy import units as u
 from astropy.table import Table
 from astropy import table
+from astropy.convolution import Gaussian1DKernel, convolve
 from icemodels import fluxes_in_filters
 
 from astroquery.svo_fps import SvoFps
@@ -19,6 +20,8 @@ jfilts.add_index('filterID')
 filter_ids = [fid for fid in jfilts['filterID'] if fid.startswith('JWST/NIRCam')]
 filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
 transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
+
+max_flux = 1*u.Jy
 
 
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
@@ -45,8 +48,19 @@ else:
                 spectable = table.vstack([spectable, spectable2])
                 spectable.sort('WAVELENGTH')
 
+            # remove super high values
+            spectable['FLUX'] = np.clip(spectable['FLUX'], 0, max_flux.value)
+
+            def fixed_flux(fluxes, threshold=0.2):
+                n_nans = np.sum(np.isnan(fluxes))
+                if n_nans / len(fluxes) < threshold:
+                    fluxes = fluxes.copy()
+                    fluxes_conv = convolve(fluxes, Gaussian1DKernel(stddev=10))
+                    fluxes[np.isnan(fluxes)] = fluxes_conv[np.isnan(fluxes)]
+                return fluxes
+
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                             spectable['FLUX'].quantity,
+                                             fixed_flux(spectable['FLUX'].quantity),
                                              filterids=filter_ids, transdata=transdata)
             nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
                                  if nirspec_flxd[key] > 0 else np.nan
@@ -165,14 +179,15 @@ if __name__ == '__main__':
         warnings.simplefilter('ignore')
         for filters, setname in ((['JWST/NIRCam.F182M',
                                    'JWST/NIRCam.F212N',
+                                   'JWST/NIRCam.F405N',
                                    'JWST/NIRCam.F410M',
                                    'JWST/NIRCam.F466N',],
                                   '2221'),
                                 (['JWST/NIRCam.F115W',
-                                   'JWST/NIRCam.F200W',
-                                   'JWST/NIRCam.F356W',
-                                   'JWST/NIRCam.F444W',
-                                   ], '1182'),
+                                  'JWST/NIRCam.F200W',
+                                  'JWST/NIRCam.F356W',
+                                  'JWST/NIRCam.F444W',
+                                  ], '1182'),
                                 ):
             for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
                 fh = fits.open(fn)
@@ -197,6 +212,12 @@ if __name__ == '__main__':
                     spectable2 = Table.read(fn2, hdu=1)
                     spectable = table.vstack([spectable, spectable2])
                     spectable.sort('WAVELENGTH')
+                    fh2 = fits.open(fn2)
+                    grating2 = fh2[0].header['GRATING']
+                else:
+                    grating2 = ''
+
+                spectable['FLUX'][spectable['FLUX_ERROR'] > max_flux.value] = np.nan
 
                 sp = pyspeckit.Spectrum(xarr=spectable['WAVELENGTH'].quantity,
                                         data=spectable['FLUX'].quantity,
@@ -231,9 +252,9 @@ if __name__ == '__main__':
                         raise ValueError(f"There are multiple rows matching target={targ}, grating={grating}, object={srcname}.  There was no slitid {slitid} to distinguish them.")
 
                 if 'MSA_Cat' in targ:
-                    sp.specname = f'{slitid} {grating}'
+                    sp.specname = f'{slitid} {grating} {grating2}'
                 else:
-                    sp.specname = f'{targ} {grating}'
+                    sp.specname = f'{targ} {grating} {grating2}'
                 sp.plotter()
                 sp.plotter.axis.set_xlabel("Wavelength [$\\mu m$]")
 
@@ -248,6 +269,8 @@ if __name__ == '__main__':
                         mag = row[key].max()
                     if pl.ylim()[0] < 0:
                         pl.ylim(0, pl.ylim()[1])
+                    if pl.ylim()[1] > max_flux.value:
+                        pl.ylim(0, max_flux.value)
                     mid = np.array(pl.ylim()).mean()
                     pl.plot(transdata[key]['Wavelength']/1e4, transdata[key]['Transmission'] * mid, linewidth=0.5,
                             label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
@@ -256,9 +279,10 @@ if __name__ == '__main__':
                     pl.plot([], [], label=f'[F182M] - [F212N] = {mags["F182M"] - mags["F212N"]:0.2f}')
                     pl.plot([], [], label=f'[F212N] - [F466N] = {mags["F212N"] - mags["F466N"]:0.2f}')
                     pl.plot([], [], label=f'[F410M] - [F466N] = {mags["F410M"] - mags["F466N"]:0.2f}')
+                    pl.plot([], [], label=f'[F405N] - [F410M] = {mags["F405N"] - mags["F410M"]:0.2f}')
                 elif setname == '1182':
                     pl.plot([], [], label=f'[F115W] - [F200W] = {mags["F115W"] - mags["F200W"]:0.2f}')
                     pl.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}')
                     pl.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}')
                 pl.legend(loc='best');
-                pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}.png', dpi=150)
+                pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}.png', dpi=150)

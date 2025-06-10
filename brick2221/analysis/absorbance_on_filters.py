@@ -70,6 +70,8 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
                 linestyle='-',
                 color=colors[ii] if colors is not None else None,
                 )
+        # DEBUG if colors is not None:
+        # DEBUG     print(f"table {ii} plotted with color {colors[ii]} [{tb.meta['composition']}].  colors={colors}")
     pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
     pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
@@ -86,6 +88,11 @@ def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18):
 
 if __name__ == "__main__":
 
+    default_colors = list(pl.rcParams['axes.prop_cycle'].by_key()['color'])
+    if default_colors[1] != '#ff7f0e':
+        print("DANGER: default colors broke.  Setting them back to normal.")
+        pl.rcParams['axes.prop_cycle'] = cycler(color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'])
+
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa))
     plot_filters()
@@ -98,7 +105,10 @@ if __name__ == "__main__":
     pl.xlim(4.55, 4.75);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withhudgins.png', dpi=150, bbox_inches='tight')
 
+    # BROKEN for no reason!?!?!?!?!?!?!?!?
     default_colors = list(pl.rcParams['axes.prop_cycle'].by_key()['color'])
+    default_colors =['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    print(f"default_colors: {default_colors}")
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, ocn),
                        colors=[default_colors[ii] for ii  in [0,1,3]]
@@ -114,6 +124,15 @@ if __name__ == "__main__":
     plot_filters()
     pl.xlim(3.71, 4.75);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_and_f410.png', dpi=150, bbox_inches='tight')
+
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,),
+                        colors=[default_colors[ii] for ii  in [0,1,2]]
+                        )
+    #plot_filters()
+    pl.xlim(1.11, 5.10);
+    pl.ylim(1e-22, 6e-18);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_full_range.png', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol ))

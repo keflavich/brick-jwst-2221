@@ -5,6 +5,10 @@ import matplotlib.pyplot as pl
 import mpl_plot_templates
 from molmass import Formula
 import re
+from astropy.wcs import WCS
+from astropy.io import fits
+from regions import Regions
+import regions
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
@@ -92,7 +96,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             abundance=(percent_ice/100)*carbon_abundance,
                             molids=np.unique(dmag_mine['mol_id']),
                             molcomps=None,
-                            av_start=20,
+                            av_start=15,
                             max_column=2e20,
                             icemol='CO',
                             icemol2=None,
@@ -104,14 +108,17 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             exclude=~ok,
                             iceage=False,
                             nirspec_archive=True,
-                            iso_archive=True,
+                            iso_archive=False,
                             pure_ice_no_dust=False,
                             cloudc=False,
                             cloudccat=None,
                             plot_brick=True,
+                            ax=None,
                             ):
     """
     """
+    if ax is None:
+        ax = pl.gca()
     if plot_brick:
         plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
                     color2=[x.lower() for x in color2], sel=False,
@@ -126,7 +133,21 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         pl.ylabel(f"{color2[0]} - {color2[1]}")
 
     if cloudc and cloudccat is not None:
-        plot_tools.ccd(Table(cloudccat), ax=pl.gca(), color1=[x.lower() for x in color1],
+
+        ww = WCS(fits.getheader('/orange/adamginsburg/jwst/cloudc/images/F182_reproj_merged-fortricolor.fits'))
+        crds_cloudc = cloudccat['skycoord_ref']
+        cloudc_regions = [y for x in [
+            '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc1.region',
+            '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc2.region',
+            '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudd.region']
+                    for y in regions.Regions.read(x)
+        ]
+        cloudc_sel = np.any([reg.contains(crds_cloudc, ww) for reg in cloudc_regions], axis=0)
+        lactea_filament_regions = regions.Regions.read('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_long.region')[0]
+        lactea_sel = lactea_filament_regions.contains(crds_cloudc, ww)
+
+
+        plot_tools.ccd(Table(cloudccat)[cloudc_sel], ax=pl.gca(), color1=[x.lower() for x in color1],
                        color2=[x.lower() for x in color2], sel=False,
                        ext=ext,
                        color='g',
@@ -136,6 +157,22 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                        head_width=0,
                        exclude=None,
                        zorder=-5,
+                       selcolor=None,
+                       label='Cloud C'
+                       )
+
+        plot_tools.ccd(Table(cloudccat)[lactea_sel], ax=pl.gca(), color1=[x.lower() for x in color1],
+                       color2=[x.lower() for x in color2], sel=False,
+                       ext=ext,
+                       color='r',
+                       alpha=0.5,
+                       markersize=2,
+                       extvec_scale=0,
+                       head_width=0,
+                       exclude=None,
+                       zorder=-5,
+                       selcolor=None,
+                       label='3 kpc arm filament'
                        )
 
     if iceage:
@@ -164,6 +201,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
               ~(nirspecarchive_mags['JWST/NIRCam.'+color2[1]].mask))
         p3222 = nirspecarchive_mags['Program'] == '03222'
         p5804 = nirspecarchive_mags['Program'] == '05804'
+        p1611 = nirspecarchive_mags['Program'] == '01611'
 
         pl.scatter(c1nirspecarchive[ok & p3222],
                    c2nirspecarchive[ok & p3222],
@@ -171,6 +209,9 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         pl.scatter(c1nirspecarchive[ok & p5804],
                    c2nirspecarchive[ok & p5804],
                    s=25, c='m', marker='+', label='NIRSpec 5804 (HOPS YSO)')
+        pl.scatter(c1nirspecarchive[ok & p1611],
+                   c2nirspecarchive[ok & p1611],
+                   s=25, c='b', marker='1', label='NIRSpec 1611 (Serpens)')
 
     if iso_archive:
         isodir = '/orange/adamginsburg/ice/iso/library/swsatlas/'
@@ -344,15 +385,18 @@ if __name__ == "__main__":
     percent = 25
 
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                 (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
                                  (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.0)),
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F162M', 'F212N'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
+                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
                                 ):
         pl.figure();
         molcomps = [
@@ -385,14 +429,17 @@ if __name__ == "__main__":
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1.png', bbox_inches='tight', dpi=150)
 
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                 (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
                                  (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.0)),
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
+                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
                                 ):
         pl.figure();
         molcomps = [
@@ -402,12 +449,14 @@ if __name__ == "__main__":
                                             ('H2O:CO:CO2 (5:1:1)', 25.0),
                                             ('H2O:CO:CO2 (10:1:1)', 25.0),
                                             ('H2O:CO:CO2 (10:1:0.5)', 25.0),
-                                            ('H2O:CO (1:1)', 25.0),
-                                            ('H2O:CO (3:1)', 25.0),
-                                            ('H2O:CO (5:1)', 25.0),
-                                            ('H2O:CO (10:1)', 25.0),
-                                            ('H2O:CO (15:1)', 25.0),
-                                            ('H2O:CO (20:1)', 25.0),
+                                            ('H2O:CO:CO2 (15:1:1)', 25.0),
+                                            ('H2O:CO:CO2 (20:1:1)', 25.0),
+                                            # ('H2O:CO (1:1)', 25.0),
+                                            # ('H2O:CO (3:1)', 25.0),
+                                            # ('H2O:CO (5:1)', 25.0),
+                                            # ('H2O:CO (10:1)', 25.0),
+                                            # ('H2O:CO (15:1)', 25.0),
+                                            # ('H2O:CO (20:1)', 25.0),
                                             ('H2O:CO:CO2:CH3OH (1:1:1:1)', 25.0),
                                             ('H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:1:1:1)', 25.0),
         ]
@@ -422,6 +471,20 @@ if __name__ == "__main__":
         pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2.png', bbox_inches='tight', dpi=150)
+
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                              molcomps=molcomps,
+        # molids=[0,1,2,3,4,5,18,24,25,26,27],
+                                                                                        #abundance=3e-4,
+                                                                                        #nh2_to_av=1e22,
+                                                                                        abundance=(percent/100.)*carbon_abundance,
+                                                                                        cloudc=True,
+                                                                                        cloudccat=cloudccat.catalog,
+                                                                                        max_column=2e20)
+        pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+        pl.axis(lims);
+        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC.png', bbox_inches='tight', dpi=150)
 
     pl.close('all')
 
@@ -457,7 +520,9 @@ if __name__ == "__main__":
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
                                 ):
         pl.figure();
         molcomps = [('CO:OCN (1:1)', 25.0),
@@ -483,7 +548,7 @@ if __name__ == "__main__":
                                  #(['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  #(['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 1.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
                                 ):
         pl.figure();
         molcomps = [('CO:OCN (1:1)', 25.0),
