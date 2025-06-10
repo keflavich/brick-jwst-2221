@@ -18,7 +18,8 @@ Observations.download_products(products)
 # JOYS: Sources targeted within the GTO programs 1290 (PI: E. F. van Dishoeck), 1236 (PI: M.E. Ressler), 1257 (PI: T. P. Ray), 1186 (PI: T. P. Greene) and the GO program 1960 (PI: E. F. van Dishoeck)
 # 1939: galcen
 # 3222: IRAS16293 "Cask-strength clouds: high percentage of methanol and HDO ices"
-for proposal_id in [1959, 1854, 3222, 3702, 4358, 5437, 5804, 5064, 6095, 6161, 1309, 1611, 3222, 5552, 1939, 1236, 1257, 1186, 1960, 1290, 5791, ]:
+# 2151: only MIRI MRS
+for proposal_id in [1959, 2640, 1960, 1854, 3222, 3702, 4358, 5437, 5804, 5064, 6095, 6161, 1309, 1611, 3222, 5552, 1939, 1236, 1257, 1186, 1960, 1290, 5791, 5437]:
     obstable = Observations.query_criteria(project='JWST', instrument_name='NIRSpec*', proposal_id=proposal_id)
     if len(obstable) > 0:
         for ii in range(len(obstable)):

@@ -34,11 +34,11 @@ import PIL
 import pyavm
 
 import pylab as pl
-pl.rcParams['figure.facecolor'] = 'w'
-pl.rcParams['image.origin'] = 'lower'
-pl.rcParams['figure.figsize'] = (10,8)
-pl.rcParams['figure.dpi'] = 100
-pl.rcParams['font.size'] = 16
+# pl.rcParams['figure.facecolor'] = 'w'
+# pl.rcParams['image.origin'] = 'lower'
+# pl.rcParams['figure.figsize'] = (10,8)
+# pl.rcParams['figure.dpi'] = 100
+# pl.rcParams['font.size'] = 16
 from astropy.table import Table
 from astropy import units as u
 

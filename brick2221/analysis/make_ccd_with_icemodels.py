@@ -296,7 +296,8 @@ if __name__ == "__main__":
                                  (['F356W', 'F405N'], ['F405N', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F356W', 'F466N'], ['F466N', 'F444W'], (-0.75, 1, -0.5, 1.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
                                 ):
@@ -391,8 +392,8 @@ if __name__ == "__main__":
                                  (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F162M', 'F212N'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
@@ -428,6 +429,8 @@ if __name__ == "__main__":
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1.png', bbox_inches='tight', dpi=150)
 
+    pl.close('all')
+
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
@@ -435,8 +438,8 @@ if __name__ == "__main__":
                                  (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
@@ -472,19 +475,24 @@ if __name__ == "__main__":
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2.png', bbox_inches='tight', dpi=150)
 
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                              molcomps=molcomps,
-        # molids=[0,1,2,3,4,5,18,24,25,26,27],
-                                                                                        #abundance=3e-4,
-                                                                                        #nh2_to_av=1e22,
-                                                                                        abundance=(percent/100.)*carbon_abundance,
-                                                                                        cloudc=True,
-                                                                                        cloudccat=cloudccat.catalog,
-                                                                                        max_column=2e20)
-        pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
-        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC.png', bbox_inches='tight', dpi=150)
+        try:
+            pl.figure()
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=molcomps,
+            # molids=[0,1,2,3,4,5,18,24,25,26,27],
+                                                                                            #abundance=3e-4,
+                                                                                            #nh2_to_av=1e22,
+                                                                                            abundance=(percent/100.)*carbon_abundance,
+                                                                                            cloudc=True,
+                                                                                            cloudccat=cloudccat.catalog,
+                                                                                            max_column=2e20)
+            pl.legend(loc='upper left', bbox_to_anchor=(1,1,0,0))
+            pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC.png', bbox_inches='tight', dpi=150)
+        except KeyError:
+            print(f"No cloudc for {color1} {color2}")
+            continue
 
     pl.close('all')
 
@@ -520,8 +528,8 @@ if __name__ == "__main__":
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
+                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
                                  (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
                                 ):
         pl.figure();
@@ -548,7 +556,7 @@ if __name__ == "__main__":
                                  #(['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  #(['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.0)),
+                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
                                 ):
         pl.figure();
         molcomps = [('CO:OCN (1:1)', 25.0),
