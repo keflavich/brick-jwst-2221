@@ -626,3 +626,29 @@ if __name__ == "__main__":
         pl.axis((0, 15, -0.5, 1.5));
         pl.title(f"25% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
         pl.close('all')
+
+    pl.figure()
+    color1 = ['F182M', 'F212N']
+    color2 = ['F405N', 'F410M']
+    molcomps = [
+        ('Hudgins', ('CO2 (1)', '70K')),
+        ('Gerakines', ('CO2 (1)', '70K')),
+        ('Hudgins', ('CO2 (1)', '10K')),
+        ('Ehrenfreund', ('CO2 (1)', '10K')),
+        ('Hudgins', ('CO2 (1)', '30K')),
+        ('Hudgins', ('CO2 (1)', '50K')),
+        ('Ehrenfreund', ('CO2 (1)', '50K')),
+        ('Gerakines', ('CO2 (1)', '8K')),
+    ]
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(
+        color1, color2,
+        molcomps=molcomps,
+        dmag_tbl=dmag_all.loc['database', 'mymix'],
+        axlims=(0, 3, -1.5, 1.0),
+        abundance=(percent_ice/100.)*carbon_abundance,
+        max_column=5e19
+    )
+    pl.legend(loc='upper left', bbox_to_anchor=(1, 1, 0, 0))
+    pl.title(f"{percent_ice}% of C in ice, $N_{{max}}$ = 5e19 cm$^{{-2}}$")
+    pl.savefig(f'{basepath}/figures/CCD_icemodel_F182M-F212N_F405N-F410M_CO2only.png', bbox_inches='tight', dpi=150)
+    pl.close()
