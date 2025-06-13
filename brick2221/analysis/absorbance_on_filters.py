@@ -126,6 +126,12 @@ if __name__ == "__main__":
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_and_f410.png', dpi=150, bbox_inches='tight')
 
     pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
+    plot_filters(['F466N', 'F410M', 'F405N'])
+    pl.xlim(3.71, 4.75);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.png', dpi=150, bbox_inches='tight')
+
+    pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,),
                         colors=[default_colors[ii] for ii  in [0,1,2]]
                         )

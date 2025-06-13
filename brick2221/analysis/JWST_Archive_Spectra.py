@@ -207,13 +207,17 @@ if __name__ == '__main__':
                     grating_ids = [os.path.basename(fn).split("_")[-2] for fn in other_gratings]
                     if len(other_gratings) > 2 and len(other_gratings) != len(set(grating_ids)):
                         raise ValueError(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
-                    #print(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
                     fn2 = other_gratings[0]
-                    spectable2 = Table.read(fn2, hdu=1)
-                    spectable = table.vstack([spectable, spectable2])
-                    spectable.sort('WAVELENGTH')
                     fh2 = fits.open(fn2)
                     grating2 = fh2[0].header['GRATING']
+                    if grating2 != grating:
+                        #print(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
+                        spectable2 = Table.read(fn2, hdu=1)
+                        spectable = table.vstack([spectable, spectable2])
+                        spectable.sort('WAVELENGTH')
+                    else:
+                        print(f"File {fn2} has the same grating {grating2} as {fn}, skipping")
+                        grating2 = ''
                 else:
                     grating2 = ''
 
@@ -276,13 +280,13 @@ if __name__ == '__main__':
                             label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
                         )
                 if setname == '2221':
-                    pl.plot([], [], label=f'[F182M] - [F212N] = {mags["F182M"] - mags["F212N"]:0.2f}')
-                    pl.plot([], [], label=f'[F212N] - [F466N] = {mags["F212N"] - mags["F466N"]:0.2f}')
-                    pl.plot([], [], label=f'[F410M] - [F466N] = {mags["F410M"] - mags["F466N"]:0.2f}')
-                    pl.plot([], [], label=f'[F405N] - [F410M] = {mags["F405N"] - mags["F410M"]:0.2f}')
+                    pl.plot([], [], label=f'[F182M] - [F212N] = {mags["F182M"] - mags["F212N"]:0.2f}', linestyle='none', color='k')
+                    pl.plot([], [], label=f'[F212N] - [F466N] = {mags["F212N"] - mags["F466N"]:0.2f}', linestyle='none', color='k')
+                    pl.plot([], [], label=f'[F410M] - [F466N] = {mags["F410M"] - mags["F466N"]:0.2f}', linestyle='none', color='k')
+                    pl.plot([], [], label=f'[F405N] - [F410M] = {mags["F405N"] - mags["F410M"]:0.2f}', linestyle='none', color='k')
                 elif setname == '1182':
-                    pl.plot([], [], label=f'[F115W] - [F200W] = {mags["F115W"] - mags["F200W"]:0.2f}')
-                    pl.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}')
-                    pl.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}')
+                    pl.plot([], [], label=f'[F115W] - [F200W] = {mags["F115W"] - mags["F200W"]:0.2f}', linestyle='none', color='k')
+                    pl.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
+                    pl.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
                 pl.legend(loc='best');
                 pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}.png', dpi=150)
