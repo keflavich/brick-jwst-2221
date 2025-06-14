@@ -71,6 +71,7 @@ dmag_all.add_index('mol_id')
 dmag_all.add_index('composition')
 dmag_all.add_index('temperature')
 dmag_all.add_index('database')
+dmag_all.add_index('author')
 
 assert 'F277W' in dmag_all.colnames, f'F277W not in dmag_all.colnames'
 
