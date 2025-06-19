@@ -32,7 +32,7 @@ import dust_extinction
 from dust_extinction.parameter_averages import CCM89
 from dust_extinction.averages import RRP89_MWGC, CT06_MWGC, F11_MWGC
 
-from icemodels.core import composition_to_molweight
+from icemodels.core import composition_to_molweight, molscomps
 
 import PIL
 import pyavm
@@ -140,19 +140,3 @@ def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F4
                                           fp=cols[sortorder][cols<1e21])
 
     return inferred_molecular_column
-
-
-def molscomps(comp):
-    if len(comp.split(" ")) == 2:
-        mols, comps = comp.split(" ")
-        comps = list(map(float, re.split("[: ]", comps.strip("()"))))
-        mols = re.split("[: ]", mols)
-    elif len(comp.split(" (")) == 1:
-        mols = [comp]
-        comps = [1]
-    else:
-        mols, comps = comp.split(" (")
-        comps = list(map(float, re.split("[: ]", comps.strip(")"))))
-        mols = re.split("[: ]", mols)
-
-    return mols, comps

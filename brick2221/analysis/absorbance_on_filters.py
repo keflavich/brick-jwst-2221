@@ -50,10 +50,11 @@ co_gerakines = gerakines = retrieve_gerakines_co()
 #nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/273_NH3_(1)_40K_Roser.txt')
 #nh3 = read_lida_file(f'{optical_constants_cache_dir}/116_NH3_1_27.0K.txt')
 nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
+water_ammonia = read_ocdb_file(f'{optical_constants_cache_dir}/265_H2O:NH3_(4:1)_24K_Mukai.txt')
 co_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/85_CO_(1)_10K_Hudgins.txt')
 
 
-def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, ),
+def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, water_ammonia),
                         colors=None,
                         ylim=(1e-21, 6e-18)):
     for ii, tb in enumerate(opacity_tables):
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_full_range.png', dpi=150, bbox_inches='tight')
 
     pl.figure()
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol ))
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia))
     plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
     pl.xlim(3.00, 5.05);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f356_and_f444.png', dpi=150, bbox_inches='tight')

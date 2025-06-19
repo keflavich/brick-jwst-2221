@@ -51,6 +51,14 @@ else:
             # remove super high values
             spectable['FLUX'] = np.clip(spectable['FLUX'], 0, max_flux.value)
 
+            # Remove only positive outliers using sigma clipping
+            from astropy.stats import sigma_clip
+            mean_flux = np.nanmean(spectable['FLUX'])
+            std_flux = np.nanstd(spectable['FLUX'])
+            bad_flux = spectable['FLUX'] > mean_flux + 10*std_flux
+            print(f"Removing {bad_flux.sum()} pixels with flux > {mean_flux + 10*std_flux}.  These will be infilled by interpolation.")
+            spectable['FLUX'][bad_flux] = np.nan
+
             def fixed_flux(fluxes, threshold=0.2):
                 n_nans = np.sum(np.isnan(fluxes))
                 if n_nans / len(fluxes) < threshold:
@@ -65,7 +73,6 @@ else:
             nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
                                  if nirspec_flxd[key] > 0 else np.nan
                             for key in nirspec_flxd}
-
             nirspec_flxd_nonan = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
                                              np.nan_to_num(spectable['FLUX'].quantity),
                                              filterids=filter_ids, transdata=transdata)
@@ -81,6 +88,13 @@ else:
             nirspec_mags_nonan = {key: np.nan if (nirspec_mags_nonan[key] > 26) or (nirspec_mags_nonan[key] < 2) else nirspec_mags_nonan[key]
                             for key in nirspec_mags_nonan}
 
+            nirspec_mags['wl_min'] = spectable['WAVELENGTH'].quantity.min()
+            nirspec_mags['wl_max'] = spectable['WAVELENGTH'].quantity.max()
+
+            # do this after filtering to avoid quantity comparison failures
+            for key in nirspec_flxd:
+                nirspec_mags[key+"_flx"] = nirspec_flxd[key]
+
             nirspec_mags['Target'] = fh[0].header['TARGNAME']
             if nirspec_mags['Target'] == '':
                 nirspec_mags['Target'] = fh[0].header['TARGPROP']
@@ -91,6 +105,12 @@ else:
                 nirspec_mags['Program'] = fh[0].header['PROGRAM']
             except KeyError:
                 nirspec_mags['Program'] = fh[1].header['PROGRAM']
+
+            if len(other_gratings) > 0:
+                fh2 = fits.open(fn2)
+                nirspec_mags['Grating2'] = fh2[0].header['GRATING']
+            else:
+                nirspec_mags['Grating2'] = ''
 
             try:
                 nirspec_mags['Object'] = fh[1].header['SRCNAME']
@@ -121,6 +141,15 @@ else:
             if 'SLIT_RA' in fh[0].header:
                 nirspec_mags['RA'] = fh[0].header['SLIT_RA']
                 nirspec_mags['Dec'] = fh[0].header['SLIT_DEC']
+
+
+            # flag out bad spectra
+            # if slitid, reason_bad in {'none': 'foo'}:
+            #     nirspec_mags['bad'] = True
+            #     nirspec_mags['bad_reason'] = reason_bad
+            # else:
+            #     nirspec_mags['bad'] = False
+
             nirspec_data.append(nirspec_mags)
 
     tbl = Table(nirspec_data)
@@ -234,6 +263,7 @@ if __name__ == '__main__':
                     row = row.loc[('Object', srcname)]
 
 
+                program = fh[0].header['PROGRAM']
                 obsid = fh[0].header['OBSERVTN']
                 visitid = fh[0].header['VISIT']
                 visitgroupid = fh[0].header['VISITGRP']
@@ -257,6 +287,8 @@ if __name__ == '__main__':
 
                 if 'MSA_Cat' in targ:
                     sp.specname = f'{slitid} {grating} {grating2}'
+                elif targ == 'Serpens_Targets':
+                    sp.specname = f'Serpens {slitid} {grating} {grating2}'
                 else:
                     sp.specname = f'{targ} {grating} {grating2}'
                 sp.plotter()
@@ -287,6 +319,16 @@ if __name__ == '__main__':
                 elif setname == '1182':
                     pl.plot([], [], label=f'[F115W] - [F200W] = {mags["F115W"] - mags["F200W"]:0.2f}', linestyle='none', color='k')
                     pl.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
+                    pl.plot([], [], label=f'[F200W] - [F356W] = {mags["F200W"] - mags["F356W"]:0.2f}', linestyle='none', color='k')
                     pl.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
                 pl.legend(loc='best');
-                pl.savefig(f'{nirspec_dir}/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}.png', dpi=150)
+                # if row['bad']:
+                #     title = pl.title()
+                #     pl.title(f'BAD: {title}')
+                #     # Add red X across the figure
+                #     xlim = pl.xlim()
+                #     ylim = pl.ylim()
+                #     pl.plot([xlim[0], xlim[1]], [ylim[0], ylim[1]], 'r-', linewidth=2, alpha=0.7)
+                #     pl.plot([xlim[0], xlim[1]], [ylim[1], ylim[0]], 'r-', linewidth=2, alpha=0.7)
+
+                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.png', dpi=150)

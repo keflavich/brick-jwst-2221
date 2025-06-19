@@ -115,6 +115,9 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             cloudccat=None,
                             plot_brick=True,
                             ax=None,
+                            label_author=False,
+                            label_temperature=False,
+                            av_scale=30,
                             ):
     """
     """
@@ -125,9 +128,10 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                     color2=[x.lower() for x in color2], sel=False,
                     markersize=2,
                     ext=ext,
-                    extvec_scale=30,
+                    extvec_scale=av_scale,
                     head_width=0.1,
                     allow_missing=True,
+                    alpha=0.25,
                     exclude=exclude)
     else:
         pl.xlabel(f"{color1[0]} - {color1[1]}")
@@ -190,12 +194,17 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
         nirspecarchive_mags = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
 
+        # 24th mag is roughly too faint in the wide bands
         c1nirspecarchive = nirspecarchive_mags['JWST/NIRCam.'+color1[0]] - nirspecarchive_mags['JWST/NIRCam.'+color1[1]]
         c2nirspecarchive = nirspecarchive_mags['JWST/NIRCam.'+color2[0]] - nirspecarchive_mags['JWST/NIRCam.'+color2[1]]
         ok = ((nirspecarchive_mags['JWST/NIRCam.'+color1[0]] != 0) &
               (nirspecarchive_mags['JWST/NIRCam.'+color1[1]] != 0) &
               (nirspecarchive_mags['JWST/NIRCam.'+color2[0]] != 0) &
               (nirspecarchive_mags['JWST/NIRCam.'+color2[1]] != 0) &
+              (nirspecarchive_mags['JWST/NIRCam.'+color1[0]] < 20) &
+              (nirspecarchive_mags['JWST/NIRCam.'+color1[1]] < 20) &
+              (nirspecarchive_mags['JWST/NIRCam.'+color2[0]] < 20) &
+              (nirspecarchive_mags['JWST/NIRCam.'+color2[1]] < 20) &
               ~(nirspecarchive_mags['JWST/NIRCam.'+color1[0]].mask) &
               ~(nirspecarchive_mags['JWST/NIRCam.'+color1[1]].mask) &
               ~(nirspecarchive_mags['JWST/NIRCam.'+color2[0]].mask) &
@@ -225,25 +234,30 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                        s=25, c='b', marker='x', label='ISO')
 
     # Now use the model plotting from colorcolordiagrams
-    return plot_ccd_icemodels(
-        color1=color1,
-        color2=color2,
-        dmag_tbl=dmag_tbl,
-        molcomps=molcomps,
-        molids=molids,
-        axlims=axlims,
-        nh2_to_av=nh2_to_av,
-        abundance=abundance,
-        av_start=av_start,
-        max_column=max_column,
-        icemol=icemol,
-        icemol2=icemol2,
-        icemol2_col=icemol2_col,
-        icemol2_abund=icemol2_abund,
-        ext=ext,
-        temperature_id=temperature_id,
-        pure_ice_no_dust=pure_ice_no_dust,
-    )
+    if molcomps:
+        return plot_ccd_icemodels(
+            color1=color1,
+            color2=color2,
+            dmag_tbl=dmag_tbl,
+            molcomps=molcomps,
+            molids=molids,
+            axlims=axlims,
+            nh2_to_av=nh2_to_av,
+            abundance=abundance,
+            av_start=av_start,
+            max_column=max_column,
+            icemol=icemol,
+            icemol2=icemol2,
+            icemol2_col=icemol2_col,
+            icemol2_abund=icemol2_abund,
+            ext=ext,
+            temperature_id=temperature_id,
+            pure_ice_no_dust=pure_ice_no_dust,
+            label_author=label_author,
+            label_temperature=label_temperature,
+        )
+    else:
+        return [None] * 8
 
 if __name__ == "__main__":
 
@@ -282,7 +296,30 @@ if __name__ == "__main__":
                                                                                           icemol2='H2O', icemol2_col=1e19, abundance=(percent_ice/100)*carbon_abundance, icemol2_abund=(percent_ice/100)*oxygen_abundance)
     pl.title(f"{percent_ice}% of CO in ice, N(CO)$_{{max}}$=$2\\times10^{{20}}$ cm$^{{-2}}$")# , dots show N(H$_2$O)=$10^{19}$ cm$^{-2}$")
     pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
+    pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_h2oco.png', bbox_inches='tight', dpi=150)
 
+    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -0.5, 4], molcomps=molcomps,
+                                                                                          dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                          icemol2='H2O',
+                                                                                          icemol2_col=1e19,
+                                                                                          abundance=(percent_ice/100)*carbon_abundance,
+                                                                                          icemol2_abund=(percent_ice/100)*oxygen_abundance,
+                                                                                          nirspec_archive=False,
+                                                                                          )
+    blue_410466 = basetable[basetable['mag_ab_f410m'] - basetable['mag_ab_f466n'] < -0.20]
+    plot_tools.ccd(basetable, ax=pl.gca(), color1=[x.lower() for x in color1],
+                    color2=[x.lower() for x in color2], sel=False,
+                    markersize=2,
+                    ext=ext,
+                    extvec_scale=0,
+                    head_width=0,
+                    allow_missing=True,
+                    color='r',
+                    label='Brick [blue 410-466]',
+                    exclude=~ok)
+    pl.title(f"{percent_ice}% of CO in ice, N(CO)$_{{max}}$=$2\\times10^{{20}}$ cm$^{{-2}}$")# , dots show N(H$_2$O)=$10^{19}$ cm$^{-2}$")
+    pl.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0, 0, 0))
+    pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_h2oco_withsel.png', bbox_inches='tight', dpi=150)
 
 
     # Search for models that can explain the wide-band filters
@@ -292,6 +329,7 @@ if __name__ == "__main__":
                                  (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                 (['F182M', 'F212N'], ['F356W', 'F444W'], (0, 3, -0.5, 1.5)),
                                  (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F356W', 'F405N'], ['F405N', 'F444W'], (-0.5, 2, -0.5, 0.5)),
@@ -399,6 +437,7 @@ if __name__ == "__main__":
                                  (['F162M', 'F212N'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
+                                 (['F200W', 'F212N'], ['F405N', 'F410M'], (-1, 1, -0.4, 0.2)),
                                 ):
         pl.figure();
         molcomps = [
@@ -436,6 +475,7 @@ if __name__ == "__main__":
                                  (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                 (['F182M', 'F212N'], ['F356W', 'F444W'], (0, 3, -0.5, 1.5)),
                                  (['F115W', 'F200W'], ['F200W', 'F444W'], (0, 20, -0.5, 4.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
@@ -444,6 +484,7 @@ if __name__ == "__main__":
                                  (['F162M', 'F210M'], ['F360M', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F466N', 'F480M'], (-0.2, 10, -1, 2.5)),
                                  (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
+                                 (['F200W', 'F212N'], ['F405N', 'F410M'], (-1, 1, -0.4, 0.2)),
                                 ):
         pl.figure();
         molcomps = [
@@ -546,11 +587,13 @@ if __name__ == "__main__":
     for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
                                  (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                  (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                 (['F182M', 'F212N'], ['F356W', 'F444W'], (0, 3, -0.5, 1.5)),
                                  (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
                                  (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
                                  (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
-                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.5)),
+                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.4, 0.2)),
+                                 (['F200W', 'F212N'], ['F405N', 'F410M'], (-1, 1, -0.4, 0.2)),
                                 ):
         pl.figure();
         molcomps = [('CO:OCN (1:1)', 25.0),
@@ -644,10 +687,13 @@ if __name__ == "__main__":
     a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(
         color1, color2,
         molcomps=molcomps,
-        dmag_tbl=dmag_all.loc['database', 'mymix'],
-        axlims=(0, 3, -1.5, 1.0),
+        dmag_tbl=dmag_all,
+        axlims=(0, 3, -0.5, 0.2),
         abundance=(percent_ice/100.)*carbon_abundance,
-        max_column=5e19
+        icemol='CO2',
+        max_column=2e19,
+        label_author=True,
+        label_temperature=True,
     )
     pl.legend(loc='upper left', bbox_to_anchor=(1, 1, 0, 0))
     pl.title(f"{percent_ice}% of C in ice, $N_{{max}}$ = 5e19 cm$^{{-2}}$")
