@@ -131,7 +131,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
              threshold=5,
              logy=True,
              color_filter1='F466N',
-             color_filter2='F410M',
+             color_filter2='F405N',
              use_abundance=False,
              ):
 
