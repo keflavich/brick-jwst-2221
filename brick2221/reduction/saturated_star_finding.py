@@ -123,8 +123,8 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
                                for srcid, (szok, slcs) in enumerate(pb(zip(all_ok, slices)))])
         all_ok &= is_star_ok
-        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="")
-        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates")
+        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="", flush=True)
+        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates", flush=True)
 
 
         tbl = Table()
@@ -264,6 +264,7 @@ def iteratively_remove_saturated_stars(data, header,
         often unreliable.  This is probably most important for aperture
         photometry, but it likely also affects PSF fitting.
     """
+    print("Beginning to iteratively remove saturated stars", flush=True)
 
     assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
 
@@ -306,6 +307,7 @@ def iteratively_remove_saturated_stars(data, header,
             sources = finder(resid,
                              mask=ndimage.binary_dilation(resid==0, iterations=1),
                              raise_for_nosources=False, rindsize=rsz)
+            print(f"Found {len(sources)} sources running finder {finder}", flush=True)
         else:
             log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
             continue
@@ -315,7 +317,7 @@ def iteratively_remove_saturated_stars(data, header,
             continue
 
         if verbose:
-            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}")
+            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}", flush=True)
 
         phot = PSFPhotometry(finder=finder,
                              grouper=daogroup,
@@ -335,20 +337,21 @@ def iteratively_remove_saturated_stars(data, header,
 
         #log.info("Doing photometry")
         try:
-            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
             result = phot(resid, mask=mask, progressbar=tqdm)
         except TypeError:
-            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
             result = phot(resid, mask=mask)
 
         result['skycoord_fit'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         results.append(result)
         #log.info(f"Done; len(result) = {len(result)})")
-        print(result)
+        print(result, flush=True)
 
         # manually subtract off PSFs because get_residual_image seems to (never?) work
         # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
         #resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
+        print(f"Making residual image.", flush=True)
         resid = phot.make_residual_image(resid, (fitsz, fitsz), include_localbkg=False)
 
         # reset saturated pixels back to zero
@@ -356,6 +359,7 @@ def iteratively_remove_saturated_stars(data, header,
 
         # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
         # pixels with the values from the fitted model.  This will be tricky.
+        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True)
 
     final_table = table.vstack(results)
 
@@ -373,8 +377,10 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     header = fh[0].header
     if 'CRPIX1' not in header:
         header.update(wcs.WCS(fh['SCI'].header).to_header())
+    print("Running iteratively_remove_saturated_stars", flush=True)
     satstar_table, satstar_resid = iteratively_remove_saturated_stars(data, header, **kwargs)
     satstar_table.meta.update(header)
+    print("Finished iteratively_remove_saturated_stars", flush=True)
 
     satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=True)
     fh['SCI'].data = satstar_resid
@@ -391,7 +397,7 @@ def main():
 
     for module in ('nrca', 'nrcb', 'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
-            remove_saturated_stars(fn)
+            remove_saturated_stars(fn, verbose=True)
 
 
 if __name__ == "__main__":
