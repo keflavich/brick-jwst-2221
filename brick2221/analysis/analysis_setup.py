@@ -16,6 +16,7 @@ from astropy.visualization import simple_norm
 from astropy import wcs
 from astropy import table
 from astropy import units as u
+import re
 
 try:
     from photutils.aperture import CircularAnnulus, CircularAperture
@@ -31,15 +32,17 @@ import dust_extinction
 from dust_extinction.parameter_averages import CCM89
 from dust_extinction.averages import RRP89_MWGC, CT06_MWGC, F11_MWGC
 
+from icemodels.core import composition_to_molweight, molscomps
+
 import PIL
 import pyavm
 
 import pylab as pl
 pl.rcParams['figure.facecolor'] = 'w'
 pl.rcParams['image.origin'] = 'lower'
-pl.rcParams['figure.figsize'] = (10,8)
-pl.rcParams['figure.dpi'] = 100
-pl.rcParams['font.size'] = 16
+# pl.rcParams['figure.figsize'] = (10,8)
+# pl.rcParams['figure.dpi'] = 100
+# pl.rcParams['font.size'] = 16
 
 
 try:
@@ -114,6 +117,26 @@ wwi_short_merged = wcs.WCS(fits.Header.fromstring(avm_nostars.Spatial.FITSheader
 def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
-for module in ('merged', 'merged-reproject'):
-    fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
-    print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
+# for module in ('merged', 'merged-reproject'):
+#     fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
+#     print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
+
+
+def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F410M', filter2='F466N'):
+    dmags1 = dmag_tbl[filter1]
+    dmags2 = dmag_tbl[filter2]
+
+    comp = np.unique(dmag_tbl['composition'])[0]
+    molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+    mols, comps = molscomps(comp)
+    mol_frac = comps[mols.index(icemol)] / sum(comps)
+
+    cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
+
+    dmag_1m2 = np.array(dmags1) - np.array(dmags2)
+    sortorder = np.argsort(dmag_1m2)
+    inferred_molecular_column = np.interp(unextincted_1m2,
+                                          xp=dmag_1m2[sortorder][cols<1e21],
+                                          fp=cols[sortorder][cols<1e21])
+
+    return inferred_molecular_column

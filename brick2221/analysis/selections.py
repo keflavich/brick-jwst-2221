@@ -34,11 +34,11 @@ import PIL
 import pyavm
 
 import pylab as pl
-pl.rcParams['figure.facecolor'] = 'w'
-pl.rcParams['image.origin'] = 'lower'
-pl.rcParams['figure.figsize'] = (10,8)
-pl.rcParams['figure.dpi'] = 100
-pl.rcParams['font.size'] = 16
+# pl.rcParams['figure.facecolor'] = 'w'
+# pl.rcParams['image.origin'] = 'lower'
+# pl.rcParams['figure.figsize'] = (10,8)
+# pl.rcParams['figure.dpi'] = 100
+# pl.rcParams['font.size'] = 16
 from astropy.table import Table
 from astropy import units as u
 
@@ -285,6 +285,7 @@ def load_table(basetable, ww, verbose=False):
     filtconv410 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint']) - abconv.value
     filtconv466 = -2.5*np.log10(1/jfilts.loc['JWST/NIRCam.F466N']['ZeroPoint']) - abconv.value
     zeropoint_offset_410_466 = filtconv410-filtconv466
+
     if verbose:
         print(f'Offset between raw ABmag for F410M-F466N = {filtconv410} - {filtconv466} = {zeropoint_offset_410_466}')
     # May 11, 2024: the new versions of the catalogs don't have this magnitude offset error
@@ -474,13 +475,14 @@ def load_table(basetable, ww, verbose=False):
                 & (basetable['qfit_f182m'] < max_qfit)
                 & (basetable['qfit_f212n'] < max_qfit)
                 & (basetable['qfit_f466n'] < max_qfit))
-        ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
-                & (basetable['emag_ab_f356w'] < 0.1)
-                & (basetable['emag_ab_f200w'] < 0.1)
-                & (basetable['qfit_f444w'] < max_qfit)
-                & (basetable['qfit_f356w'] < max_qfit)
-                & (basetable['qfit_f200w'] < max_qfit)
-                )
+        if 'emag_ab_f444w' in basetable.colnames:
+            ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
+                      & (basetable['emag_ab_f356w'] < 0.1)
+                      & (basetable['emag_ab_f200w'] < 0.1)
+                      & (basetable['qfit_f444w'] < max_qfit)
+                      & (basetable['qfit_f356w'] < max_qfit)
+                      & (basetable['qfit_f200w'] < max_qfit)
+                      )
     elif 'qf_f182m' in basetable.colnames:
         ok2221 = ((basetable['emag_ab_f182m'] < 0.1)
                 & (basetable['emag_ab_f212n'] < 0.1)
@@ -488,20 +490,21 @@ def load_table(basetable, ww, verbose=False):
                 & (basetable['emag_ab_f405n'] < 0.1)
                 & (basetable['emag_ab_f410m'] < 0.1)
                 & (basetable['emag_ab_f187n'] < 0.1)
-                & (basetable['qf_f187n'] < minqf)
-                & (basetable['qf_f410m'] < minqf)
-                & (basetable['qf_f405n'] < minqf)
-                & (basetable['qf_f182m'] < minqf)
-                & (basetable['qf_f212n'] < minqf)
-                & (basetable['qf_f466n'] < minqf)
+                & (basetable['qf_f187n'] > minqf)
+                & (basetable['qf_f410m'] > minqf)
+                & (basetable['qf_f405n'] > minqf)
+                & (basetable['qf_f182m'] > minqf)
+                & (basetable['qf_f212n'] > minqf)
+                & (basetable['qf_f466n'] > minqf)
                 )
-        ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
-                & (basetable['emag_ab_f356w'] < 0.1)
-                & (basetable['emag_ab_f200w'] < 0.1)
-                & (basetable['qf_f444w'] < minqf)
-                & (basetable['qf_f356w'] < minqf)
-                & (basetable['qf_f200w'] < minqf)
-                )
+        if 'emag_ab_f444w' in basetable.colnames:
+            ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
+                    & (basetable['emag_ab_f356w'] < 0.1)
+                    & (basetable['emag_ab_f200w'] < 0.1)
+                    & (basetable['qf_f444w'] > minqf)
+                    & (basetable['qf_f356w'] > minqf)
+                    & (basetable['qf_f200w'] > minqf)
+                    )
     else:
         raise ValueError("What kind of catalog is this?")
 

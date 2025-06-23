@@ -96,7 +96,7 @@ def plot_extvec_ccd(ax, color1, color2, ext=CT06_MWGC(), extvec_scale=200,
              start[1],
              e_1 - e_2,
              e_3 - e_4,
-             color=color, head_width=head_width)
+             color=color, head_width=head_width, label=f'$A_V={extvec_scale}$')
 
 def ccd(basetable,
         ax,
@@ -113,35 +113,45 @@ def ccd(basetable,
         selcolor='r',
         max_uncertainty=None,
         markersize=5,
+        head_width=0.1,
+        extvec_start=(0, 0),
+        allow_missing=False,
         **kwargs
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
     keys2 = [f'mag_ab_{col}' for col in color2]
-    colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
-    colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
 
-    if max_uncertainty is not None:
-        reject_1 = (basetable['e'+keys1[0]] > max_uncertainty) | (basetable['e'+keys1[1]] > max_uncertainty)
-        reject_2 = (basetable['e'+keys2[0]] > max_uncertainty) | (basetable['e'+keys2[1]] > max_uncertainty)
+    try:
+        colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
+        colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
+
+        if max_uncertainty is not None:
+            reject_1 = (basetable['e'+keys1[0]] > max_uncertainty) | (basetable['e'+keys1[1]] > max_uncertainty)
+            reject_2 = (basetable['e'+keys2[0]] > max_uncertainty) | (basetable['e'+keys2[1]] > max_uncertainty)
+            if exclude is None:
+                exclude = reject_1 | reject_2
+            else:
+                exclude = exclude | reject_1 | reject_2
+
         if exclude is None:
-            exclude = reject_1 | reject_2
+            include = slice(None)
         else:
-            exclude = exclude | reject_1 | reject_2
+            include = ~exclude
+            sel = sel & include
 
-    if exclude is None:
-        include = slice(None)
-    else:
-        include = ~exclude
-        sel = sel & include
-
-    ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized)
-    ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized)
+        ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
+        if selcolor is not None:
+            ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
+    except Exception as ex:
+        if not allow_missing:
+            raise ex
     ax.set_xlabel(f"{color1[0]} - {color1[1]}")
     ax.set_ylabel(f"{color2[0]} - {color2[1]}")
     ax.axis(axlims)
-    if ext is not None:
+    if ext is not None and extvec_scale > 0:
         try:
-            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale)
+            plot_extvec_ccd(ax, color1, color2, ext=ext, extvec_scale=extvec_scale,
+                            head_width=head_width, start=extvec_start)
         except Exception as ex:
             print(ex)
 
@@ -153,6 +163,7 @@ def ccds(basetable, sel=True,
          extvec_scale=200,
          rasterized=True,
          gridspec_kwargs={},
+         head_width=0.1,
          **kwargs
         ):
     if fig is None:
@@ -163,7 +174,7 @@ def ccds(basetable, sel=True,
         ax = fig.add_subplot(gridspec[ii])
         ccd(basetable, ax=ax, color1=color1, color2=color2,
             axlims=axlims, sel=sel,
-            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale,
+            rasterized=rasterized, ext=ext, extvec_scale=extvec_scale, head_width=head_width,
             **kwargs)
 
     fig.subplots_adjust(**gridspec_kwargs)
@@ -177,6 +188,7 @@ def cmds(basetable, sel=True,
          ext=CT06_MWGC(),
          fig=None,
          extvec_scale=30,
+         head_width=0.5,
          markersize=5,
          rasterized=True,
          exclude=False,
@@ -230,7 +242,7 @@ def cmds(basetable, sel=True,
             e_1 = ext(w1) * extvec_scale
             e_2 = ext(w2) * extvec_scale
 
-            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=0.5)
+            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=head_width)
     return fig
 
 
@@ -1157,7 +1169,7 @@ def star_density_color(crd, ww, dx=1*u.arcsec, blur=False, fig=None):
     if blur:
         blurred = gaussian_filter(hh, blur)
         hh = blurred
-    
+
     im = ax.imshow(hh.swapaxes(0,1))
     pl.colorbar(im)
     return hh
