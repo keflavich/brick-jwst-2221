@@ -127,10 +127,12 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates", flush=True)
 
 
+        print("Creating table", flush=True)
         tbl = Table()
         tbl['id'] = np.arange(1,all_ok.sum()+1)
         tbl['xcentroid'] = [cc[1] for cc, ok in zip(coms, all_ok) if ok]
         tbl['ycentroid'] = [cc[0] for cc, ok in zip(coms, all_ok) if ok]
+        print("Table created; returning table", flush=True)
 
         return tbl
     return saturated_finder
@@ -154,31 +156,11 @@ def get_psf(header, path_prefix='.'):
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
-    from astroquery.mast import Mast
-
-    loaded_psfgen = False
-    ntries = 0
-    while not loaded_psfgen:
-        print(f"Attempting to load PSF for {obsdate}")
-        try:
-            Mast.login(api_token.strip())
-            os.environ['MAST_API_TOKEN'] = api_token.strip()
-
-            psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
-            loaded_psfgen = True
-        except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-            print(f"Failed to build PSF: {ex}")
-        except Exception as ex:
-            print("psfgen load_wss_opd_by_date failed")
-            print(ex)
-        ntries += 1
-        if ntries > 10:
-            raise ValueError("Could not download in 10 tries")
 
     npsf = 16
     oversample = 2
     fov_pixels = 512
-    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
+    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}_{module}.fits'
     if module == 'merged':
         project_id = header['PROGRAM'][1:5]
         obs_id = header['OBSERVTN'].strip()
@@ -196,6 +178,21 @@ def get_psf(header, path_prefix='.'):
             print(f"PSF IS A LIST OF GRIDS!!!")
             big_grid = big_grid[0]
     else:
+        log.info(f'PSF file {psf_fn} does not exist; downloading from MAST')
+        from astroquery.mast import Mast
+
+        print(f"Attempting to load PSF for {obsdate}")
+        try:
+            Mast.login(api_token.strip())
+            os.environ['MAST_API_TOKEN'] = api_token.strip()
+
+            psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+        except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
+            print(f"Failed to build PSF: {ex}")
+        except Exception as ex:
+            print("psfgen load_wss_opd_by_date failed")
+            print(ex)
+
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
         # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/webbpsf_core.py#L640
         # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/gridded_library.py#L424
@@ -301,6 +298,7 @@ def iteratively_remove_saturated_stars(data, header,
 
     for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter, rsz in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations, rindsize):
         finder = finder_maker(min_size=minsz, max_size=maxsz, require_gradient=grad, min_flux=minflx)
+        print(f"Created finder {finder}", flush=True)
 
         # do the search on data b/c PSF subtraction can change zeros to non-zeros
         if np.any(resid == 0):
@@ -389,11 +387,11 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
 
 def main():
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
-        api_token = fh.read().strip()
-    from astroquery.mast import Mast
-    Mast.login(api_token.strip())
-    os.environ['MAST_API_TOKEN'] = api_token.strip()
+    #with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+    #    api_token = fh.read().strip()
+    #from astroquery.mast import Mast
+    #Mast.login(api_token.strip())
+    #os.environ['MAST_API_TOKEN'] = api_token.strip()
 
     for module in ('nrca', 'nrcb', 'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
