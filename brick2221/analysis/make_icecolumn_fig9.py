@@ -405,6 +405,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
 
             artists_and_labels[co_av_line_25.get_label()] = co_av_line_25
     else:
+        # if we're not using abundance, we're using fixed levels of {icemol}/H2 (so it's CO/H2, not C/H2 * 0.25)
         levels = [5e-4, 2.5e-4, 1e-4]
         NMolofAV = NHtoAV * np.linspace(0.1, 100, 1000)
         for level, linestyle in zip(levels, ('--', ':', '-.')):
@@ -415,6 +416,8 @@ def makeplot(avfilts=['F182M', 'F410M'],
             co_av_line, = ax.plot(xax_toplot, co_y,
                 label=f'{icemol}/H$_2 = {level%10:0.1f} \\times 10^{{{int(np.log10(level))}}}$',
                 color='r', linestyle=linestyle, zorder=-10, alpha=0.5)
+
+            artists_and_labels[co_av_line.get_label()] = co_av_line
 
     if xax == 'AV':
         ax.set_xlabel(f"A$_V$ from {avfilts[0]}-{avfilts[1]} (mag)")
