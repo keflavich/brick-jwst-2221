@@ -123,18 +123,23 @@ def getmtime(x):
 
 
 def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F410M', filter2='F466N',
-                             maxcol=1e21):
+                             maxcol=1e21, verbose=True):
     dmags1 = dmag_tbl[filter1]
     dmags2 = dmag_tbl[filter2]
 
     comp = np.unique(dmag_tbl['composition'])[0]
-    molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+    # molwt = u.Quantity(composition_to_molweight(comp), u.Da)
     mols, comps = molscomps(comp)
     mol_frac = comps[mols.index(icemol)] / sum(comps)
 
     cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
 
     dmag_1m2 = np.array(dmags1) - np.array(dmags2)
+
+    if verbose:
+        print(f"min(dmag1) = {np.nanmin(dmags1)}, max(dmag1) = {np.nanmax(dmags1)}")
+        print(f"min(unextincted_1m2) = {np.nanmin(unextincted_1m2)}, max(unextincted_1m2) = {np.nanmax(unextincted_1m2)}")
+
     sortorder = np.argsort(dmag_1m2)
     inferred_molecular_column = np.interp(unextincted_1m2,
                                           xp=dmag_1m2[sortorder][cols<maxcol],
