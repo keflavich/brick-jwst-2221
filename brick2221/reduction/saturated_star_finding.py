@@ -33,7 +33,7 @@ import urllib3
 def debug_wrap(function):
     @functools.wraps(function)
     def wrapper(*args, **kwargs):
-        print(function.__name__)
+        print(function.__name__, flush=True)
         return function(*args, **kwargs)
     return wrapper
 
@@ -77,7 +77,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         """
         Wrap the star finder to reject bad stars
         """
-        saturated = (data==0)
+        saturated = np.logical_or((data==0), np.isnan(data))
         if not np.any(saturated):
             raise ValueError("No saturated (data==0) pixels found")
         sources_, nsources_ = label(saturated)
@@ -95,7 +95,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
 
         # now re-calculate sources
         sources, nsources = label(no_edge_saturated)
-        print(f"Reduced nsources from {nsources_} to {nsources} by excluding edge zone with size {msfe}")
+        print(f"Reduced nsources from {nsources_} to {nsources} by excluding edge zone with size {msfe}", flush=True)
         if raise_for_nosources and nsources == 0:
             raise ValueError("No saturated sources found")
 
@@ -168,14 +168,14 @@ def get_psf(header, path_prefix='.'):
         if os.path.exists(psf_fn):
             psf_fn = merged_psf_fn
         else:
-            print("webbPSF is being used for merged data because merged PSF does not exist")
+            print("webbPSF is being used for merged data because merged PSF does not exist", flush=True)
 
     if os.path.exists(str(psf_fn)):
         # As a file
         log.info(f"Loading grid from psf_fn={psf_fn}")
         big_grid = to_griddedpsfmodel(psf_fn)  # file created 2 cells above
         if isinstance(big_grid, list):
-            print(f"PSF IS A LIST OF GRIDS!!!")
+            print(f"PSF IS A LIST OF GRIDS!!!", flush=True)
             big_grid = big_grid[0]
     else:
         log.info(f'PSF file {psf_fn} does not exist; downloading from MAST')
@@ -203,7 +203,7 @@ def get_psf(header, path_prefix='.'):
         # now the PSF should be written
         assert glob.glob(psf_fn.replace(".fits", "*"))
         if isinstance(big_grid, list):
-            print(f"PSF FROM PSF_GEN IS A LIST OF GRIDS!!!")
+            print(f"PSF FROM PSF_GEN IS A LIST OF GRIDS!!!", flush=True)
             big_grid = big_grid[0]
             # if we really want to get this right, we need to create a new grid of PSF models
             # that is some sort of average of the PSF model grid.
@@ -301,7 +301,7 @@ def iteratively_remove_saturated_stars(data, header,
         print(f"Created finder {finder}", flush=True)
 
         # do the search on data b/c PSF subtraction can change zeros to non-zeros
-        if np.any(resid == 0):
+        if np.any(np.logical_or(resid == 0, np.isnan(resid))):
             sources = finder(resid,
                              mask=ndimage.binary_dilation(resid==0, iterations=1),
                              raise_for_nosources=False, rindsize=rsz)
@@ -329,9 +329,9 @@ def iteratively_remove_saturated_stars(data, header,
 
         # Mask out the inner portion of the PSF when fitting it
         if diliter > 0:
-            mask = ndimage.binary_dilation(resid==0, iterations=diliter)
+            mask = ndimage.binary_dilation(np.logical_or(resid==0, np.isnan(resid)), iterations=diliter)
         else:
-            mask = resid==0
+            mask = np.logical_or(resid==0, np.isnan(resid))
 
         #log.info("Doing photometry")
         try:
@@ -357,7 +357,7 @@ def iteratively_remove_saturated_stars(data, header,
 
         # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
         # pixels with the values from the fitted model.  This will be tricky.
-        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True)
+        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True, end='\n\n')
 
     final_table = table.vstack(results)
 
@@ -365,11 +365,13 @@ def iteratively_remove_saturated_stars(data, header,
 
 
 def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
+    print(f"Removing saturated stars from {filename}", flush=True)
     fh = fits.open(filename)
     data = fh['SCI'].data
 
     # there are examples, especially in F405, where the variance is NaN but the value
     # is negative
+    print(f"Setting NaN variance to 0", flush=True)
     data[np.isnan(fh['VAR_POISSON'].data)] = 0
 
     header = fh[0].header
@@ -393,7 +395,11 @@ def main():
     #Mast.login(api_token.strip())
     #os.environ['MAST_API_TOKEN'] = api_token.strip()
 
-    for module in ('nrca', 'nrcb', 'merged'):
+    fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
+    remove_saturated_stars(fn, verbose=True)
+
+    # skipping 'merged' b/c we don't expect PSFs to fit well enough
+    for module in ('nrca', 'nrcb', ):#'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
             remove_saturated_stars(fn, verbose=True)
 
