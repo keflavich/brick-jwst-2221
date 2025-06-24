@@ -123,14 +123,16 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
                                for srcid, (szok, slcs) in enumerate(pb(zip(all_ok, slices)))])
         all_ok &= is_star_ok
-        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="")
-        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates")
+        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="", flush=True)
+        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates", flush=True)
 
 
+        print("Creating table", flush=True)
         tbl = Table()
         tbl['id'] = np.arange(1,all_ok.sum()+1)
         tbl['xcentroid'] = [cc[1] for cc, ok in zip(coms, all_ok) if ok]
         tbl['ycentroid'] = [cc[0] for cc, ok in zip(coms, all_ok) if ok]
+        print("Table created; returning table", flush=True)
 
         return tbl
     return saturated_finder
@@ -154,31 +156,11 @@ def get_psf(header, path_prefix='.'):
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
-    from astroquery.mast import Mast
-
-    loaded_psfgen = False
-    ntries = 0
-    while not loaded_psfgen:
-        print(f"Attempting to load PSF for {obsdate}")
-        try:
-            Mast.login(api_token.strip())
-            os.environ['MAST_API_TOKEN'] = api_token.strip()
-
-            psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
-            loaded_psfgen = True
-        except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-            print(f"Failed to build PSF: {ex}")
-        except Exception as ex:
-            print("psfgen load_wss_opd_by_date failed")
-            print(ex)
-        ntries += 1
-        if ntries > 10:
-            raise ValueError("Could not download in 10 tries")
 
     npsf = 16
     oversample = 2
     fov_pixels = 512
-    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}.fits'
+    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}_{module}.fits'
     if module == 'merged':
         project_id = header['PROGRAM'][1:5]
         obs_id = header['OBSERVTN'].strip()
@@ -196,6 +178,21 @@ def get_psf(header, path_prefix='.'):
             print(f"PSF IS A LIST OF GRIDS!!!")
             big_grid = big_grid[0]
     else:
+        log.info(f'PSF file {psf_fn} does not exist; downloading from MAST')
+        from astroquery.mast import Mast
+
+        print(f"Attempting to load PSF for {obsdate}")
+        try:
+            Mast.login(api_token.strip())
+            os.environ['MAST_API_TOKEN'] = api_token.strip()
+
+            psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+        except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
+            print(f"Failed to build PSF: {ex}")
+        except Exception as ex:
+            print("psfgen load_wss_opd_by_date failed")
+            print(ex)
+
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
         # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/webbpsf_core.py#L640
         # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/gridded_library.py#L424
@@ -264,6 +261,7 @@ def iteratively_remove_saturated_stars(data, header,
         often unreliable.  This is probably most important for aperture
         photometry, but it likely also affects PSF fitting.
     """
+    print("Beginning to iteratively remove saturated stars", flush=True)
 
     assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
 
@@ -300,12 +298,14 @@ def iteratively_remove_saturated_stars(data, header,
 
     for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter, rsz in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations, rindsize):
         finder = finder_maker(min_size=minsz, max_size=maxsz, require_gradient=grad, min_flux=minflx)
+        print(f"Created finder {finder}", flush=True)
 
         # do the search on data b/c PSF subtraction can change zeros to non-zeros
         if np.any(resid == 0):
             sources = finder(resid,
                              mask=ndimage.binary_dilation(resid==0, iterations=1),
                              raise_for_nosources=False, rindsize=rsz)
+            print(f"Found {len(sources)} sources running finder {finder}", flush=True)
         else:
             log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
             continue
@@ -315,7 +315,7 @@ def iteratively_remove_saturated_stars(data, header,
             continue
 
         if verbose:
-            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}")
+            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}", flush=True)
 
         phot = PSFPhotometry(finder=finder,
                              grouper=daogroup,
@@ -335,20 +335,21 @@ def iteratively_remove_saturated_stars(data, header,
 
         #log.info("Doing photometry")
         try:
-            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
             result = phot(resid, mask=mask, progressbar=tqdm)
         except TypeError:
-            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
             result = phot(resid, mask=mask)
 
         result['skycoord_fit'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         results.append(result)
         #log.info(f"Done; len(result) = {len(result)})")
-        print(result)
+        print(result, flush=True)
 
         # manually subtract off PSFs because get_residual_image seems to (never?) work
         # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
         #resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
+        print(f"Making residual image.", flush=True)
         resid = phot.make_residual_image(resid, (fitsz, fitsz), include_localbkg=False)
 
         # reset saturated pixels back to zero
@@ -356,6 +357,7 @@ def iteratively_remove_saturated_stars(data, header,
 
         # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
         # pixels with the values from the fitted model.  This will be tricky.
+        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True)
 
     final_table = table.vstack(results)
 
@@ -373,8 +375,10 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     header = fh[0].header
     if 'CRPIX1' not in header:
         header.update(wcs.WCS(fh['SCI'].header).to_header())
+    print("Running iteratively_remove_saturated_stars", flush=True)
     satstar_table, satstar_resid = iteratively_remove_saturated_stars(data, header, **kwargs)
     satstar_table.meta.update(header)
+    print("Finished iteratively_remove_saturated_stars", flush=True)
 
     satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=True)
     fh['SCI'].data = satstar_resid
@@ -383,15 +387,15 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
 
 def main():
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
-        api_token = fh.read().strip()
-    from astroquery.mast import Mast
-    Mast.login(api_token.strip())
-    os.environ['MAST_API_TOKEN'] = api_token.strip()
+    #with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+    #    api_token = fh.read().strip()
+    #from astroquery.mast import Mast
+    #Mast.login(api_token.strip())
+    #os.environ['MAST_API_TOKEN'] = api_token.strip()
 
     for module in ('nrca', 'nrcb', 'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
-            remove_saturated_stars(fn)
+            remove_saturated_stars(fn, verbose=True)
 
 
 if __name__ == "__main__":
