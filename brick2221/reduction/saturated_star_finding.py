@@ -273,7 +273,8 @@ def iteratively_remove_saturated_stars(data, header,
     #big_grid.fixed['x_0'] = True
     #big_grid.fixed['y_0'] = True
 
-    daogroup = SourceGrouper(min_separation=8)
+    # daogroup should be set super high to avoid fitting lots of "stars"... if there are a lot of saturated pixels near each other, they're probably all junk
+    daogroup = SourceGrouper(min_separation=25)
 
     resid = data
 
