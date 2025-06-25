@@ -64,7 +64,7 @@ def is_star(data, sources, srcid, slc, rindsize=3, min_flux=500, require_gradien
 
     return ((rind1sum > rind2sum) or not require_gradient) and rind3sum > min_flux
 
-def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
+def finder_maker(max_size=100, min_size=0, min_sep_from_edge=5, min_flux=500,
                  edge_npix=10000,
                  progressbar=False,
                  rindsize=3, require_gradient=False, raise_for_nosources=True, *args, **kwargs):
@@ -73,7 +73,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
     distance from the edge of the image
     """
     # criteria are based on examining some plots; they probably don't hold universally
-    def saturated_finder(data, *args, raise_for_nosources=raise_for_nosources, **kwargs):
+    def saturated_finder(data, *args, raise_for_nosources=raise_for_nosources, rind_threshold=1000, **kwargs):
         """
         Wrap the star finder to reject bad stars
         """
@@ -105,6 +105,29 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         coms = center_of_mass(saturated, sources, np.arange(nsources)+1)
         coms = np.array(coms)
 
+        # Create additional mask for rind threshold check using scipy tools
+        def check_rind_threshold(label_id, rindsz=3):
+            # Get the slice for this source using find_objects
+            src_slice = slices[label_id - 1]  # label_id is 1-indexed, slices is 0-indexed
+            # Expand slice by 3 pixels on each side
+            src_slice = (slice(max(0, src_slice[0].start - rindsz),
+                               min(data.shape[0], src_slice[0].stop + rindsz)),
+                        slice(max(0, src_slice[1].start - rindsz),
+                              min(data.shape[1], src_slice[1].stop + rindsz)))
+            src_mask = sources[src_slice] == label_id
+            # Create 3-pixel rind around the source
+            rind = ndimage.binary_dilation(src_mask, iterations=rindsz) & ~src_mask
+            # Check if sum of values in rind exceeds threshold
+            rind_sum = np.nansum(data[src_slice][rind])
+            return rind_sum > rind_threshold
+
+        # Apply rind threshold check to all sources
+        rind_ok = np.array([check_rind_threshold(label_id) for label_id in range(1, nsources + 1)])
+
+        # Update sources to only include those that pass rind threshold
+        print(f"Reduced nsources from {len(slices)} to {rind_ok.sum()} by applying rind threshold {rind_threshold}", flush=True)
+
+
         # progressbar isn't super necessary as this is rarely the bottleneck
         # (but I included it because I didn't know that up front)
         if progressbar:
@@ -119,7 +142,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
             (coms[:,1] < data.shape[1]-msfe) &
             (coms[:,0] < data.shape[0]-msfe)
         )
-        all_ok = sizes_ok & coms_finite & coms_inbounds
+        all_ok = sizes_ok & coms_finite & coms_inbounds & rind_ok
         is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
                                for srcid, (szok, slcs) in enumerate(pb(zip(all_ok, slices)))])
         all_ok &= is_star_ok
@@ -149,7 +172,11 @@ def get_psf(header, path_prefix='.'):
     module = header['MODULE']
 
     ww = wcs.WCS(header)
-    assert ww.wcs.cdelt[1] != 1
+    try:
+        assert ww.wcs.cdelt[1] != 1, "This is not a valid WCS!!! CDELT is wrong!! how did this HAPPEN!?!?"
+    except AssertionError as ex:
+        print(ex)
+        print("ignoring WCS failure so check that stuff is right...")
 
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
@@ -399,9 +426,12 @@ def main():
     fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
     remove_saturated_stars(fn, verbose=True)
 
+
     # skipping 'merged' b/c we don't expect PSFs to fit well enough
     for module in ('nrca', 'nrcb', ):#'merged'):
-        for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
+        for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*{module}*crf.fits"):
+            print()
+            print(fn)
             remove_saturated_stars(fn, verbose=True)
 
 
