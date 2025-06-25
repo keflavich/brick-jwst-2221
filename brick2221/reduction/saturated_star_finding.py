@@ -346,7 +346,7 @@ def iteratively_remove_saturated_stars(data, header,
             print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}", flush=True)
 
         phot = PSFPhotometry(finder=finder,
-                             grouper=daogroup,
+                             # grouping disabled b/c it apepars to be a major bottleneck grouper=daogroup,
                              localbkg_estimator=None, # must be none or it un-saturates pixels
                              #psf_model=epsf_model,
                              psf_model=big_grid,
@@ -430,6 +430,12 @@ def main():
     # skipping 'merged' b/c we don't expect PSFs to fit well enough
     for module in ('nrca', 'nrcb', ):#'merged'):
         for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*{module}*crf.fits"):
+            print()
+            print(fn)
+            remove_saturated_stars(fn, verbose=True)
+
+    for module in ('nrca', 'nrcb', ):#'merged'):
+        for fn in glob.glob(f"/orange/adamginsburg/jwst/cloudc/F*/pipeline/*{module}*crf.fits"):
             print()
             print(fn)
             remove_saturated_stars(fn, verbose=True)
