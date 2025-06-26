@@ -92,11 +92,24 @@ def plot_extvec_ccd(ax, color1, color2, ext=CT06_MWGC(), extvec_scale=200,
     e_2 = ext(w2) * extvec_scale
     e_3 = ext(w3) * extvec_scale
     e_4 = ext(w4) * extvec_scale
-    ax.arrow(start[0],
-             start[1],
-             e_1 - e_2,
-             e_3 - e_4,
-             color=color, head_width=head_width, label=f'$A_V={extvec_scale}$')
+    if False:
+        ax.arrow(start[0],
+                start[1],
+                e_1 - e_2,
+                e_3 - e_4,
+                color=color, head_width=head_width, label=f'$A_V={extvec_scale}$')
+
+    if True:
+        # Draw the arrow
+        ax.annotate('', xy=(start[0] + (e_1 - e_2), start[1] + (e_3 - e_4)),
+                    xytext=(start[0], start[1]),
+                    arrowprops=dict(arrowstyle='-|>', color=color,
+                                shrinkA=0, shrinkB=0,
+                                mutation_scale=20, linewidth=1.5))
+
+        # Add a legend entry by plotting an invisible point
+        ax.plot([], [], color=color, marker='>', markersize=8,
+                label=f'$A_V={extvec_scale}$', linestyle='-', linewidth=2)
 
 def ccd(basetable,
         ax,

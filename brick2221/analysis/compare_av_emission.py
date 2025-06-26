@@ -61,9 +61,8 @@ unextincted_466m410 = measured_466m410 + E_V_410_466 * av
 dmag_tbl = Table.read(f'{basepath}/tables/H2O+CO_ice_absorption_tables.ecsv')
 dmag_tbl.add_index('composition')
 
-inferred_molecular_column = compute_molecular_column(unextincted_466m410=unextincted_466m410, av=av,
-                                                     dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'],
-                                                     basetable=basetable, ext=ext)
+inferred_molecular_column = compute_molecular_column(unextincted_1m2=unextincted_466m410,
+                                                     dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (5:1:0.5)'])
 
 match = av[keep] > (columns/2.21e21 + 20)
 
@@ -86,7 +85,7 @@ pl.legend(loc='best');
 cocols = cocol[pcrds[1], pcrds[0]]
 pl.figure(2)
 pl.scatter(cocols, inferred_molecular_column[keep], s=1)
-pl.scatter(cocols[match], inferred_molecular_column[keep][match], s=1, c='r')
+pl.scatter(cocols[match], inferred_molecular_column[keep][match], s=1, c='r', label='A$_V$ > c NH + 20')
 pl.plot(np.logspace(16, 20, 100), np.logspace(16, 20, 100), 'k--', label='1:1')
 pl.plot(np.logspace(13, 20, 100), np.logspace(13, 20, 100)*10, 'k:', label='10:1')
 pl.plot(np.logspace(13, 20, 100), np.logspace(13, 20, 100)*100, 'k-.', label='100:1')
@@ -102,7 +101,3 @@ ax = pl.subplot(projection=ww.celestial)
 ax.imshow(column, origin='lower', cmap='gray_r')
 ax.scatter_coord(crds[keep][~match], s=1, alpha=0.5)
 ax.scatter_coord(crds[keep][match], s=1, c='r', alpha=0.5)
-
-
-
-

@@ -673,6 +673,7 @@ def main():
                 dmag_tbl=dmag_co.loc['mol_id', 64].loc['composition', 'CO'],
                 color_filter1=color_filter1,
                 color_filter2=color_filter2,
+                xax='color',
                 )
         pl.close('all')
 
