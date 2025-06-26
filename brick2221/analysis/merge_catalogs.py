@@ -172,7 +172,7 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
 
 
 def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask,
-                        min_offset=0.01*u.arcsec,
+                        min_offset=0.10*u.arcsec,
                         offsets_table=None,
                         verbose=True
                         ):
@@ -223,7 +223,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
             # even if the match is not mutual, consider it the same star as an existing one because it's too close.
             # keep = (sep > max_offset) | ((~mutual_matches) & (sep  > min_offset))
-            keep = sep > max_offset
+            keep = sep > min_offset
 
             newcrds = crds[keep]
             basecrds = SkyCoord([basecrds, newcrds])
@@ -298,7 +298,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
                 # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
                 # keep = (sep > max_offset) | (~mutual_matches)
-                keep = (sep > max_offset)
+                keep = (sep > min_offset)
 
                 newcrds = crds[keep]
                 basecrds = SkyCoord([basecrds, newcrds])
