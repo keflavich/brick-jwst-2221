@@ -157,3 +157,9 @@ if __name__ == "__main__":
     plot_opacity_tables(opacity_tables=(ocn_mix1, ocn_mix2, ocn_mix3, ocn_mix4, ocn_mix5,))
     plot_filters()
     pl.xlim(3.71, 4.75);
+
+    pl.figure()
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines))
+    plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
+    pl.xlim(2.50, 5.00);
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.png', dpi=150, bbox_inches='tight')
