@@ -10,10 +10,67 @@ from astropy.table import Table
 from astropy import table
 from astropy.convolution import Gaussian1DKernel, convolve
 from icemodels import fluxes_in_filters
+import astropy.io.registry.base
+from astropy.coordinates import SkyCoord
 
 from astroquery.svo_fps import SvoFps
 jfilts = SvoFps.get_filter_list('JWST')
 jfilts.add_index('filterID')
+
+
+# jwst_archive_spectra_checklist.csv is a hand-edited checklist
+# key for checklist: y = yes, all filters covered.  n=no, some filters not covered.  g=there is overlap between a filter and a gap w=weird l=low s/n in long-wavelength data, e=emission
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def adjust_yaxis_for_legend_overlap(ax, margin_factor=1.1):
+    """
+    Adjust y-axis to avoid legend overlap with plotted data.
+
+    Parameters:
+    -----------
+    ax : matplotlib.axes.Axes
+        The Axes object containing the plot.
+    margin_factor : float
+        Factor to increase y-axis range by if overlap is detected.
+    """
+    fig = ax.figure
+    fig.canvas.draw()  # Make sure the legend is rendered
+
+    legend = ax.get_legend()
+    if legend is None:
+        return
+
+    # Get legend bounding box in display coordinates (pixels)
+    legend_bbox = legend.get_window_extent()
+
+    # Convert to data coordinates
+    inv = ax.transData.inverted()
+    legend_bbox_data = inv.transform(legend_bbox)
+
+    # Extract bounding box ranges
+    x0, y0 = legend_bbox_data[0]
+    x1, y1 = legend_bbox_data[1]
+
+    # Get data from lines in the plot
+    for line in ax.lines:
+        xdata, ydata = line.get_data()
+        mask = (
+            (xdata >= x0) & (xdata <= x1) &
+            (ydata >= y0) & (ydata <= y1)
+        )
+        if np.any(mask):
+            # Overlap detected, expand y-axis
+            ymin, ymax = ax.get_ylim()
+            new_ymax = ymax * margin_factor if ymax > 0 else ymax / margin_factor
+            ax.set_ylim(ymin, new_ymax)
+            fig.canvas.draw()  # Re-render with new limits
+            # Recursive call to ensure multiple adjustments if needed
+            adjust_yaxis_for_legend_overlap(ax, margin_factor)
+            return  # Stop after the first adjustment
+
+
 
 # filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W',
 #              'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N']
@@ -33,7 +90,11 @@ else:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
-            fh = fits.open(fn)
+            try:
+                fh = fits.open(fn)
+            except OSError as ex:
+                print(f'{fn} failed to open: {ex} (it should be deleted or re-downloaded)')
+                continue
             spectable = Table.read(fn, hdu=1)
 
             namestart = "_".join(os.path.basename(fn).split("_")[:-3])
@@ -44,22 +105,32 @@ else:
                     raise ValueError(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
                 #print(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
                 fn2 = other_gratings[0]
-                spectable2 = Table.read(fn2, hdu=1)
+                try:
+                    spectable2 = Table.read(fn2, hdu=1)
+                except astropy.io.registry.base.IORegistryError as ex:
+                    print(f'{fn2} failed to open: {ex} (it should be deleted or re-downloaded)')
+                    continue
                 spectable = table.vstack([spectable, spectable2])
                 spectable.sort('WAVELENGTH')
 
             # remove super high values
-            spectable['FLUX'] = np.clip(spectable['FLUX'], 0, max_flux.value)
+            spectable['FLUX'][spectable['FLUX'] > max_flux.value] = np.nan
+            # flag out negatives too
+            spectable['FLUX'][spectable['FLUX'] < 0] = np.nan
 
             # Remove only positive outliers using sigma clipping
             from astropy.stats import sigma_clip
-            mean_flux = np.nanmean(spectable['FLUX'])
-            std_flux = np.nanstd(spectable['FLUX'])
+            mean_flux = np.nanmean(np.array(spectable['FLUX']))
+            std_flux = np.nanstd(np.array(spectable['FLUX']))
             bad_flux = spectable['FLUX'] > mean_flux + 10*std_flux
             print(f"Removing {bad_flux.sum()} pixels with flux > {mean_flux + 10*std_flux}.  These will be infilled by interpolation.")
             spectable['FLUX'][bad_flux] = np.nan
 
             def fixed_flux(fluxes, threshold=0.2):
+                """
+                Interpolate bad values.
+                Not needed if they're ignored by fluxes_in_filters, which they are in the latest version
+                """
                 n_nans = np.sum(np.isnan(fluxes))
                 if n_nans / len(fluxes) < threshold:
                     fluxes = fluxes.copy()
@@ -68,28 +139,19 @@ else:
                 return fluxes
 
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                             fixed_flux(spectable['FLUX'].quantity),
+                                             (spectable['FLUX'].quantity),
                                              filterids=filter_ids, transdata=transdata)
             nirspec_mags = {key: -2.5*np.log10(nirspec_flxd[key].to(u.Jy).value / filter_data[key])
                                  if nirspec_flxd[key] > 0 else np.nan
                             for key in nirspec_flxd}
-            nirspec_flxd_nonan = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
-                                             np.nan_to_num(spectable['FLUX'].quantity),
-                                             filterids=filter_ids, transdata=transdata)
-            nirspec_mags_nonan = {key: -2.5*np.log10(nirspec_flxd_nonan[key].to(u.Jy).value / filter_data[key])
-                                 if nirspec_flxd_nonan[key] > 0 else np.nan
-                            for key in nirspec_flxd_nonan}
-            for key in nirspec_mags_nonan:
-                nirspec_mags[key+"_nonan"] = nirspec_mags_nonan[key]
 
             # filter out measurements that are implausibly faint
             nirspec_mags = {key: np.nan if (nirspec_mags[key] > 26) or (nirspec_mags[key] < 2) else nirspec_mags[key]
                             for key in nirspec_mags}
-            nirspec_mags_nonan = {key: np.nan if (nirspec_mags_nonan[key] > 26) or (nirspec_mags_nonan[key] < 2) else nirspec_mags_nonan[key]
-                            for key in nirspec_mags_nonan}
 
             nirspec_mags['wl_min'] = spectable['WAVELENGTH'].quantity.min()
             nirspec_mags['wl_max'] = spectable['WAVELENGTH'].quantity.max()
+            nirspec_mags['bad_pixels'] = bad_flux.sum()
 
             # do this after filtering to avoid quantity comparison failures
             for key in nirspec_flxd:
@@ -219,7 +281,11 @@ if __name__ == '__main__':
                                   ], '1182'),
                                 ):
             for fn in tqdm(glob.glob(f'{nirspec_dir}/jw*/*x1d.fits')):
-                fh = fits.open(fn)
+                try:
+                    fh = fits.open(fn)
+                except OSError as ex:
+                    print(f'{fn} failed to open: {ex} (it should be deleted or re-downloaded)')
+                    continue
 
                 targ = fh[0].header["TARGNAME"]
                 if targ == '':
@@ -228,6 +294,7 @@ if __name__ == '__main__':
                     targ = os.path.basename(fn).split('x1d')[0]
                 grating = fh[0].header['GRATING']
                 srcname = fh[1].header.get('SRCNAME', targ)
+                srcalias = fh[1].header.get('SRCALIAS', srcname)
                 spectable = Table.read(fn, hdu=1)
 
                 namestart = "_".join(os.path.basename(fn).split("_")[:-3])
@@ -241,7 +308,11 @@ if __name__ == '__main__':
                     grating2 = fh2[0].header['GRATING']
                     if grating2 != grating:
                         #print(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
-                        spectable2 = Table.read(fn2, hdu=1)
+                        try:
+                            spectable2 = Table.read(fn2, hdu=1)
+                        except astropy.io.registry.base.IORegistryError as ex:
+                            print(f'{fn2} failed to open: {ex} (it should be deleted or re-downloaded)')
+                            continue
                         spectable = table.vstack([spectable, spectable2])
                         spectable.sort('WAVELENGTH')
                     else:
@@ -286,13 +357,26 @@ if __name__ == '__main__':
                         raise ValueError(f"There are multiple rows matching target={targ}, grating={grating}, object={srcname}.  There was no slitid {slitid} to distinguish them.")
 
                 if 'MSA_Cat' in targ:
-                    sp.specname = f'{slitid} {grating} {grating2}'
+                    sp.specname = f'{program} {srcalias} {slitid} {grating} {grating2}'
                 elif targ == 'Serpens_Targets':
-                    sp.specname = f'Serpens {slitid} {grating} {grating2}'
+                    sp.specname = f'Serpens {program} {srcalias} {slitid} {grating} {grating2}'
+                elif targ == 'Catalogue_4':
+                    sp.specname = f'Orion {program} {srcalias} {grating} {grating2}'
                 else:
-                    sp.specname = f'{targ} {grating} {grating2}'
+                    sp.specname = f'{targ} {program} {srcalias} {grating} {grating2}'
+                if not np.any(np.isfinite(sp.data)):
+                    print(f'{fn} has no finite data')
+                    continue
                 sp.plotter()
-                sp.plotter.axis.set_xlabel("Wavelength [$\\mu m$]")
+                ax = sp.plotter.axis
+                ax.set_xlabel("Wavelength [$\\mu m$]")
+
+                try:
+                    slit_coord = SkyCoord(fh[0].header['SLIT_RA'], fh[0].header['SLIT_DEC'], unit=(u.hourangle, u.deg))
+                except KeyError:
+                    slit_coord = SkyCoord(fh[1].header['SLIT_RA'], fh[1].header['SLIT_DEC'], unit=(u.hourangle, u.deg))
+                ax.set_title(f'{sp.specname}\n{slit_coord.to_string(sep=":", style="hmsdms", decimal=False)}')
+
 
                 mags = {}
                 for key in filters:
@@ -303,25 +387,28 @@ if __name__ == '__main__':
                         # print(f'{targ} {srcname} {grating} {key} has multiple values: {mag}')
                         # raise ValueError('multiple values')
                         mag = row[key].max()
-                    if pl.ylim()[0] < 0:
-                        pl.ylim(0, pl.ylim()[1])
-                    if pl.ylim()[1] > max_flux.value:
-                        pl.ylim(0, max_flux.value)
-                    mid = np.array(pl.ylim()).mean()
-                    pl.plot(transdata[key]['Wavelength']/1e4, transdata[key]['Transmission'] * mid, linewidth=0.5,
+                    if ax.get_ylim()[0] < 0:
+                        ax.set_ylim(0, ax.get_ylim()[1])
+                    if ax.get_ylim()[1] > max_flux.value:
+                        ax.set_ylim(0, max_flux.value)
+                    mid = np.array(ax.get_ylim()).mean()
+                    ax.plot(transdata[key]['Wavelength']/1e4, transdata[key]['Transmission'] * mid, linewidth=0.5,
                             label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
                         )
                 if setname == '2221':
-                    pl.plot([], [], label=f'[F182M] - [F212N] = {mags["F182M"] - mags["F212N"]:0.2f}', linestyle='none', color='k')
-                    pl.plot([], [], label=f'[F212N] - [F466N] = {mags["F212N"] - mags["F466N"]:0.2f}', linestyle='none', color='k')
-                    pl.plot([], [], label=f'[F410M] - [F466N] = {mags["F410M"] - mags["F466N"]:0.2f}', linestyle='none', color='k')
-                    pl.plot([], [], label=f'[F405N] - [F410M] = {mags["F405N"] - mags["F410M"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F182M] - [F212N] = {mags["F182M"] - mags["F212N"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F212N] - [F466N] = {mags["F212N"] - mags["F466N"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F405N] - [F466N] = {mags["F405N"] - mags["F466N"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F405N] - [F410M] = {mags["F405N"] - mags["F410M"]:0.2f}', linestyle='none', color='k')
                 elif setname == '1182':
-                    pl.plot([], [], label=f'[F115W] - [F200W] = {mags["F115W"] - mags["F200W"]:0.2f}', linestyle='none', color='k')
-                    pl.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
-                    pl.plot([], [], label=f'[F200W] - [F356W] = {mags["F200W"] - mags["F356W"]:0.2f}', linestyle='none', color='k')
-                    pl.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
-                pl.legend(loc='best');
+                    ax.plot([], [], label=f'[F115W] - [F200W] = {mags["F115W"] - mags["F200W"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F200W] - [F444W] = {mags["F200W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F200W] - [F356W] = {mags["F200W"] - mags["F356W"]:0.2f}', linestyle='none', color='k')
+                    ax.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
+
+                ax.legend(loc='upper left', fontsize=10);
+                adjust_yaxis_for_legend_overlap(ax)
+
                 # if row['bad']:
                 #     title = pl.title()
                 #     pl.title(f'BAD: {title}')
