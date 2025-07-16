@@ -129,6 +129,9 @@ def ccd(basetable,
         head_width=0.1,
         extvec_start=(0, 0),
         allow_missing=False,
+        hexbin=False,
+        hexbin_cmap='gray',
+        n_hexbin_bins=100,
         **kwargs
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
@@ -152,9 +155,14 @@ def ccd(basetable,
             include = ~exclude
             sel = sel & include
 
-        ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
-        if selcolor is not None:
-            ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
+        if hexbin:
+            ax.hexbin(colorp1[include], colorp2[include], mincnt=1, gridsize=n_hexbin_bins, extent=axlims, cmap=hexbin_cmap)
+            if selcolor is not None:
+                ax.hexbin(colorp1[sel], colorp2[sel], mincnt=1, gridsize=n_hexbin_bins, extent=axlims, cmap=hexbin_cmap)
+        else:
+            ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
+            if selcolor is not None:
+                ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
     except Exception as ex:
         if not allow_missing:
             raise ex

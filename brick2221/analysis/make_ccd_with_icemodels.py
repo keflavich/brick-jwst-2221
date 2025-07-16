@@ -1,4 +1,3 @@
-from astropy.table import Table
 import numpy as np
 import astropy.units as u
 import matplotlib.pyplot as pl
@@ -7,9 +6,10 @@ from molmass import Formula
 import re
 from astropy.wcs import WCS
 from astropy.io import fits
+from astropy import table
+from astropy.table import Table
 from regions import Regions
 import regions
-
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
 from cycler import cycler
@@ -44,6 +44,30 @@ import sys
 sys.path.append('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament')
 import jwst_plots
 cloudccat = jwst_plots.make_cat_use()
+
+
+
+def filter_selection_mask(cat):
+    filters_with_detections = ['f480m','f410m','f405n', 'f360m']
+    #filters_without_detections = ['f150w', 'f182m', 'f187n', 'f210m', 'f212n',]
+    # 300, 360, 466 are optional
+    mask_with = np.logical_and.reduce([~np.isnan(cat[f'mag_ab_{band}']) for band in filters_with_detections])
+    #mask_without = np.logical_and.reduce([np.isnan(cat[f'mag_ab_{band}']) for band in filters_without_detections])
+    mask = mask_with
+    #mask = np.logical_and(maks_with, mask_without)
+
+    return mask
+
+def load_sgrb2cat():
+    sgrb2cat_fn = '/orange/adamginsburg/jwst/sgrb2/NB/catalogs/crowdsource_nsky0_merged_photometry_tables_merged.fits'
+    sgrb2cat = Table.read(sgrb2cat_fn)
+    mask = filter_selection_mask(sgrb2cat)
+    sgrb2cat = sgrb2cat[mask]
+    return sgrb2cat
+
+sgrb2cat = load_sgrb2cat()
+
+
 
 
 dmag_co2 = Table.read(f'{basepath}/tables/CO2_ice_absorption_tables.ecsv')
@@ -119,6 +143,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             label_temperature=False,
                             av_scale=30,
                             show_orion_2770=False,
+                            hexbin=False,
                             ):
     """
     """
@@ -131,8 +156,10 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                     ext=ext,
                     extvec_scale=av_scale,
                     head_width=0.1,
+                    axlims=axlims,
                     allow_missing=True,
                     alpha=0.25,
+                    hexbin=hexbin,
                     exclude=exclude)
     else:
         pl.xlabel(f"{color1[0]} - {color1[1]}")
@@ -164,7 +191,8 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                        exclude=None,
                        zorder=-5,
                        selcolor=None,
-                       label='Cloud C'
+                       label='Cloud C',
+                       hexbin=hexbin
                        )
 
         plot_tools.ccd(Table(cloudccat)[lactea_sel], ax=pl.gca(), color1=[x.lower() for x in color1],
@@ -178,7 +206,8 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                        exclude=None,
                        zorder=-5,
                        selcolor=None,
-                       label='3 kpc arm filament'
+                       label='3 kpc arm filament',
+                       hexbin=hexbin
                        )
 
     if iceage:
@@ -194,11 +223,14 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
     if nirspec_archive:
         nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
         nirspecarchive_mags_original = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
-        checklist = Table.read(f'{nirspec_dir}/jwst_archive_spectra_checklist.csv')
 
-        common_keys = ['Target', 'Program', 'Grating', 'Grating2', 'Object', 'SlitID',
-                       'Observation', 'Visit', 'VisitGroup', 'Filename']
-        nirspecarchive_mags = join(nirspecarchive_mags_original, checklist, keys=common_keys)
+        if 'ISOKN' not in nirspecarchive_mags_original.colnames:
+            checklist = Table.read(f'{nirspec_dir}/jwst_archive_spectra_checklist.csv')
+            common_keys = ['Target', 'Program', 'Grating', 'Grating2', 'Object', 'SlitID',
+                        'Observation', 'Visit', 'VisitGroup', 'Filename']
+            nirspecarchive_mags = table.join(nirspecarchive_mags_original, checklist, keys=common_keys)
+        else:
+            nirspecarchive_mags = nirspecarchive_mags_original
 
         # 24th mag is roughly too faint in the wide bands
         c1nirspecarchive = nirspecarchive_mags['JWST/NIRCam.'+color1[0]] - nirspecarchive_mags['JWST/NIRCam.'+color1[1]]
@@ -215,13 +247,28 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
               ~(nirspecarchive_mags['JWST/NIRCam.'+color1[1]].mask) &
               ~(nirspecarchive_mags['JWST/NIRCam.'+color2[0]].mask) &
               ~(nirspecarchive_mags['JWST/NIRCam.'+color2[1]].mask))
-        p3222 = nirspecarchive_mags['Program'] == '03222'
-        p5804 = nirspecarchive_mags['Program'] == '05804'
-        p1611 = nirspecarchive_mags['Program'] == '01611'
-        p2770 = nirspecarchive_mags['Program'] == '02770'
+        p3222 = nirspecarchive_mags['Program'] == 3222
+        p5804 = nirspecarchive_mags['Program'] == 5804
+        p1611 = nirspecarchive_mags['Program'] == 1611
+        p2770 = nirspecarchive_mags['Program'] == 2770
 
         if np.all('n' in c.lower() or 'm' in c.lower() for c in color1+color2):
             ok = nirspecarchive_mags['ISOKN'] == 'y'
+            assert ok.sum() > 0
+
+            # too-faint and/or nan values are bad for orion
+            orionok = ((nirspecarchive_mags['JWST/NIRCam.F410M'][p2770] < 20) &
+                       (nirspecarchive_mags['neg_pixels'][p2770] < 5) &
+                       ~(nirspecarchive_mags['emission_line'][p2770].astype(bool))
+                       )
+            if show_orion_2770:
+                assert orionok.sum() > 0
+            ok[p2770] &= orionok
+            assert ok.sum() > 0
+            print(f'{ok.sum()} good values ')
+        else:
+            # use the above critera and _also_ use the narrowband ones
+            ok &= nirspecarchive_mags['ISOKN'] == 'y'
 
         pl.scatter(c1nirspecarchive[ok & p3222],
                    c2nirspecarchive[ok & p3222],
@@ -513,7 +560,8 @@ if __name__ == "__main__":
             pl.figure();
             molcomps = [
                                                 ('H2O:CO:CO2 (1:1:1)', 25.0),
-                                                ('H2O:CO:CO2 (3:1:0.5)', 25.0),
+                                                #('H2O:CO:CO2 (3:1:0.5)', 25.0),
+                                                ('H2O:CO:CO2 (2:1:1)', 25.0),
                                                 ('H2O:CO:CO2 (3:1:1)', 25.0),
                                                 ('H2O:CO:CO2 (5:1:1)', 25.0),
                                                 ('H2O:CO:CO2 (10:1:1)', 25.0),

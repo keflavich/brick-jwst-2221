@@ -19,10 +19,10 @@ from astroquery.svo_fps import SvoFps
 jfilts = SvoFps.get_filter_list('JWST')
 jfilts.add_index('filterID')
 
-# filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W', 
+# filter_ids = ['JWST/NIRCam.F410M', 'JWST/NIRCam.F466N', 'JWST/NIRCam.F356W',
 #              'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N']
 filter_ids = [fid for fid in jfilts['filterID'] if fid.startswith('JWST/NIRCam')]
-filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
+filter_data = {fid: u.Quantity(jfilts.loc[fid]['ZeroPoint'], u.Jy) for fid in filter_ids}
 transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 
 iceage_flxd = fluxes_in_filters(spectable['wavelength'], spectable['flux'], filterids=filter_ids, transdata=transdata)

@@ -82,6 +82,7 @@ max_flux = 1*u.Jy
 
 
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
+checklist = Table.read(f'{nirspec_dir}/jwst_archive_spectra_checklist.csv')
 
 if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
     tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
@@ -99,7 +100,7 @@ else:
 
             namestart = "_".join(os.path.basename(fn).split("_")[:-3])
             other_gratings = glob.glob(f'{nirspec_dir}/{namestart}*/*x1d.fits')
-            if len(other_gratings) > 0:
+            if fh[0].header['GRATING'] != 'PRISM' and len(other_gratings) > 0:
                 grating_ids = [os.path.basename(fn).split("_")[-2] for fn in other_gratings]
                 if len(other_gratings) > 2 and len(other_gratings) != len(set(grating_ids)):
                     raise ValueError(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
@@ -126,18 +127,6 @@ else:
             print(f"Removing {bad_flux.sum()} pixels with flux > {mean_flux + 10*std_flux}.  These will be infilled by interpolation.")
             spectable['FLUX'][bad_flux] = np.nan
 
-            def fixed_flux(fluxes, threshold=0.2):
-                """
-                Interpolate bad values.
-                Not needed if they're ignored by fluxes_in_filters, which they are in the latest version
-                """
-                n_nans = np.sum(np.isnan(fluxes))
-                if n_nans / len(fluxes) < threshold:
-                    fluxes = fluxes.copy()
-                    fluxes_conv = convolve(fluxes, Gaussian1DKernel(stddev=10))
-                    fluxes[np.isnan(fluxes)] = fluxes_conv[np.isnan(fluxes)]
-                return fluxes
-
             nirspec_flxd = fluxes_in_filters(spectable['WAVELENGTH'].quantity,
                                              (spectable['FLUX'].quantity),
                                              filterids=filter_ids, transdata=transdata)
@@ -148,14 +137,24 @@ else:
             # filter out measurements that are implausibly faint
             nirspec_mags = {key: np.nan if (nirspec_mags[key] > 26) or (nirspec_mags[key] < 2) else nirspec_mags[key]
                             for key in nirspec_mags}
+            # do this after filtering to avoid quantity comparison failures
+            for key in nirspec_flxd:
+                try:
+                    nirspec_mags[key+"_flx"] = nirspec_flxd[key].value
+                except AttributeError:
+                    nirspec_mags[key+"_flx"] = nirspec_flxd[key]
 
             nirspec_mags['wl_min'] = spectable['WAVELENGTH'].quantity.min()
             nirspec_mags['wl_max'] = spectable['WAVELENGTH'].quantity.max()
             nirspec_mags['bad_pixels'] = bad_flux.sum()
+            nirspec_mags['neg_pixels'] = (spectable['FLUX'] < 0).sum()
 
-            # do this after filtering to avoid quantity comparison failures
-            for key in nirspec_flxd:
-                nirspec_mags[key+"_flx"] = nirspec_flxd[key]
+            emission_line = ((spectable['FLUX'][np.argmin(np.abs(spectable['WAVELENGTH'] - 1.875*u.um))] >
+                              2*spectable['FLUX'][np.argmin(np.abs(spectable['WAVELENGTH'] - 1.82*u.um))]) and
+                             (spectable['FLUX'][np.argmin(np.abs(spectable['WAVELENGTH'] - 4.05*u.um))] >
+                              2*spectable['FLUX'][np.argmin(np.abs(spectable['WAVELENGTH'] - 4.00*u.um))]))
+            nirspec_mags['emission_line'] = emission_line
+
 
             nirspec_mags['Target'] = fh[0].header['TARGNAME']
             if nirspec_mags['Target'] == '':
@@ -168,7 +167,8 @@ else:
             except KeyError:
                 nirspec_mags['Program'] = fh[1].header['PROGRAM']
 
-            if len(other_gratings) > 0:
+            nirspec_mags['Grating'] = fh[0].header['GRATING']
+            if nirspec_mags['Grating'] != 'PRISM' and len(other_gratings) > 0:
                 fh2 = fits.open(fn2)
                 nirspec_mags['Grating2'] = fh2[0].header['GRATING']
             else:
@@ -199,7 +199,6 @@ else:
 
             nirspec_mags['Filename'] = fn
 
-            nirspec_mags['Grating'] = fh[0].header['GRATING']
             if 'SLIT_RA' in fh[0].header:
                 nirspec_mags['RA'] = fh[0].header['SLIT_RA']
                 nirspec_mags['Dec'] = fh[0].header['SLIT_DEC']
@@ -215,6 +214,29 @@ else:
             nirspec_data.append(nirspec_mags)
 
     tbl = Table(nirspec_data)
+
+    for key in tbl.colnames:
+        if key.endswith('_flx'):
+            tbl[key] = u.Quantity(tbl[key], unit=u.Jy)
+
+    # 'Grating', 'Grating2',
+    common_keys = ['Target', 'Program', 'Object', 'SlitID',
+                   'Observation', 'Visit', 'VisitGroup', 'Filename']
+    checklist['SlitID'][checklist['SlitID'].mask] = ''
+    tbl['Program'] = tbl['Program'].astype(int)
+    tbl['Observation'] = tbl['Observation'].astype(int)
+    tbl['Visit'] = tbl['Visit'].astype(int)
+    tbl['VisitGroup'] = tbl['VisitGroup'].astype('int')
+    tbl = table.join(tbl, checklist, keys=common_keys)
+    if 'Grating_1' in tbl.colnames:
+        tbl['Grating'] = tbl['Grating_1']
+        tbl['Grating2'] = tbl['Grating2_1']
+        del tbl['Grating_1']
+        del tbl['Grating2_1']
+        del tbl['Grating_2']
+        del tbl['Grating2_2']
+
+    tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.ecsv', overwrite=True)
     tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits', overwrite=True)
 
 
@@ -299,7 +321,7 @@ if __name__ == '__main__':
 
                 namestart = "_".join(os.path.basename(fn).split("_")[:-3])
                 other_gratings = glob.glob(f'{nirspec_dir}/{namestart}*/*x1d.fits')
-                if len(other_gratings) > 0:
+                if grating != 'PRISM' and len(other_gratings) > 0:
                     grating_ids = [os.path.basename(fn).split("_")[-2] for fn in other_gratings]
                     if len(other_gratings) > 2 and len(other_gratings) != len(set(grating_ids)):
                         raise ValueError(f'{fn} -> {namestart} has multiple gratings: {other_gratings}')
@@ -321,13 +343,20 @@ if __name__ == '__main__':
                 else:
                     grating2 = ''
 
+
                 spectable['FLUX'][spectable['FLUX_ERROR'] > max_flux.value] = np.nan
 
                 sp = pyspeckit.Spectrum(xarr=spectable['WAVELENGTH'].quantity,
                                         data=spectable['FLUX'].quantity,
                                         header=fh[0].header
                                     )
+                if targ not in tbl['Target']:
+                    print(f'{fn} has target {targ} not in {tbl["Target"]}')
+                    continue
                 row = tbl.loc[('Target', targ)]
+                if grating not in row['Grating']:
+                    print(f'{fn} has grating {grating} not in {row["Grating"]} for target {targ}')
+                    continue
                 if isinstance(row, Table) and len(row) > 0:
                     row = row.loc[('Grating', grating)]
                 if isinstance(row, Table) and len(row) > 0:
@@ -339,11 +368,11 @@ if __name__ == '__main__':
                 visitid = fh[0].header['VISIT']
                 visitgroupid = fh[0].header['VISITGRP']
                 if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Observation', obsid)]
+                    row = row.loc[('Observation', int(obsid))]
                 if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Visit', visitid)]
+                    row = row.loc[('Visit', int(visitid))]
                 if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('VisitGroup', visitgroupid)]
+                    row = row.loc[('VisitGroup', int(visitgroupid))]
                 if isinstance(row, Table) and len(row) > 0:
                     row = row.loc[('Filename', fn)]
 
@@ -419,3 +448,4 @@ if __name__ == '__main__':
                 #     pl.plot([xlim[0], xlim[1]], [ylim[1], ylim[0]], 'r-', linewidth=2, alpha=0.7)
 
                 pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.png', dpi=150)
+                pl.close('all')
