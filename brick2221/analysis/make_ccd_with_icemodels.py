@@ -121,7 +121,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                             abundance=(percent_ice/100)*carbon_abundance,
                             molids=np.unique(dmag_mine['mol_id']),
                             molcomps=None,
-                            av_start=15,
+                            av_start=17,
                             max_column=2e20,
                             icemol='CO',
                             icemol2=None,
@@ -753,14 +753,14 @@ if __name__ == "__main__":
     color1 = ['F182M', 'F212N']
     color2 = ['F405N', 'F410M']
     molcomps = [
-        ('Hudgins', ('CO2 (1)', '70K')),
-        ('Gerakines', ('CO2 (1)', '70K')),
-        ('Hudgins', ('CO2 (1)', '10K')),
-        ('Ehrenfreund', ('CO2 (1)', '10K')),
-        ('Hudgins', ('CO2 (1)', '30K')),
-        ('Hudgins', ('CO2 (1)', '50K')),
-        ('Ehrenfreund', ('CO2 (1)', '50K')),
-        ('Gerakines', ('CO2 (1)', '8K')),
+        ('Hudgins', ('CO2 (1)', '70')),
+        ('Gerakines', ('CO2 (1)', '70')),
+        ('Hudgins', ('CO2 (1)', '10')),
+        ('Ehrenfreund', ('CO2 (1)', '10')),
+        ('Hudgins', ('CO2 (1)', '30')),
+        ('Hudgins', ('CO2 (1)', '50')),
+        ('Ehrenfreund', ('CO2 (1)', '50')),
+        ('Gerakines', ('CO2 (1)', '8')),
     ]
     a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(
         color1, color2,
