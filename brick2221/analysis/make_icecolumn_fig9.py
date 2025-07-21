@@ -45,13 +45,14 @@ def calc_av(avfilts=['F182M', 'F410M'], basetable=None, ext=CT06_MWGC(), return_
         return color
 
 
-def makeplot(avfilts=['F182M', 'F410M'],
+def makeplot(basetable,
+             avfilts=['F182M', 'F410M'],
              ax=None, sel=None, ok=None, alpha=0.5,
              icemol='CO',
              atom='C',
              abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
              title='H2O:CO:CO2 (10:1:1)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'],
+             dmag_tbl=None,
              plot_brandt=True,
              NHtoAV=2.21e21,
              # av_start = 20 based on Jang, An, Whittet...
@@ -80,6 +81,9 @@ def makeplot(avfilts=['F182M', 'F410M'],
              debug=False,
              ):
 
+
+    assert dmag_tbl is not None
+    assert basetable is not None
 
     if ax is None:
         ax = pl.gca()
@@ -320,7 +324,7 @@ def makeplot(avfilts=['F182M', 'F410M'],
     ax2 = ax.twiny()
     ax2.set_xlabel('N(H$_2$) [10$^{22}$ cm$^{-2}$]')
     if xax == 'AV':
-        ax2.set_xlim(np.array(xlim) * NHtoAV / 2 * 1e-22)
+        ax2.set_xlim((np.array(xlim) - av_start) * NHtoAV / 2 * 1e-22)
     elif xax == 'color':
         # A_V = [B-V] / E(B-V)
         ax2.set_xlim(np.array(xlim) / ev(avfilts, ext) * NHtoAV / 2 * 1e-22)
@@ -404,7 +408,10 @@ def makeplot(avfilts=['F182M', 'F410M'],
     ax.set_title(title)
 
     # mask out low signal-to-noise stuff
-    ax.fill_between([0, 1e25], [1e16, 1e16], [1e18, 1e18], color='w', alpha=0.2, zorder=5)
+    # if logy:
+    #     ax.fill_between([0, 1e25], [16, 16], [18, 18], color='w', alpha=0.2, zorder=5)
+    # else:
+    #     ax.fill_between([0, 1e25], [1e16, 1e16], [1e18, 1e18], color='w', alpha=0.2, zorder=5)
 
     outfn2 = f"{basepath}/paper_co/fig9s/N{icemol}_{title_to_save}_vs_{xax}_{color_filter1}-{color_filter2}_{avfilts[0]}-{avfilts[1]}{suffix}"
     fig.savefig(f"{outfn2}.pdf", dpi=150, bbox_inches='tight')
@@ -547,7 +554,8 @@ def main():
         for contour in (False, True):
             for scatter, scatterlabel in zip((False, True, False), ('', '_scatter', '_hexbin')):
                 for xax in ('AV', 'color'):
-                    av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
+                    av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                            avfilts=['F182M', 'F212N'],
                             sel=ok2221, ok=ok2221,
                             icemol='CO',
                             abundance=c_abundance,
@@ -566,11 +574,11 @@ def main():
                             nlevels=2,
                             contour=contour,
                             suffix=f'_BrickCloudCandArm{scatterlabel}',
-                            legend_kwargs={'loc': 'lower right', 'bbox_to_anchor': (1.2, 0,)},
+                            legend_kwargs={'loc': 'lower right',},# 'bbox_to_anchor': (1.2, 0,)},
                             cloudccat=jwst_plots.make_cat_use().catalog,
                             color_filter1=color_filter1,
                             color_filter2=color_filter2,
-                            hexbin_alpha=0.5,
+                           # hexbin_alpha=0.5,
                             );
                     ax.cla()
                     pl.clf()
@@ -582,7 +590,8 @@ def main():
                                         (sgrb2cat['emag_ab_f182m'] < 0.05) &
                                         (sgrb2cat['emag_ab_f410m'] < 0.05) &
                                         (sgrb2cat['emag_ab_f466n'] < 0.05)]
-                    makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+                    makeplot(basetable=basetable,
+                            avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
                             icemol='CO', abundance=c_abundance,
                             title='H2O:CO:CO2 (10:1:1)',
                             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'],
@@ -598,12 +607,12 @@ def main():
                             nbins=46,
                             nlevels=2,
                             contour=contour,
-                            legend_kwargs={'loc': 'lower right', 'bbox_to_anchor': (1.2, 0,)},
+                            legend_kwargs={'loc': 'lower right'}, #, 'bbox_to_anchor': (1.2, 0,)},
                             sgrb2cat=sgrb2cat,
                             color_filter1=color_filter1,
                             color_filter2=color_filter2,
                             suffix=f'SgrB2{scatterlabel}',
-                            hexbin_alpha=0.5,
+                            #hexbin_alpha=0.5,
                             );
                     pl.clf()
                     pl.close('all')
@@ -611,11 +620,14 @@ def main():
         pl.close('all')
 
         # DEFAULT
-        makeplot(sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
 
         # CT06 doesn't apply to F115W
-        makeplot(avfilts=['F115W', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ext=G23(Rv=5.5), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
-        makeplot(avfilts=['F115W', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ext=G23(Rv=5.5), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                avfilts=['F115W', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ext=G23(Rv=5.5), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                avfilts=['F115W', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ext=G23(Rv=5.5), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
 
 
         dmag_h2o = Table.read(f'{basepath}/tables/H2O_ice_absorption_tables.ecsv')
@@ -626,7 +638,8 @@ def main():
         dmag_h2o.add_index('temperature')
         dmag_h2o.add_index('mol_id')
 
-        makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+        makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
                 icemol='H2O', abundance=o_abundance_gc, #abundance=4.89e-4,
                 atom='O',
                 title='H2O',
@@ -650,7 +663,8 @@ def main():
         #         )
 
 
-        makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+        makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
                 icemol='CO', abundance=c_abundance,
                 title='H2O:CO (10:1)',
                 dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'],
@@ -666,7 +680,8 @@ def main():
                 color_filter2=color_filter2,
                 )
 
-        makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+        makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
                 icemol='CO', abundance=c_abundance,
                 title='H2O:CO (10:1)',
                 dmag_tbl=dmag_tbl.loc['H2O:CO (10:1)'],
@@ -685,7 +700,8 @@ def main():
 
 
 
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
+        av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221,
                 icemol='CO', abundance=c_abundance,
                 title='CO',
                 ylim=(16.5, np.log10(3e20)),
@@ -720,7 +736,8 @@ def main():
         #         )
 
 
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+        av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
                 icemol='CO', abundance=c_abundance,
                 title='H2O:CO (10:1)',
                 ylim=(16.5, np.log10(2e19)),
@@ -729,7 +746,8 @@ def main():
                 color_filter1=color_filter1,
                 color_filter2=color_filter2,
                 )
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+        av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
                 icemol='H2O', abundance=o_abundance,
                 atom='O',
                 title='H2O:CO (10:1)',
@@ -741,7 +759,8 @@ def main():
                 )
         pl.close('all')
 
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+        av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
                 icemol='CO', abundance=c_abundance,
                 title='H2O:CO:CO2 (10:1:2)',
                 ylim=(17.0, np.log10(2e19)),
@@ -752,7 +771,8 @@ def main():
                 )
         pl.close('all')
 
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
+        av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(),
                 icemol='H2O', abundance=o_abundance,
                 atom='O',
                 title='H2O:CO:CO2 (10:1:2)',
@@ -764,30 +784,31 @@ def main():
                 )
         pl.close('all')
 
-        makeplot(avfilts=['F182M', 'F410M'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                avfilts=['F182M', 'F410M'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
         pl.close('all')
-        makeplot(avfilts=['F187N', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                avfilts=['F187N', 'F212N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
         pl.close('all')
-        makeplot(avfilts=['F187N', 'F405N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                avfilts=['F187N', 'F405N'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
         pl.close('all')
-        makeplot(avfilts=['F182M', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        makeplot(basetable=basetable,
+                avfilts=['F182M', 'F200W'], sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
         pl.close('all')
 
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
-                                             sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5),
-                                             xlim=(-1, 80),
-                                             plot_brandt=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+        av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                avfilts=['F182M', 'F212N'],
+                sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5),
+                xlim=(-1, 80),
+                plot_brandt=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
         pl.close('all')
-        av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
-                                             sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(16.0, 19.2),
-                                             xlim=(-1, 80),
-                                             plot_brandt=False,
-                                             logy=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
 
         # for uncertainty estimation
         for hexbin, hexbinlabel in zip((False, True), ('', '_hexbin')):
             for molcomp in ('H2O:CO:CO2 (5:1:1)', 'H2O:CO:CO2 (10:1:1)', 'H2O:CO:CO2 (20:1:1)'):
-                av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
+                av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                                                    avfilts=['F182M', 'F212N'],
                                                     sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5),
                                                     xlim=(-1, 80),
                                                     dmag_tbl=dmag_tbl.loc[molcomp],
@@ -800,7 +821,8 @@ def main():
                                                     contour=False,
                                                     plot_brandt=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
 
-                av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
+                av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                                                             avfilts=['F182M', 'F212N'],
                                                     sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 20.0),
                                                     xlim=(-1, 80),
                                                     dmag_tbl=dmag_tbl.loc[molcomp],
@@ -817,7 +839,8 @@ def main():
                 pl.close('all')
 
             for av_foreground in (15, 17, 20, 25):
-                av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
+                av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                                                             avfilts=['F182M', 'F212N'],
                                                     sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5),
                                                     xlim=(-1, 80),
                                                     title=f'H2O:CO:CO2 (10:1:1); $A_{{V,fg}}={av_foreground}$',
@@ -832,7 +855,8 @@ def main():
                 pl.close('all')
 
             for ext, extname in zip((CT06_MWGC(), G23(Rv=5.5), G23(Rv=3.1)), ('CT06', 'G23 $R_V=5.5$', 'G23 $R_V=3.1$')):
-                av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
+                av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                                                             avfilts=['F182M', 'F212N'],
                                                     sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5),
                                                     xlim=(-1, 80),
                                                     title=f'H2O:CO:CO2 (10:1:1) {extname}',
@@ -850,7 +874,8 @@ def main():
             # Special case so the left edge matches
             ext = G23(Rv=5.5)
             extname = 'G23 $R_V=5.5$'
-            av, inferred_molecular_column, ax = makeplot(avfilts=['F182M', 'F212N'],
+            av, inferred_molecular_column, ax = makeplot(basetable=basetable,
+                                                avfilts=['F182M', 'F212N'],
                                                 sel=ok2221, ok=ok2221, ax=pl.figure().gca(), ylim=(17.0, 19.5),
                                                 xlim=(-1, 80),
                                                 title=f'H2O:CO:CO2 (10:1:1) {extname}, $A_{{V,fg}}=12$',
