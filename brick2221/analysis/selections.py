@@ -429,7 +429,8 @@ def load_table(basetable, ww, verbose=False):
     sel = reg.contains(basetable['skycoord_f410m'], ww)
     sel &= basetable['sep_f466n'].quantity < 0.1*u.arcsec
     sel &= basetable['sep_f405n'].quantity < 0.1*u.arcsec
-    sel &= ~field_edge_regions.contains(basetable['skycoord_f410m'], ww)
+    # should work but doesn't.
+    # sel &= ~field_edge_regions.contains(basetable['skycoord_f410m'], ww)
 
     def ccds_withiso(basetable=basetable, sel=sel, exclude=exclude, **kwargs):
         return plot_tools.ccds_withiso(basetable=basetable, sel=sel, exclude=exclude, **kwargs)
@@ -541,8 +542,9 @@ def load_table(basetable, ww, verbose=False):
             print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
 
     # exclude all field-edge sources
-    for filt in filternames:
-        ok2221 &= ~field_edge_regions.contains(basetable[f'skycoord_{filt}'], ww)
+    # should work but doesn't.
+    # for filt in filternames:
+    #     ok2221 &= ~field_edge_regions.contains(basetable[f'skycoord_{filt}'], ww)
 
     assert 'ok2221' in locals()
     return locals()

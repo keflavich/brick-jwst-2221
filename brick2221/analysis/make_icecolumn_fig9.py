@@ -45,6 +45,55 @@ def calc_av(avfilts=['F182M', 'F410M'], basetable=None, ext=CT06_MWGC(), return_
         return color
 
 
+def get_smithdata():
+    from pylatexenc.latex2text import LatexNodes2Text
+    from unidecode import unidecode
+
+    tab = Table.read('https://www.nature.com/articles/s41550-025-02511-z/tables/1', format='ascii.html')
+
+    ln2 = LatexNodes2Text()
+    for colname in tab.colnames:
+
+        for row in tab:
+            try:
+                row[colname] = ln2.latex_to_text(row[colname])
+            except:
+                pass
+
+        # Convert LaTeX to Unicode, then Unicode to ASCII
+        unicode_name = ln2.latex_to_text(colname).replace("_", "")
+        ascii_name = unidecode(unicode_name)
+        tab.rename_column(colname, ascii_name)
+
+    tab['F410M'].unit = u.mJy
+    tab['RA'].unit = u.deg
+    tab['Dec'].unit = u.deg
+    tab['NH2'].unit = 10**22 * u.cm**-2
+    tab['NH2O'].unit = 10**18 * u.cm**-2
+    tab['NCO2'].unit = 10**18 * u.cm**-2
+    tab['NCO'].unit = 10**18 * u.cm**-2
+    tab['Av'] = tab['NH2']*10**22 * u.cm**-2 * 2 / (2.21e21 * u.cm**-2)   # Convert to Av using NH2 to Av conversion factor
+    tab['Av'].unit = u.mag  # Av is in magnitudes
+
+    #tab['NCO']
+    NCO_ice = np.zeros(len(tab['NCO']))#NCO_ice))#np.array(tab['NCO'])
+    NCO_poserr = np.zeros_like(NCO_ice)
+    NCO_negerr = np.zeros_like(NCO_ice)
+    Av_ice = np.array(tab['Av'])
+
+    for i in range(len(NCO_ice)):
+        #ele = NCO_ice[i]
+        NCO_ice[i] = np.float64(np.array(tab['NCO'])[i].split('_')[0])
+        NCO_negerr[i] = np.abs(np.float64(np.array(tab['NCO'])[i].split('_')[1].split("^")[0]))
+        NCO_poserr[i] = np.abs(np.float64(np.array(tab['NCO'])[i].split('_')[1].split("^")[1]))
+
+    NCO_ice = NCO_ice * 1e18  # Convert to cm^-2 for consistency with other values
+    NCO_poserr = NCO_poserr * 1e18  # Convert to cm^-2 for consistency with other values
+    NCO_negerr = NCO_negerr * 1e18  # Convert to cm^-2 for consistency with other values
+    NH2 = tab['NH2'].quantity.to(u.cm**-2)
+
+    return NH2, NCO_ice, NCO_poserr, NCO_negerr, Av_ice
+
 def makeplot(basetable,
              avfilts=['F182M', 'F410M'],
              ax=None, sel=None, ok=None, alpha=0.5,
@@ -60,6 +109,7 @@ def makeplot(basetable,
              xax='AV',
              cloudccat=None,
              sgrb2cat=None,
+             smithplot=False,
              scatter=True,
              contour=True,
              hexbin=False,
@@ -277,8 +327,8 @@ def makeplot(basetable,
             artists, labels = cnt.legend_elements()
 
             blue_line = mlines.Line2D([], [], color=(0,0,1,0.7), marker='none',
-                                      linestyle='-', label='Cloud C')
-            artists_and_labels['Cloud C'] = blue_line
+                                      linestyle='-', label='Cloud C & D')
+            artists_and_labels['Cloud C & D'] = blue_line
             #print(cx, cy)
             #pl.legend(artists, ['Cloud C'], **legend_kwargs)
             cx,cy,H,_,_,levels,cnt = mpl_plot_templates.adaptive_param_plot(np.array(av_cloudc[lactea_sel]),
@@ -304,6 +354,31 @@ def makeplot(basetable,
         suffix += '_cloudc'
     else:
         suffix += '_with1182'
+
+
+    if smithplot:
+        NH2_smith, NCO_smith, NCO_poserr_smith, NCO_negerr_smith, AV_ice_smith = get_smithdata()
+        toplot_smith = ((NCO_negerr_smith / NCO_smith) < 0.2) & ((NCO_poserr_smith / NCO_smith) < 0.2)
+        if logy:
+            ax.errorbar((AV_ice_smith + av_start)[toplot_smith],
+                        np.log10(NCO_smith[toplot_smith]),
+                        yerr=[np.abs((NCO_negerr_smith/NCO_smith)[toplot_smith]),
+                              np.abs((NCO_poserr_smith/NCO_smith)[toplot_smith])],
+                        color='k',
+                        marker='o',
+                        linewidth=0.5,
+                        alpha=0.7,
+                        zorder=3,
+                        markersize=5, linestyle='none', label='Smith+25')
+        else:
+            ax.errorbar((AV_ice_smith + av_start)[toplot_smith],
+                        NCO_smith[toplot_smith],
+                        yerr=[NCO_negerr_smith[toplot_smith], NCO_poserr_smith[toplot_smith]],
+                        color='k',
+                        linewidth=0.5,
+                        alpha=0.7,
+                        zorder=3,
+                        marker='o', markersize=5, linestyle='none', label='Smith+25')
 
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
@@ -577,6 +652,7 @@ def main():
                             nbins=46,
                             nlevels=2,
                             contour=contour,
+                            smithplot=True,
                             suffix=f'_BrickCloudCandArm{scatterlabel}',
                             legend_kwargs={'loc': 'lower right',},# 'bbox_to_anchor': (1.2, 0,)},
                             cloudccat=jwst_plots.make_cat_use().catalog,

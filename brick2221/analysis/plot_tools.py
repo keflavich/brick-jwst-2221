@@ -246,7 +246,10 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
         sel=None, axlims=None, xlim_percentiles=None, ext=None, extvec_scale=None,
         head_width=None, markersize=None, alpha=None, alpha_sel=None,
         rasterized=None, color='k', selcolor='r', hexbin=False,
-        n_hexbin_bins=100, hexbin_cmap='gray'):
+        n_hexbin_bins=100, hexbin_cmap='gray',
+        zorder=None,
+        sel_zorder=None,
+        ):
     if ax is None:
         ax = pl.gca()
 
@@ -256,11 +259,11 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
         if axlims[2] > axlims[3]:
             # binning doesn't allow reverse axes, but we manually set that below
             extent = axlims[0], axlims[1], axlims[3], axlims[2]
-        ax.hexbin(colorp[include], magp[include], mincnt=1, gridsize=n_hexbin_bins, extent=extent, cmap=hexbin_cmap)
+        ax.hexbin(colorp[include], magp[include], mincnt=1, gridsize=n_hexbin_bins, extent=extent, cmap=hexbin_cmap, zorder=zorder)
     else:
-        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized)
-    if any(sel):
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized)
+        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, zorder=zorder)
+    if sel is not None and any(sel):
+        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, zorder=sel_zorder)
     ax.set_xlabel(f"{f1} - {f2}")
     ax.set_ylabel(f"{f1}")
     ax.axis(axlims)
