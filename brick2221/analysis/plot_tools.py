@@ -242,7 +242,11 @@ def cmds(basetable, sel=True,
         cmd(ax=ax, basetable=basetable, f1=f1, f2=f2, include=include, sel=sel, axlims=axlims, xlim_percentiles=xlim_percentiles, ext=ext, extvec_scale=extvec_scale, head_width=head_width, markersize=markersize, alpha=alpha, alpha_sel=alpha_sel, rasterized=rasterized)
     return fig
 
-def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None), sel=None, axlims=None, xlim_percentiles=None, ext=None, extvec_scale=None, head_width=None, markersize=None, alpha=None, alpha_sel=None, rasterized=None, hexbin=False, n_hexbin_bins=100, hexbin_cmap='gray'):
+def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
+        sel=None, axlims=None, xlim_percentiles=None, ext=None, extvec_scale=None,
+        head_width=None, markersize=None, alpha=None, alpha_sel=None,
+        rasterized=None, color='k', selcolor='r', hexbin=False,
+        n_hexbin_bins=100, hexbin_cmap='gray'):
     if ax is None:
         ax = pl.gca()
 
@@ -254,9 +258,9 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None), sel=None
             extent = axlims[0], axlims[1], axlims[3], axlims[2]
         ax.hexbin(colorp[include], magp[include], mincnt=1, gridsize=n_hexbin_bins, extent=extent, cmap=hexbin_cmap)
     else:
-        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c='k', rasterized=rasterized)
+        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized)
     if any(sel):
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c='r', rasterized=rasterized)
+        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized)
     ax.set_xlabel(f"{f1} - {f2}")
     ax.set_ylabel(f"{f1}")
     ax.axis(axlims)

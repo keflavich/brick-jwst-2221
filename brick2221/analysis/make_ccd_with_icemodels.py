@@ -191,7 +191,7 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
                        exclude=None,
                        zorder=-5,
                        selcolor=None,
-                       label='Cloud C',
+                       label='Cloud C & D',
                        hexbin=hexbin
                        )
 
