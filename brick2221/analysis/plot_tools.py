@@ -157,12 +157,12 @@ def ccd(basetable,
 
         if hexbin:
             ax.hexbin(colorp1[include], colorp2[include], mincnt=1, gridsize=n_hexbin_bins, extent=axlims, cmap=hexbin_cmap)
-            if selcolor is not None:
-                ax.hexbin(colorp1[sel], colorp2[sel], mincnt=1, gridsize=n_hexbin_bins, extent=axlims, cmap=hexbin_cmap)
         else:
             ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
-            if selcolor is not None:
-                ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
+
+        # scatter the selection
+        if selcolor is not None:
+            ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
     except Exception as ex:
         if not allow_missing:
             raise ex
@@ -239,32 +239,45 @@ def cmds(basetable, sel=True,
             sel = default_sel
 
         ax = fig.add_subplot(gridspec[ii])
-        colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
-        magp = basetable[f'mag_ab_{f1}']
-        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c='k', rasterized=rasterized)
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c='r', rasterized=rasterized)
-        ax.set_xlabel(f"{f1} - {f2}")
-        ax.set_ylabel(f"{f1}")
-        ax.axis(axlims)
-        if xlim_percentiles:
-            try:
-                xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
-                xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
-                if np.isfinite(xlow) and np.isfinite(xhigh):
-                    ax.set_xlim(xlow, xhigh)
-                else:
-                    print(f"xlow={xlow} xhigh={xhigh}")
-            except Exception as ex:
-                print(ex)
-
-        if ext is not None:
-            w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
-            w2 = 4.10*u.um if f2 == '410m405' else 4.05*u.um if f2 == '405m410' else int(f2[1:-1])/100*u.um
-            e_1 = ext(w1) * extvec_scale
-            e_2 = ext(w2) * extvec_scale
-
-            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=head_width)
+        cmd(ax=ax, basetable=basetable, f1=f1, f2=f2, include=include, sel=sel, axlims=axlims, xlim_percentiles=xlim_percentiles, ext=ext, extvec_scale=extvec_scale, head_width=head_width, markersize=markersize, alpha=alpha, alpha_sel=alpha_sel, rasterized=rasterized)
     return fig
+
+def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None), sel=None, axlims=None, xlim_percentiles=None, ext=None, extvec_scale=None, head_width=None, markersize=None, alpha=None, alpha_sel=None, rasterized=None, hexbin=False, n_hexbin_bins=100, hexbin_cmap='gray'):
+    if ax is None:
+        ax = pl.gca()
+
+    colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
+    magp = basetable[f'mag_ab_{f1}']
+    if hexbin:
+        if axlims[2] > axlims[3]:
+            # binning doesn't allow reverse axes, but we manually set that below
+            extent = axlims[0], axlims[1], axlims[3], axlims[2]
+        ax.hexbin(colorp[include], magp[include], mincnt=1, gridsize=n_hexbin_bins, extent=extent, cmap=hexbin_cmap)
+    else:
+        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c='k', rasterized=rasterized)
+    if any(sel):
+        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c='r', rasterized=rasterized)
+    ax.set_xlabel(f"{f1} - {f2}")
+    ax.set_ylabel(f"{f1}")
+    ax.axis(axlims)
+    if xlim_percentiles:
+        try:
+            xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
+            xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
+            if np.isfinite(xlow) and np.isfinite(xhigh):
+                ax.set_xlim(xlow, xhigh)
+            else:
+                print(f"xlow={xlow} xhigh={xhigh}")
+        except Exception as ex:
+            print(ex)
+
+    if ext is not None:
+        w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
+        w2 = 4.10*u.um if f2 == '410m405' else 4.05*u.um if f2 == '405m410' else int(f2[1:-1])/100*u.um
+        e_1 = ext(w1) * extvec_scale
+        e_2 = ext(w2) * extvec_scale
+
+        ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=head_width)
 
 
 def color_plot(basetable,

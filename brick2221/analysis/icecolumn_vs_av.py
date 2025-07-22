@@ -74,7 +74,7 @@ def boxplot_abundance(
     if grid:
         ax.grid(True, linestyle='--', alpha=0.25, zorder=-50)
 
-    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext, return_av=(xax == 'AV'))
+    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext, return_av=True)
 
     # Dynamic color calculation based on color_filter parameters
     filter1_wav = int(color_filter1[1:-1])/100. * u.um
@@ -94,58 +94,88 @@ def boxplot_abundance(
     NH2_of_AV = NHtoAV / 2. * (av - av_start)
 
     abundance = inferred_molecular_column / NH2_of_AV
-    print("abundance: ", np.array(abundance[:10]))
-    print("av: ", np.array(av[:10]))
-    print("NH2_of_AV: ", np.array(NH2_of_AV[:10]))
-    print("inferred_molecular_column: ", np.array(inferred_molecular_column[:10]))
-
-    ax.hexbin(av[av > av_start], np.log10(abundance[av > av_start]),
-              gridsize=50,
-              extent=(av_start, av_max, ymin, ymax),
-              bins='log', mincnt=1, cmap='Reds', alpha=hexbin_alpha)
-    ticklabels = ax.get_xticklabels()
-    ticks = ax.get_xticks()
 
     av_bins = np.arange(av_start, av_max, av_spacing)
     av_bin_centers = av_bins[:-1] + av_spacing / 2
 
+    if xax == 'AV':
+        xtoplot = av
+        extent = (av_start, av_max, ymin, ymax)
+        bins, bin_centers = av_bins, av_bin_centers
+        spacing = av_spacing
+        start = av_start
+        first_bin = 1
+    elif xax == 'NH2':
+        xtoplot = NH2_of_AV
+        extent = (0, (av_max - av_start) * NHtoAV / 2., ymin, ymax)
+        bins, bin_centers = (av_bins - av_start) * NHtoAV / 2., (av_bin_centers - av_start) * NHtoAV / 2.
+        spacing = av_spacing * NHtoAV / 2.
+        start = 0
+        first_bin = 1
+    elif xax == 'logNH2':
+        xtoplot = np.log10(NH2_of_AV)
+        extent = (21.5, 23, ymin, ymax)
+        bins = np.linspace(extent[0], extent[1], 15)
+        bin_centers = (bins[:-1] + bins[1:]) / 2.
+        spacing = np.diff(bins)[0]
+        print(f"logNH2 spacing: {spacing}")
+        start = 0
+        first_bin = 3
+        #print(f"bins: {bins}.  bin_centers: {bin_centers}")
+
+    ax.hexbin(xtoplot[av > av_start], np.log10(abundance[av > av_start]),
+              gridsize=50,
+              extent=extent,
+              bins='log', mincnt=1, cmap='Reds', alpha=hexbin_alpha)
+    ticklabels = ax.get_xticklabels()
+    ticks = ax.get_xticks()
+
     medians = []
     bins_to_fit = []
-    for av_bin_center in av_bin_centers:
-        selection = (av > av_bin_center - av_spacing / 2) & (av < av_bin_center + av_spacing / 2)
+    for bin_center in bin_centers:
+        selection = (xtoplot > bin_center - spacing / 2) & (xtoplot < bin_center + spacing / 2)
+        #print(bin_center, selection.sum())
         if selection.sum() > 10:
             ret = ax.boxplot(x=np.log10(abundance[selection]), notch=True,
-                    widths=[av_spacing/2],
-                    positions=[av_bin_center],
+                    widths=[spacing/2],
+                    positions=[bin_center],
                     showfliers=False,
                     orientation='vertical')
-            bins_to_fit.append(av_bin_center)
+            bins_to_fit.append(bin_center)
             medians.append(ret['medians'][0].get_ydata()[0])
 
+    xtolabel = 'A$_V$' if xax == 'AV' else 'N$_{H_2}$' if xax == 'NH2' else 'log(N$_{H_2}$)'
 
-    poly = np.polyfit(np.array(bins_to_fit[1:]) - av_start, medians[1:], 1)
-    pl.plot(av_bin_centers, np.polyval(poly, av_bin_centers - av_start), color='black', linestyle=':',
-            label=f'log(X) = {poly[1]:.2f} + {poly[0]:.3f}A$_V$')
+    poly = np.polyfit(np.array(bins_to_fit[first_bin:]) - start, medians[first_bin:], 1)
+    pl.plot(bin_centers, np.polyval(poly, bin_centers - start), color='black', linestyle=':',
+            label=f'log(X) = {poly[1]:.2f} + {poly[0]:.3f}{xtolabel}')
 
+    if xax == 'logNH2':
+        print(f"X = {10**poly[1]:.2e} N$_{{H_2}}^{{{poly[1]}}}$")
 
     # extrapolate flatly for another few bins
-    bins_to_fit.append(av_bin_center + av_spacing)
+    bins_to_fit.append(bin_centers[-1] + spacing)
     medians.append(medians[-1])
-    bins_to_fit.append(av_bin_center + av_spacing*2)
+    bins_to_fit.append(bin_centers[-1] + spacing*2)
     medians.append(medians[-1])
 
-    poly = np.polyfit(np.array(bins_to_fit[1:]) - av_start, medians[1:], 2)
-    pl.plot(av_bin_centers, np.polyval(poly, av_bin_centers - av_start), color='black', linestyle='--',
-            label=f'log(X) = {poly[2]:.2f} + {poly[1]:.3f}A$_V$ + {poly[0]:.5f}A$_V^2$')
+    poly = np.polyfit(np.array(bins_to_fit[first_bin:]) - start, medians[first_bin:], 2)
+    pl.plot(bin_centers, np.polyval(poly, bin_centers - start), color='black', linestyle='--',
+            label=f'log(X) = {poly[2]:.2f} + {poly[1]:.3f}{xtolabel} + {poly[0]:.5f}{xtolabel}$^2$')
 
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.set_ylim(ymin, ymax)
 
-    ax.fill_between([0, av_start+5], ymin, ymax, color='white', alpha=0.5)
-    ax.set_xlabel('A$_V$')
+    ax.fill_between([0, bins[first_bin]], ymin, ymax, color='white', alpha=0.5)
+    if xax == 'AV':
+        ax.set_xlabel('A$_V$')
+    elif xax == 'NH2':
+        ax.set_xlabel('NH$_2$')
+    elif xax == 'logNH2':
+        ax.set_xlabel('log(N$_{H_2}$)')
     ax.set_ylabel('log(X)')
-    ax.set_xlim(av_start, av_max)
+    ax.set_xlim(extent[0], extent[1])
 
     ax.legend(loc='lower right')
 
@@ -181,8 +211,17 @@ def main():
 
 
     pl.clf()
-    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3)
-    pl.savefig(f'{basepath}/figures/boxplot_abundance_with_fit.pdf', bbox_inches='tight')
+    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='AV')
+    pl.savefig(f'{basepath}/figures/boxplot_abundance_vs_AV_with_fit.pdf', bbox_inches='tight')
+
+    pl.clf()
+    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='NH2')
+    pl.savefig(f'{basepath}/figures/boxplot_abundance_vs_NH2_with_fit.pdf', bbox_inches='tight')
+
+    pl.clf()
+    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='logNH2')
+    pl.savefig(f'{basepath}/figures/boxplot_abundance_vs_logNH2_with_fit.pdf', bbox_inches='tight')
+
 
 if __name__ == '__main__':
     main()

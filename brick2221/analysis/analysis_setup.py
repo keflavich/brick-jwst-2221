@@ -63,6 +63,12 @@ filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m',
 reg = regions.Regions.read(f'{basepath}/regions_/leftside_brick_zoom.reg')[0]
 regzoom = regions.Regions.read(f'{basepath}/regions_/leftside_brick_rezoom.reg')[0]
 
+field_edge_regions = regions.Regions.read(f'{basepath}/regions_/field_edges.reg')
+field_edge_regions_ = field_edge_regions[0]
+for reg in field_edge_regions[1:]:
+    field_edge_regions_ |= reg
+field_edge_regions = field_edge_regions_
+
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
