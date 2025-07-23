@@ -18,12 +18,14 @@ import matplotlib.lines as mlines
 from brick2221.analysis.analysis_setup import filternames
 from brick2221.analysis.selections import load_table
 from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps
+from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps, compute_dmag_from_column
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg, F11_MWGC
 from dust_extinction.parameter_averages import G23
 
 from astropy.wcs import WCS
+
+from matplotlib.ticker import Locator, FuncFormatter
 
 
 def ev(avfilts, ext=G21_MWAvg()):
@@ -94,8 +96,9 @@ def get_smithdata():
 
     return NH2, NCO_ice, NCO_poserr, NCO_negerr, Av_ice
 
+
 def makeplot(basetable,
-             avfilts=['F182M', 'F410M'],
+             avfilts=['F182M', 'F212N'],
              ax=None, sel=None, ok=None, alpha=0.5,
              icemol='CO',
              atom='C',
@@ -482,6 +485,25 @@ def makeplot(basetable,
               **legend_kwargs)
     ax.set_title(title)
 
+    ax3 = ax.twinx()
+    ylim = ax.get_ylim()
+    ax3.set_ylim(ylim)
+    #ticks = np.linspace(ylim[0], ylim[1], 6)
+    #print(f"ylim is {ylim}")
+    #print(f'yaxis ticks: {ax3.yaxis.get_ticklocs()}')
+    #print(f'yaxis tick labels: {ax3.yaxis.get_ticklabels()}')
+    formatter = lambda x, pos=None: f'{compute_dmag_from_column(10**x if logy else x, dmag_tbl=dmag_tbl, icemol=icemol, filter1=color_filter1, filter2=color_filter2, verbose=False):.1f}'
+    #print(f'computed dmag: {compute_dmag_from_column(10**ax3.yaxis.get_ticklocs() if logy else ax3.yaxis.get_ticklocs(), dmag_tbl=dmag_tbl, icemol=icemol, filter1=color_filter1, filter2=color_filter2, verbose=False)}')
+    #print(f'yaxis ticks formatted: {[formatter(10**x if logy else x, None) for x in ax3.yaxis.get_ticklocs()]}')
+    #tick_labels = [f"{compute_dmag_from_column(tick, dmag_tbl=dmag_tbl, icemol=icemol, filter1=color_filter1, filter2=color_filter2):.1f}" for tick in ticks]
+    #ax3.set_yticks(ticks)
+    #ax3.set_yticklabels(tick_labels)
+    ax3.yaxis.set_major_formatter(FuncFormatter(formatter))
+    #print(f'yaxis tick labels after setting formatter: {ax3.yaxis.get_ticklabels()}')
+    #ax3.set_ylim(ylim)
+    ax3.set_ylabel(f"[{color_filter1}]-[{color_filter2}] (mag)")
+
+
     # mask out low signal-to-noise stuff
     # if logy:
     #     ax.fill_between([0, 1e25], [16, 16], [18, 18], color='w', alpha=0.2, zorder=5)
@@ -699,8 +721,10 @@ def main():
         pl.close('all')
 
         # DEFAULT
+        print(f"DEFAULT: color_filter1={color_filter1}, color_filter2={color_filter2}")
         makeplot_simpler(
                 ax=pl.figure().gca(), ylim=(17.0, 19.5), legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+
 
         # CT06 doesn't apply to F115W
         makeplot_simpler(

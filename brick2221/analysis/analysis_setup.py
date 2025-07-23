@@ -152,3 +152,30 @@ def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F4
                                           fp=cols[sortorder][cols<maxcol])
 
     return inferred_molecular_column
+
+
+def compute_dmag_from_column(cols_of_icemol, dmag_tbl, icemol='CO', filter1='F410M', filter2='F466N',
+                             maxcol=1e21, verbose=True):
+    dmags1 = dmag_tbl[filter1]
+    dmags2 = dmag_tbl[filter2]
+
+    comp = np.unique(dmag_tbl['composition'])[0]
+    # molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+    mols, comps = molscomps(comp)
+    mol_frac = comps[mols.index(icemol)] / sum(comps)
+    cols = dmag_tbl['column'] * mol_frac
+
+    dmag_1m2 = np.array(dmags1) - np.array(dmags2)
+
+    sortorder = np.argsort(cols)
+    dmag_of_icemol = np.interp(cols_of_icemol,
+                               xp=cols[sortorder][cols<maxcol],
+                               fp=dmag_1m2[sortorder][cols<maxcol],
+                              )
+
+    if verbose:
+        print(f"min(dmag1) = {np.nanmin(dmags1)}, max(dmag1) = {np.nanmax(dmags1)}")
+        print(f"min(cols) = {np.nanmin(cols)}, max(cols) = {np.nanmax(cols)}")
+        print(f"min(dmag_of_icemol) = {np.nanmin(dmag_of_icemol)}, max(dmag_of_icemol) = {np.nanmax(dmag_of_icemol)}")
+
+    return dmag_of_icemol
