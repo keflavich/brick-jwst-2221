@@ -15,6 +15,7 @@ from icemodels.core import (absorbed_spectrum, absorbed_spectrum_Gaussians, conv
                             download_all_lida,
                             composition_to_molweight,
                             fluxes_in_filters, load_molecule, load_molecule_ocdb, atmo_model, molecule_data, read_ocdb_file)
+from icemodels.absorbance_in_filters import make_mixtable
 
 from brick2221.analysis.analysis_setup import basepath
 
@@ -47,11 +48,13 @@ ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_30.0K.txt
 methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
 ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
 co_gerakines = gerakines = retrieve_gerakines_co()
-#nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/273_NH3_(1)_40K_Roser.txt')
+nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/273_NH3_(1)_40K_Roser.txt')
 #nh3 = read_lida_file(f'{optical_constants_cache_dir}/116_NH3_1_27.0K.txt')
 nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
 water_ammonia = read_ocdb_file(f'{optical_constants_cache_dir}/265_H2O:NH3_(4:1)_24K_Mukai.txt')
 co_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/85_CO_(1)_10K_Hudgins.txt')
+strong_icemix_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/119_H2O:CH3OH:CO:NH3_(100:50:1:1)_10K_Hudgins.txt')
+icemix_ehrenfreund = read_lida_file(f'{optical_constants_cache_dir}/35_H2O:CH3OH:CO2_(9:1:2)_10.0K.txt')
 
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, water_ammonia),
@@ -62,7 +65,11 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
 
         kk = tb['k₁'] if 'k₁' in tb.colnames else tb['k']
-        opacity = ((kk.quantity * tb['Wavelength'].to(u.cm**-1, u.spectral()) * 4 * np.pi / (1*u.g/u.cm**3 / (molwt)))).to(u.cm**2)
+        #opacity = ((kk.quantity * tb['Wavelength'].to(u.cm**-1, u.spectral()) * 4 * np.pi / (1*u.g/u.cm**3 / (molwt)))).to(u.cm**2)
+
+        # calculated "tau" with unitless ice_column to get the same as calculated above
+        opacity = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1, ice_model_table=tb, molecular_weight=molwt, return_tau=True).to(u.cm**2)
+
         pl.plot(tb['Wavelength'],
                 opacity,
                 label=f'{tb.meta["author"]} {tb.meta["composition"]} {tb.meta["temperature"]}'
@@ -85,6 +92,59 @@ def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18):
         xarr = wavelength_table['Wavelength'].quantity.to(u.um)
         pl.plot(xarr, wavelength_table['Transmission']/wavelength_table['Transmission'].max() * ymax,
                 color='k', linewidth=3, alpha=0.5, zorder=-5)
+
+
+def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
+                                       'H2O': water_mastrapa,
+                                       'CO2': co2_gerakines,
+                                       'CH3CH2OH': ethanol,
+                                       'CH3OH': methanol,
+                                       'OCN': ocn,
+                                       'NH4+': nh4p,
+                                       'NH3': nh3, },
+                        mixture={'CO': 1},
+                        colors=None,
+                        normalize_to_molecule=False,
+                        ylim=(1e-21, 6e-18),
+                        **kwargs):
+
+    authors = {mol: tb.meta['author'] for mol, tb in opacity_tables.items()}
+
+    grid = np.linspace(2.5*u.um, 5.0*u.um, 20000)
+    composition = ':'.join(mixture.keys()) + " (" + ":".join([str(val) for val in mixture.values()]) + ")"
+    print(f"composition: {composition}")
+    tb = make_mixtable(composition, moltbls=opacity_tables, grid=grid, density=1*u.g/u.cm**3, temperature=25*u.K,
+                       authors=', '.join([authors[mol] for mol in composition.split(' ')[0].split(':')]),)
+
+    molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
+    opacity = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1, ice_model_table=tb, molecular_weight=molwt, return_tau=True).to(u.cm**2)
+
+    #kk = tb['k₁'] if 'k₁' in tb.colnames else tb['k']
+    #opacity = ((kk.quantity * tb['Wavelength'].to(u.cm**-1, u.spectral()) * 4 * np.pi / (1*u.g/u.cm**3 / (molwt)))).to(u.cm**2)
+
+    if normalize_to_molecule:
+        total = sum(mixture.values())
+        molval = mixture[normalize_to_molecule]
+        molfrac_mol = molval / total
+        opacity = opacity * molfrac_mol
+
+    pl.plot(tb['Wavelength'],
+            opacity,
+            label=f'{tb.meta["author"]} {tb.meta["composition"]} {tb.meta["temperature"]}'
+                    if 'author' in tb.meta else
+                f'{tb.meta["index"]} {tb.meta["molecule"]} {tb.meta["ratio"]} {tb.meta["temperature"]}',
+            linestyle='-',
+            color=colors[ii] if colors is not None else None,
+            **kwargs,
+            )
+
+    pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+    pl.xlabel("Wavelength ($\\mu$m)")
+    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    pl.semilogy();
+    pl.ylim(ylim);
+
+    return tb
 
 
 if __name__ == "__main__":
@@ -163,3 +223,37 @@ if __name__ == "__main__":
     plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
     pl.xlim(2.00, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.png', dpi=150, bbox_inches='tight')
+
+
+    pl.close('all')
+    # compare my mixture to real mixture
+    pl.figure()
+    plot_mixed_opacity(mixture={'H2O': 100, 'CH3OH': 50, 'CO': 1, 'NH3': 1},)
+    plot_opacity_tables(opacity_tables=(strong_icemix_hudgins,))
+    pl.xlim(2.71, 5.25);
+    pl.ylim(1e-22, 1e-18)
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix.png', dpi=150, bbox_inches='tight')
+
+    pl.close('all')
+    # compare my mixture to real mixture
+    pl.figure()
+    plot_mixed_opacity(mixture={'H2O': 9, 'CH3OH': 1, 'CO2': 2},)
+    plot_opacity_tables(opacity_tables=(icemix_ehrenfreund,))
+    pl.xlim(2.71, 5.25);
+    pl.ylim(1e-22, 1e-18)
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix_ehrenfreund.png', dpi=150, bbox_inches='tight')
+
+    # pl.clf()
+    # tb = plot_mixed_opacity(mixture={'H2O': 100, 'CH3OH': 50, 'CO': 1, 'NH3': 1},)
+    # pl.ylim(1e-35, 1e-10)
+    # pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/debug.png', dpi=150, bbox_inches='tight')
+
+
+    pl.figure()
+    plot_mixed_opacity(mixture={'H2O': 10, 'CO': 1, 'CO2': 1, 'CH3OH': 1, }, normalize_to_molecule='CO')
+    plot_mixed_opacity(mixture={'H2O': 10, 'CO': 1, 'CO2': 1}, normalize_to_molecule='CO', linewidth=0.5)
+    plot_mixed_opacity(mixture={'H2O': 5,  'CO': 1, 'CO2': 1}, normalize_to_molecule='CO', linewidth=0.5)
+    plot_mixed_opacity(mixture={'H2O': 20, 'CO': 1, 'CO2': 1}, normalize_to_molecule='CO', linewidth=0.5)
+    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(CO_{ice})$]");
+    pl.ylim(1e-22, 1e-19)
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mixtures_normalized.png', dpi=150, bbox_inches='tight')

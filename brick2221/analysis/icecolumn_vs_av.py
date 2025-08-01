@@ -12,29 +12,51 @@ import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.lines as mlines
 from scipy import stats
+import warnings
 
 from brick2221.analysis.analysis_setup import filternames
 from brick2221.analysis.selections import load_table
 from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
 from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps
-from brick2221.analysis.make_icecolumn_fig9 import calc_av, ev
+from brick2221.analysis.make_icecolumn_fig9 import calc_av, ev, get_smithdata
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg, F11_MWGC
 from dust_extinction.parameter_averages import G23
 
 from astropy.wcs import WCS
 
+def get_cloudc():
+
+    import sys
+    sys.path.append('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament')
+    import jwst_plots
+    cloudccat = jwst_plots.make_cat_use().catalog
+
+    ww = WCS(fits.getheader('/orange/adamginsburg/jwst/cloudc/images/F182_reproj_merged-fortricolor.fits'))
+    crds_cloudc = cloudccat['skycoord_ref']
+    cloudc_regions = [y for x in [
+        '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc1.region',
+        '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc2.region',
+        '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudd.region']
+                for y in regions.Regions.read(x)
+    ]
+    cloudcd_sel = np.any([reg.contains(crds_cloudc, ww) for reg in cloudc_regions], axis=0)
+    lactea_filament_regions = regions.Regions.read('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_long.region')[0]
+    lactea_sel = lactea_filament_regions.contains(crds_cloudc, ww)
+
+    return cloudccat[cloudcd_sel], cloudccat[lactea_sel]
+
+
 
 def boxplot_abundance(
              basetable,
-             avfilts=['F182M', 'F410M'],
-             ax=None, sel=ok2221, ok=ok2221, alpha=0.5,
+             avfilts=['F182M', 'F212N'],
+             ax=None, sel=None, ok=None, alpha=0.5,
              icemol='CO',
              atom='C',
              abundance=10**(8.7-12), # roughly extrapolated from Smartt 2001A%26A...367...86S
              title='H2O:CO:CO2 (10:1:1)',
-             dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'],
-             plot_brandt=True,
+             dmag_tbl=None,
              NHtoAV=2.21e21,
              # av_start = 20 based on Jang, An, Whittet...
              av_start=20,
@@ -113,12 +135,14 @@ def boxplot_abundance(
         start = 0
         first_bin = 1
     elif xax == 'logNH2':
-        xtoplot = np.log10(NH2_of_AV)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            xtoplot = np.log10(NH2_of_AV)
         extent = (21.5, 23, ymin, ymax)
         bins = np.linspace(extent[0], extent[1], 15)
         bin_centers = (bins[:-1] + bins[1:]) / 2.
         spacing = np.diff(bins)[0]
-        print(f"logNH2 spacing: {spacing}")
+        #print(f"logNH2 spacing: {spacing}")
         start = 0
         first_bin = 3
         #print(f"bins: {bins}.  bin_centers: {bin_centers}")
@@ -153,6 +177,10 @@ def boxplot_abundance(
     if xax == 'logNH2':
         print(f"X = {10**poly[1]:.2e} N$_{{H_2}}^{{{poly[1]}}}$")
 
+    mean_median = np.mean(medians[first_bin:])
+    std_median = np.std(medians[first_bin:])
+    print(f"mean(medians[{first_bin}:]) = {mean_median:.2f} +/- {std_median:.2f}")
+
     # extrapolate flatly for another few bins
     bins_to_fit.append(bin_centers[-1] + spacing)
     medians.append(medians[-1])
@@ -178,6 +206,8 @@ def boxplot_abundance(
     ax.set_xlim(extent[0], extent[1])
 
     ax.legend(loc='lower right')
+
+    return mean_median, std_median
 
 
 def main():
@@ -211,16 +241,106 @@ def main():
 
 
     pl.clf()
-    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='AV')
+    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'], av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='AV')
     pl.savefig(f'{basepath}/figures/boxplot_abundance_vs_AV_with_fit.pdf', bbox_inches='tight')
 
     pl.clf()
-    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='NH2')
+    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'], av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='NH2')
     pl.savefig(f'{basepath}/figures/boxplot_abundance_vs_NH2_with_fit.pdf', bbox_inches='tight')
 
     pl.clf()
-    boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='logNH2')
+    mean_brick, std_brick = boxplot_abundance(basetable=basetable, sel=ok2221, ok=ok2221, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'], av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='logNH2')
     pl.savefig(f'{basepath}/figures/boxplot_abundance_vs_logNH2_with_fit.pdf', bbox_inches='tight')
+
+    cloudccat, lacteacat = get_cloudc()
+    pl.clf()
+    print()
+    print("Cloud C/D")
+    mean_cloudcd, std_cloudcd = boxplot_abundance(basetable=cloudccat, sel=True, ok=True, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'], av_start=17, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='logNH2')
+    pl.savefig(f'{basepath}/figures/boxplot_cloudcd_abundance_vs_logNH2_with_fit.pdf', bbox_inches='tight')
+
+    pl.clf()
+    print()
+    print("3 kpc filament")
+    mean_3kpc, std_3kpc = boxplot_abundance(basetable=lacteacat, sel=True, ok=True, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'], av_start=15, av_max=80, av_spacing=5, ymin=-4.75, ymax=-3, xax='logNH2')
+    pl.savefig(f'{basepath}/figures/boxplot_3kpcfilament_abundance_vs_logNH2_with_fit.pdf', bbox_inches='tight')
+
+    NH2_smith, NCO_smith, NCO_poserr_smith, NCO_negerr_smith, AV_ice_smith = get_smithdata()
+    toplot_smith = ((NCO_negerr_smith / NCO_smith) < 0.2) & ((NCO_poserr_smith / NCO_smith) < 0.2)
+    mean_smith = np.average(np.log10((NCO_smith/NH2_smith).value)[toplot_smith],
+                                       weights=NCO_smith[toplot_smith]/(NCO_poserr_smith[toplot_smith]**2 + NCO_negerr_smith[toplot_smith]**2))
+    std_smith = np.log10((NCO_smith/NH2_smith).value)[toplot_smith].std()
+    print(f"Smith+25: {mean_smith:.2f} +/- {std_smith:.2f}")
+
+    co_abundances = np.array([mean_smith, mean_3kpc, mean_cloudcd, mean_brick])
+    co_errors = np.array([std_smith, std_3kpc, std_cloudcd, std_brick])
+
+    gradient = 0.044 # dex/kpc
+    gradient2 = 0.4 / 8.1
+    # put cloud c/d 50 pc away for plotting
+    rgal = np.array([8.1, 3, 0.05, 0])
+    rgal_err = np.array([0, 1.5, 0.1, 0.1])
+    rsun = 8.1 - rgal
+    metallicities = np.array(10**(rsun * gradient))
+    metallicities2 = np.array(10**(rsun * gradient2))
+    print('metallicities:', metallicities, metallicities2)
+    metallicity_error = ((10**((rsun + rgal_err) * gradient) - 10**((rsun - rgal_err) * gradient))**2
+                        + (metallicities2 - metallicities)**2)**0.5
+    print('metallicity_error:', metallicity_error)
+    metallicity_error[metallicity_error <= 0] = 1e-5
+
+
+    from scipy import odr
+
+    def linear_model(beta, x):
+        return beta[0] * x + beta[1]
+
+    model = odr.Model(linear_model)
+    data = odr.Data(metallicities, co_abundances, we=1./co_errors**2, wd=1./metallicity_error**2) # wd and we are weights for x and y errors
+
+    odr_obj = odr.ODR(data, model, beta0=[1.0, -4.0]) # Initial guess for slope and intercept
+    output = odr_obj.run()
+
+    slope_tls, intercept_tls = output.beta
+    print(rf"Total Least Squares fit: [\mathrm{{CO}}/\mathrm{{H}}_2] = {output.beta[0]:.2f} Z {output.beta[1]:.2f}")
+
+    pl.clf()
+    pl.errorbar(metallicities,
+                co_abundances,
+                yerr=co_errors,
+                xerr=metallicity_error,
+                marker='o', linestyle='none')
+
+    yfit = slope_tls * metallicities + intercept_tls
+    pl.plot(metallicities, yfit, 'k--')
+
+    pl.xlabel(r'Metallicity [Z/Z$_\odot$]')
+    pl.ylabel('CO ice abundance [CO/H$_2$]')
+    pl.savefig(f'{basepath}/figures/abundance_vs_metallicity.pdf', bbox_inches='tight')
+
+
+    # rgal
+    data = odr.Data(rgal, co_abundances, we=1./co_errors**2) # wd and we are weights for x and y errors
+    odr_obj = odr.ODR(data, model, beta0=[1.0, -4.0]) # Initial guess for slope and intercept
+    output = odr_obj.run()
+
+    slope_tls, intercept_tls = output.beta
+    print(rf"Total Least Squares fit: [\mathrm{{CO}}/\mathrm{{H}}_2] = {output.beta[0]:.2f} R_{{gal}} {output.beta[1]:.2f}")
+
+    pl.clf()
+    pl.errorbar(rgal,
+                co_abundances,
+                yerr=co_errors,
+                xerr=rgal_err,
+                marker='o', linestyle='none')
+
+    yfit = slope_tls * rgal + intercept_tls
+    pl.plot(rgal, yfit, 'k--')
+
+    pl.xlabel(r'Galactocentric Radius [kpc]')
+    pl.ylabel('CO ice abundance [CO/H$_2$]')
+    pl.savefig(f'{basepath}/figures/abundance_vs_rgal.pdf', bbox_inches='tight')
+
 
 
 if __name__ == '__main__':

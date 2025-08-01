@@ -546,6 +546,13 @@ def load_table(basetable, ww, verbose=False):
     # for filt in filternames:
     #     ok2221 &= ~field_edge_regions.contains(basetable[f'skycoord_{filt}'], ww)
 
+    # There are some clearly saturated sources that aren't getting flagged appropriately
+    # this cut is similar to but less aggressive than the badblue note above
+    bad_to_exclude = (basetable['mag_ab_f410m'] < 13.7) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -0.2) )
+    bad_to_exclude |= (basetable['mag_ab_f410m'] > 17) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -1) )
+    bad_to_exclude |= (basetable['mag_ab_f182m'] < 15.5)
+    ok2221 &= ~bad_to_exclude
+
     assert 'ok2221' in locals()
     return locals()
 
@@ -706,7 +713,8 @@ def main():
         from brick2221.analysis.analysis_setup import (fh_merged_reproject as fh,
                                     ww410_merged_reproject as ww410,
                                     ww410_merged_reproject as ww)
-        result = load_table_dao(basetable_merged_reproject_dao_iter_bg_epsf, ww=ww)
+        # 2025-07-27: changed from load_table_dao to load_table but not sure if callspec has changed
+        result = load_table(basetable_merged_reproject_dao_iter_bg_epsf, ww=ww)
         globals().update(result)
         basetable = basetable_merged_reproject_dao_iter_bg_epsf
         print("Loaded merged-reproject-iterative-bg-epsf")

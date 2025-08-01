@@ -19,7 +19,7 @@ def load_table():
 
     if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits'):
         basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits')
-        print("Loaded merged1182_daophot_basic_indivexp (2025-07-21 version)")
+        print("Loaded merged1182_daophot_basic_indivexp (2025-07-21 version)", flush=True)
     else:
         from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         from brick2221.analysis.selections import load_table as load_table_
@@ -43,6 +43,12 @@ def load_table():
     # # don't remove masked sources
     # edge_sources &= ~basetable['skycoord_f410m'].mask
     # basetable = basetable[~edge_sources]
+
+    # see jwst/brick/notebooks/SaturatedF410M_ColorCut.ipynb
+    bad_to_exclude = (basetable['mag_ab_f410m'] < 13.7) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -0.2) )
+    bad_to_exclude |= ((basetable['mag_ab_f410m'] > 17) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -1) ))
+    bad_to_exclude |= (basetable['mag_ab_f182m'] < 15.5)
+    basetable = basetable[~bad_to_exclude]
 
     return basetable
 
@@ -128,6 +134,53 @@ def nondetections_on_rgb(basetable,
     fig.savefig(f"{basepath}/figures/Nondetections_on_{rgb_name}_{'+'.join(detections)}_{'-'.join(nondetections)}.png", dpi=200, bbox_inches='tight')
 
 
+def overlay_stars(basetable,
+                  ax=None,
+                  color_filter1='F405N',
+                  color_filter2='F466N',
+                  threshold=-0.3,
+                  av_threshold=17,
+                  ref_filter='f410m',
+                  avfilts=['F182M', 'F212N'],
+                  ext=CT06_MWGC(),
+                  cbar=True,
+                  cmap='Reds',
+                  s=5,
+                  **kwargs,
+                  ):
+
+    if ax is None:
+        ax = pl.gca()
+
+    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext, return_av=True)
+    filter1_wav = int(color_filter1[1:-1])/100. * u.um
+    filter2_wav = int(color_filter2[1:-1])/100. * u.um
+    E_V_color = (ext(filter2_wav) - ext(filter1_wav))
+    measured_color = basetable[f'mag_ab_{color_filter1.lower()}'] - basetable[f'mag_ab_{color_filter2.lower()}']
+    unextincted_color = measured_color + E_V_color * av
+
+    blue_ice = (unextincted_color < threshold) & (av > av_threshold)
+
+    crds = basetable[f'skycoord_{ref_filter}']
+    inds = np.argsort(unextincted_color[blue_ice])[::-1]
+    sc = ax.scatter_coord(
+        crds[blue_ice][inds],
+        #transform=ax.get_transform('world'),
+        marker='o', #facecolors=(0.2, 1, 0.6),
+        linewidths=0.5,
+        s=s,
+        c=unextincted_color[blue_ice][inds],
+        cmap=cmap,
+        **kwargs,
+    );
+
+    if cbar:
+        cb = pl.colorbar(mappable=sc, ax=ax, pad=0.01)
+        cb.set_label(f'{color_filter1} - {color_filter2} (dereddened)')#, rotation=270, labelpad=20)
+
+    return unextincted_color, blue_ice
+
+
 def blue_stars_on_rgb(basetable,
                       rgb_imagename='images/BrickJWST_merged_longwave_narrowband_lighter.png',
                       wcsaxes=None,
@@ -170,15 +223,6 @@ def blue_stars_on_rgb(basetable,
 
     ax.imshow(img_narrow, zorder=-5, transform=ax.get_transform(wwi_narrow))
 
-    av = calc_av(avfilts=avfilts, basetable=basetable, ext=ext, return_av=True)
-    filter1_wav = int(color_filter1[1:-1])/100. * u.um
-    filter2_wav = int(color_filter2[1:-1])/100. * u.um
-    E_V_color = (ext(filter2_wav) - ext(filter1_wav))
-    measured_color = basetable[f'mag_ab_{color_filter1.lower()}'] - basetable[f'mag_ab_{color_filter2.lower()}']
-    unextincted_color = measured_color + E_V_color * av
-
-    blue_co_ice = (unextincted_color < threshold) & (av > av_threshold)
-
     #ax.scatter(crds.ra[blue_410_405], crds.dec[blue_410_405], edgecolors='orange', facecolors='none', transform=ax.get_transform('world'))
     if 'ra' in ax.coords:
         ra = lon = ax.coords['ra']
@@ -186,7 +230,6 @@ def blue_stars_on_rgb(basetable,
         ra.set_major_formatter('hh:mm:ss.ss')
         dec.set_major_formatter('dd:mm:ss.ss')
         ra.set_axislabel('Right Ascension')
-        ra.set_ticklabel(rotation=25, pad=30)
         dec.set_axislabel('Declination')
         if swapaxes_wcs:
             ra.set_ticks_position('l')
@@ -195,6 +238,9 @@ def blue_stars_on_rgb(basetable,
             dec.set_ticks_position('b')
             dec.set_ticklabel_position('b')
             dec.set_axislabel_position('b')
+            dec.set_ticklabel(rotation=25, pad=30)
+        else:
+            ra.set_ticklabel(rotation=25, pad=30)
     elif 'glon' in ax.coords:
         glon = lon = ax.coords['glon']
         glat = lat = ax.coords['glat']
@@ -210,22 +256,15 @@ def blue_stars_on_rgb(basetable,
     #lon.grid(color='red')
     #lat.grid(color='blue')
 
-
-    crds = basetable[f'skycoord_{ref_filter}']
-    inds = np.argsort(unextincted_color[blue_co_ice])[::-1]
-    sc = ax.scatter_coord(
-        crds[blue_co_ice][inds],
-        #transform=ax.get_transform('world'),
-        marker='o', #facecolors=(0.2, 1, 0.6),
-        linewidths=0.5,
-        s=5,
-        c=unextincted_color[blue_co_ice][inds],
-        cmap=cmap,
-    );
-
-    if cbar:
-        cb = pl.colorbar(mappable=sc, ax=ax, pad=0.01)
-        cb.set_label(f'{color_filter1} - {color_filter2} (dereddened)')#, rotation=270, labelpad=20)
+    uniextincted_color, blue_ice = overlay_stars(basetable=basetable,
+                  ax=ax,
+                  color_filter1=color_filter1,
+                  color_filter2=color_filter2,
+                  threshold=threshold,
+                  av_threshold=av_threshold,
+                  ref_filter=ref_filter,
+                  cbar=cbar,
+                  )
 
     if flip_y:
         ax.set_ylim(ax.get_ylim()[::-1])
@@ -240,7 +279,7 @@ def blue_stars_on_rgb(basetable,
     fig2 = pl.figure()
     ax = pl.gca()
     ax.hist(unextincted_color, bins=np.linspace(-3, 3, 100), histtype='step', log=True, color='black')
-    ax.hist(unextincted_color[blue_co_ice], bins=np.linspace(-3, 3, 100), histtype='step', log=True, color='red')
+    ax.hist(unextincted_color[blue_ice], bins=np.linspace(-3, 3, 100), histtype='step', log=True, color='red')
     ax.set_xlabel(f'{color_filter1} - {color_filter2} dereddened with CT06 using {avfilts[0]} and {avfilts[1]}')
     fig2.savefig(f"{basepath}/paper_figures/BlueStars_on_{rgb_name}_{color_filter1}-{color_filter2}_hist.png", dpi=200, bbox_inches='tight')
 
@@ -372,3 +411,13 @@ if __name__ == '__main__':
                       )
 
     pl.close('all')
+
+
+    # 2025-07-26 There are some stars with excess F410M absorption
+    blue_stars_on_rgb(basetable=basetable, swapaxes_wcs=True, transform=None,
+                      rgb_name='RGB_merged',
+                      color_filter1='F405N',
+                      color_filter2='F410M',
+                      ref_filter='f410m',
+                      avfilts=['F182M', 'F212N'],
+                      threshold=-0.2)

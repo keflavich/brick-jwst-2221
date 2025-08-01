@@ -100,7 +100,10 @@ def main():
 
     basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits')
     measured_466m410 = basetable['mag_ab_f466n'] - basetable['mag_ab_f410m']
-    sel = ok = ok2221 = np.ones(len(basetable), dtype=bool)
+    bad_to_exclude = (basetable['mag_ab_f410m'] < 13.7) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -0.2) )
+    bad_to_exclude |= (basetable['mag_ab_f410m'] > 17) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -1) )
+    bad_to_exclude |= (basetable['mag_ab_f182m'] < 15.5)
+    sel = ok = ok2221 = ~bad_to_exclude
 
     dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
     dmag_tbl.add_index('composition')

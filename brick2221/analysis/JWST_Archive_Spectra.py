@@ -84,9 +84,7 @@ max_flux = 1*u.Jy
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
 checklist = Table.read(f'{nirspec_dir}/jwst_archive_spectra_checklist.csv')
 
-if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
-    tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
-else:
+def make_nirspec_spectra_as_fluxes_table():
     nirspec_data = []
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -239,10 +237,17 @@ else:
     tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.ecsv', overwrite=True)
     tbl.write(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits', overwrite=True)
 
+    return tbl
+
 
 if __name__ == '__main__':
     import pylab as pl
 
+    # "if false" to force re-run; mostly we want this b/c we're downloading new data
+    if False and os.path.exists(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits'):
+        tbl = Table.read(f'{nirspec_dir}/jwst_archive_spectra_as_fluxes.fits')
+    else:
+        tbl = make_nirspec_spectra_as_fluxes_table()
 
     pl.figure()
     pl.scatter(tbl['JWST/NIRCam.F212N'] - tbl['JWST/NIRCam.F410M'],

@@ -160,6 +160,12 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
 
     log_column = int(np.log10(column_density))
 
+    description = f'Molecules that absorb NIRCAM filters by at least 0.1 mag when their column density is 10$^{{{log_column}}}$ cm$^{{-2}}$.  This table is not comprehensive, since some molecules are potentially much more abundant (e.g., \\water), and the more complex molecules are likely to be rarer.  NIRCAM filters excluded from this table do not have significant ($>0.1$ mag) ice absorption at N(ice)=10$^{{{log_column}}}$ cm$^{{-2}}$.'
+    if column_density == 1e18:
+        description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, and HC$_3$N.'
+    if column_density == 1e19:
+        description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, N$_2$O, CH$_3$CH$_2$NH$_2$, CH$_3$NH$_2$, C$_6$H$_6$, C$_5$H$_5$N, C$_2$H$_6$O, C$_3$H$_8$, C$_3$H$_2$O, and HC$_3$N.'
+
     # the AI felt that this cruft was necessary
     for line in lines:
         if '\\begin{table}' in line:
@@ -181,7 +187,7 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
             enhanced_lines.append('\\textbf{Filter} & \\textbf{Ice Molecules} & \\textbf{$\\Delta$mag Values} \\\\')
             enhanced_lines.append('\\hline')
         elif '\\end{table}' in line:
-            enhanced_lines.append(f'\\par Molecules that absorb NIRCAM filters by at least 0.1 mag when their column density is 10$^{{{log_column}}}$ cm$^{-2}$.  This table is not comprehensive, since some molecules are potentially much more abundant (e.g., \\water), and the more complex molecules are likely to be rarer.  NIRCAM filters excluded from this table do not have significant ($>0.1$ mag) ice absorption at N(ice)=10$^{{{log_column}}}$ cm$^{-2}$.')
+            enhanced_lines.append(f'\\par {description}')
             enhanced_lines.append('\\end{table*}')
         else:
             enhanced_lines.append(line)
@@ -247,6 +253,11 @@ def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18):
     # Filter out molecules with "under" or "over" in the name (substrate experiments)
     under_molecule_mask = ~np.array([('under' in str(mol).lower()) or ('over' in str(mol).lower()) for mol in filtered_data['molecule']])
     filtered_data = filtered_data[under_molecule_mask]
+
+    # filter out rare molecules
+    rare_molecules = ['nh4cn', 'n2h4', 'hc3n', 'n2o', 'ch3ch2nh2', 'ch3nh2', 'c3h4', 'c3h6', 'c6h6', 'c5h5n', 'c2h6o', 'c3h8', 'c3h2o', 'c2h4o']
+    rare_molecule_mask = np.array([np.any([mm.lower() in mol.lower() for mm in rare_molecules]) for mol in filtered_data['molecule']])
+    filtered_data = filtered_data[~rare_molecule_mask]
 
     #print(f"After filtering out 'under' molecules: {len(filtered_data)} entries")
 

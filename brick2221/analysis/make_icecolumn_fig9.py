@@ -540,6 +540,10 @@ def plot_brandt_model(ax, nh_to_av=2.21e21, molecule='CO', av_start=0):
         lims = (0, 100, 15, 21)
     ok = np.isfinite(column) & np.isfinite(molcol) & (column>0) & (molcol>0)
 
+    column[column == 0] = np.nan
+    # background-subtract: assert that the column density starts at 0
+    column -= np.nanmin(column)
+
     # multiply by 2 to go from H2->H
     av = column * 2 / nh_to_av + av_start
 
@@ -618,6 +622,11 @@ def main():
             basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221_20250324.fits', overwrite=False)
         except:
             pass
+
+    bad_to_exclude = (basetable['mag_ab_f410m'] < 13.7) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -0.2) )
+    bad_to_exclude |= (basetable['mag_ab_f410m'] > 17) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -1) )
+    bad_to_exclude |= (basetable['mag_ab_f182m'] < 15.5)
+    basetable = basetable[~bad_to_exclude]
 
     measured_466m410 = basetable['mag_ab_f466n'] - basetable['mag_ab_f410m']
 
