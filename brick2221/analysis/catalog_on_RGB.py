@@ -256,7 +256,7 @@ def blue_stars_on_rgb(basetable,
     #lon.grid(color='red')
     #lat.grid(color='blue')
 
-    uniextincted_color, blue_ice = overlay_stars(basetable=basetable,
+    unextincted_color, blue_ice = overlay_stars(basetable=basetable,
                   ax=ax,
                   color_filter1=color_filter1,
                   color_filter2=color_filter2,
@@ -264,6 +264,7 @@ def blue_stars_on_rgb(basetable,
                   av_threshold=av_threshold,
                   ref_filter=ref_filter,
                   cbar=cbar,
+                  cmap=cmap,
                   )
 
     if flip_y:

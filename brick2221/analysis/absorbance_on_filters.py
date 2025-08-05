@@ -235,6 +235,19 @@ if __name__ == "__main__":
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix.png', dpi=150, bbox_inches='tight')
 
     pl.close('all')
+    # compare the ingredients my mixture to real mixture
+    pl.figure(figsize=(8.5, 4))
+    plot_mixed_opacity(mixture={'H2O': 100, 'CH3OH': 50, 'CO': 1, 'NH3': 1},)
+    plot_opacity_tables(opacity_tables=(strong_icemix_hudgins,))
+    plot_opacity_tables(opacity_tables=(water_mastrapa,))
+    plot_opacity_tables(opacity_tables=(methanol,))
+    plot_opacity_tables(opacity_tables=(co_gerakines,))
+    plot_opacity_tables(opacity_tables=(nh3,))
+    pl.xlim(2.71, 5.25);
+    pl.ylim(1e-22, 1e-17)
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_components_to_realmix.png', dpi=150, bbox_inches='tight')
+
+    pl.close('all')
     # compare my mixture to real mixture
     pl.figure()
     plot_mixed_opacity(mixture={'H2O': 9, 'CH3OH': 1, 'CO2': 2},)

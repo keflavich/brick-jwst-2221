@@ -55,9 +55,9 @@ if 'cloudccat' not in globals():
     print("Loading cloudccat.  ", end=' ', flush=True)
     import jwst_plots
     cloudccat = jwst_plots.make_cat_use()
-    bad_to_exclude = (cloudccat['mag_ab_f410m'] < 13.7) & ( (cloudccat['mag_ab_f405n'] - cloudccat['mag_ab_f410m'] < -0.2) )
-    bad_to_exclude |= (cloudccat['mag_ab_f410m'] > 17) & ( (cloudccat['mag_ab_f405n'] - cloudccat['mag_ab_f410m'] < -1) )
-    bad_to_exclude |= (cloudccat['mag_ab_f182m'] < 15.5)
+    bad_to_exclude = (cloudccat.catalog['mag_ab_f410m'] < 13.7) & ( (cloudccat.catalog['mag_ab_f405n'] - cloudccat.catalog['mag_ab_f410m'] < -0.2) )
+    bad_to_exclude |= (cloudccat.catalog['mag_ab_f410m'] > 17) & ( (cloudccat.catalog['mag_ab_f405n'] - cloudccat.catalog['mag_ab_f410m'] < -1) )
+    bad_to_exclude |= (cloudccat.catalog['mag_ab_f182m'] < 15.5)
     cloudccat.catalog = cloudccat.catalog[~bad_to_exclude]
     print(f"Load time = {time.time()-t0:0.1f}s", flush=True)
 
@@ -304,20 +304,25 @@ def plot_ccd_with_icemodels(color1, color2, axlims=[-1, 4, -2.5, 1],
         return [None] * 8
 
 mixes1 = [
-    ('H2O:CO (0.5:1)', 25.0),
+    ('H2O 1', 25.0),
+    ('CO 1', 25.0),
+    ('CO2 1', 25.0),
+    #('CH3OH 1', 25.0),
+    #('CH3CH2OH 1', 25.0),
+    #('H2O:CO (0.5:1)', 25.0),
     ('H2O:CO (1:1)', 25.0),
     ('H2O:CO (3:1)', 25.0),
     ('H2O:CO (5:1)', 25.0),
-    ('H2O:CO (7:1)', 25.0),
+    #('H2O:CO (7:1)', 25.0),
     ('H2O:CO (10:1)', 25.0),
-    ('H2O:CO (15:1)', 25.0),
+    #('H2O:CO (15:1)', 25.0),
     ('H2O:CO (20:1)', 25.0),
     ('H2O:CO:CO2:CH3OH (1:1:0.1:0.1)', 25.0),
-    ('H2O:CO:CO2:CH3OH (1:1:0.1:1)', 25.0),
+    #('H2O:CO:CO2:CH3OH (1:1:0.1:1)', 25.0),
     ('H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:1:0.1)', 25.0),
-    ('H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:0.1:0.1)', 25.0),
+    #('H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:0.1:0.1:0.1)', 25.0),
     ('H2O:CO:CO2:CH3OH:CH3CH2OH (0.1:1:0.1:1:0.1)', 25.0),
-    ('H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)', 25.0),
+    #('H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:1:0.1:0.1:1)', 25.0),
     ('H2O:CO:CO2:CH3OH:CH3CH2OH (0.01:0.1:0.1:0.1:1)', 25.0),
 ]
 
@@ -405,7 +410,7 @@ if __name__ == "__main__":
     pl.rcParams['figure.dpi'] = 300
     pl.rcParams['font.size'] = 10
 
-    legend_kwargs = dict(loc='lower left', bbox_to_anchor=(0.0, 1.0,))
+    legend_kwargs = dict(loc='lower left', bbox_to_anchor=(0.0, 1.06,))
 
     if 'dmag_all' not in globals():
         dmag_all = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
@@ -432,14 +437,47 @@ if __name__ == "__main__":
     for co_to_h2 in (1e-4, 2.5e-4, 5e-4, 1e-3, 2e-3):
         print(f'color1: {color1}, color2: {color2} co_to_h2: {co_to_h2} [mixes2 abundance comparisons]', flush=True)
         a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                                dmag_tbl=dmag_all,
-                                                                                                molcomps=mixes2,
-                                                                                                abundance_wrt_h2=co_to_h2,
-                                                                                                max_column=None,
-                                                                                                max_h2_column=max_h2_column)
+                                                                                              dmag_tbl=dmag_all,
+                                                                                              molcomps=mixes2,
+                                                                                              abundance_wrt_h2=co_to_h2,
+                                                                                              max_column=None,
+                                                                                              max_h2_column=max_h2_column)
         pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$ cm$^{{-2}}$");
         pl.axis(lims);
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_cotoh2{co_to_h2:0.1e}_nolegend.png', bbox_inches='tight', )
+        pl.close('all')
+
+    # Fiducial value
+    co_to_h2 = 2.5e-4
+
+
+
+    # pure ices
+    ice_abundance = {'CO 1': 1e-3, 'CO2 1': 1e-3, 'H2O 1': 1e-3, 'CH3OH 1': 1e-3, 'CH3CH2OH 1': 1e-3}
+    for color1, color2, lims in colors_and_lims:
+        print(f'color1: {color1}, color2: {color2} [pure ice comparisons]', flush=True)
+        pl.figure();
+        molcomps = [('CO 1', 25.0),
+                    ('CO2 1', 25.0),
+                    ('H2O 1', 25.0),
+                    ('CH3OH 1', 25.0),
+                    ('CH3CH2OH 1', 30.0), ]
+        for ii, molcomp in enumerate(molcomps):
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=[molcomp],
+                                                                                                dmag_tbl=dmag_all,
+                                                                                                abundance_wrt_h2=ice_abundance[molcomp[0]],
+                                                                                                icemol=molcomp[0].split(' ')[0],
+                                                                                                max_column=None,
+                                                                                                nirspec_archive=False,
+                                                                                                iso_archive=False,
+                                                                                                av_scale=(30 if ii == 0 else 0),
+                                                                                                max_h2_column=max_h2_column)
+        pl.legend(**legend_kwargs)
+        pl.title(f"ice/H$_2 = 10^{{-3}}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
+        pl.axis(lims);
+        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_pureices.png', bbox_inches='tight', )
+
         pl.close('all')
 
     for color1, color2, lims in colors_and_lims:
