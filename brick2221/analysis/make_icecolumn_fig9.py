@@ -275,6 +275,24 @@ def makeplot(basetable,
 
 
     if cloudccat is not None:
+        """
+        reg_f = Regions.read('/orange/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_short.region')
+        reg_c1 = Regions.read('/orange/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc1.region')
+        reg_c2 = Regions.read('/orange/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudc2.region')
+        reg_d = Regions.read('/orange/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/cloudd.region')
+
+        cat_f = JWSTCatalog(cat_use.table_region_mask(reg_f, cutout_405.wcs))
+        mask_red = (cat_f.color('f182m', 'f212n') > 0.55) | (np.isnan(np.array(cat_f.band('f182m'))) & np.isnan(np.array(cat_f.band('f187n'))))
+        mask_red = mask_red & (cat_f.color('f410m', 'f466n') < 0)
+        cat_f = JWSTCatalog(cat_f.catalog[mask_red])
+
+        ridge_reg = [reg_d[0], reg_c1[0], reg_c2[0]]
+        cat_ridge = JWSTCatalog(cat_use.table_region_mask(ridge_reg, cutout_405.wcs))
+        mask_red = (cat_ridge.color('f182m', 'f212n') > 0.8) | (np.isnan(np.array(cat_ridge.band('f182m'))) & np.isnan(np.array(cat_ridge.band('f187n'))))
+        mask_red = mask_red & (cat_ridge.color('f410m', 'f466n') < 0)
+        cat_ridge = JWSTCatalog(cat_ridge.catalog[mask_red])
+        """
+
         ww = WCS(fits.getheader('/orange/adamginsburg/jwst/cloudc/images/F182_reproj_merged-fortricolor.fits'))
         crds_cloudc = cloudccat['skycoord_ref']
         cloudc_regions = [y for x in [

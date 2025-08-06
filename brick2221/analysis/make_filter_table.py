@@ -158,13 +158,13 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
     enhanced_lines = []
     in_table = False
 
-    log_column = int(np.log10(column_density))
+    log_column = int(np.round(np.log10(column_density)))
 
-    description = f'Molecules that absorb NIRCAM filters by at least 0.1 mag when their column density is 10$^{{{log_column}}}$ cm$^{{-2}}$.  This table is not comprehensive, since some molecules are potentially much more abundant (e.g., \\water), and the more complex molecules are likely to be rarer.  NIRCAM filters excluded from this table do not have significant ($>0.1$ mag) ice absorption at N(ice)=10$^{{{log_column}}}$ cm$^{{-2}}$.'
+    description = f'Molecules that absorb NIRCAM filters by at least 0.1 mag when their column density is 10$^{{{log_column}}}$ cm$^{{-2}}$.  This table is not comprehensive, since some molecules are potentially much more abundant (e.g., \\water), and the more complex molecules are likely to be rarer.  NIRCAM filters excluded from this table do not have significant ($>0.1$ mag) ice absorption at N(ice)=10$^{{{log_column}}}$ cm$^{{-2}}$.  '
     if column_density == 1e18:
-        description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, and HC$_3$N.'
+        description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, and HC$_3$N.  '
     if column_density == 1e19:
-        description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, N$_2$O, CH$_3$CH$_2$NH$_2$, CH$_3$NH$_2$, C$_6$H$_6$, C$_5$H$_5$N, C$_2$H$_6$O, C$_3$H$_8$, C$_3$H$_2$O, and HC$_3$N.'
+        description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, N$_2$O, CH$_3$CH$_2$NH$_2$, CH$_3$NH$_2$, C$_6$H$_6$, C$_5$H$_5$N, C$_2$H$_6$O, C$_3$H$_8$, C$_3$H$_2$O, and HC$_3$N.  '
 
     # the AI felt that this cruft was necessary
     for line in lines:
@@ -211,7 +211,7 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
     return enhanced_content
 
 
-def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18):
+def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_column=False):
     """
     Create a table showing which ice molecules significantly affect each NIRCAM filter.
 
@@ -231,10 +231,21 @@ def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18):
     # Load the absorption data
     dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
     dmag_tbl = dmag_tbl[dmag_tbl['database'] != 'mymix']
+    # LIDA k-values aren't trustworthy
+    dmag_tbl = dmag_tbl[dmag_tbl['database'] != 'lida']
+    # Hudgings 1993 is not the CO we want
+    dmag_tbl = dmag_tbl[~((dmag_tbl['author'] == 'Hudgins') & (dmag_tbl['composition'] == 'CO (1)'))]
 
     # Filter for the specified column density
     mask = dmag_tbl['column'] == column_density
-    assert mask.sum() > 0, f"No ice entries found at column density {column_density:.0e} cm^-2"
+    if nearest_column and mask.sum() == 0:
+        cols = np.unique(dmag_tbl['column'])
+        ind = np.argmin(np.abs(cols - column_density))
+        column_density = cols[ind]
+        mask = dmag_tbl['column'] == column_density
+        print(f"Using nearest column density: {column_density:.03e} cm^-2")
+    else:
+        assert mask.sum() > 0, f"No ice entries found at column density {column_density:.0e} cm^-2"
     filtered_data = dmag_tbl[mask]
 
     #print(f"Found {len(filtered_data)} ice entries at column density {column_density:.0e} cm^-2")
@@ -343,12 +354,12 @@ def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18):
     # print(f"Using dmag threshold: {dmag_threshold}")
     # print(f"Using column density: {column_density:.0e} cm^-2")
 
-    return result_table
+    return result_table, column_density
 
 
 if __name__ == "__main__":
     # Create the filter-ice table with default parameters
-    filter_ice_table = create_filter_ice_table(dmag_threshold=0.1, column_density=1e18)
+    filter_ice_table, column_density = create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_column=True)
 
     print(filter_ice_table[0])
 
@@ -364,11 +375,11 @@ if __name__ == "__main__":
     #print("\nLaTeX table preview:")
     #print(latex_table)
 
-    filter_ice_table_sensitive = create_filter_ice_table(dmag_threshold=0.1, column_density=1e19)
+    filter_ice_table_sensitive, column_density = create_filter_ice_table(dmag_threshold=0.1, column_density=1e19, nearest_column=True)
     output_filename = f'{basepath}/tables/nircam_filter_ice_table_1e19.ecsv'
     filter_ice_table_sensitive.write(output_filename, overwrite=True)
     latex_output_file = f'{basepath}/tables/nircam_filter_ice_table_1e19.tex'
-    latex_table = create_latex_table(filter_ice_table_sensitive, output_file=latex_output_file, column_density=1e19)
+    latex_table = create_latex_table(filter_ice_table_sensitive, output_file=latex_output_file, column_density=column_density)
 
     # print()
     # filter_ice_table_higher_column = create_filter_ice_table(dmag_threshold=0.1, column_density=1e20)
@@ -387,3 +398,14 @@ if __name__ == "__main__":
 
     filter_ice_table_sensitive.add_index('filter_name')
     print(filter_ice_table_sensitive.loc['F250M'])
+
+
+    # Sanity check code 2025-08-05
+    dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
+    dmag_tbl.add_index('composition')
+    dmag_tbl.add_index('column')
+    dmag_tbl.add_column(name='F405N-F466N', col=dmag_tbl['F405N'] - dmag_tbl['F466N'])
+    cols = np.unique(dmag_tbl['column'])
+    pureco_check = dmag_tbl.loc[('CO (1)')].loc[('column', cols[13])]['molecule', 'mol_id', 'molwt', 'database', 'author', 'composition', 'temperature', 'density',  'F405N',  'F466N', 'F405N-F466N' ]
+    print(pureco_check)
+    dmag_tbl.loc[('composition', 'H2O:CO:CO2 (10:1:1)')]

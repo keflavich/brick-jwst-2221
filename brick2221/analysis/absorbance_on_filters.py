@@ -44,20 +44,23 @@ from cycler import cycler
 # Load mix bases
 water_mastrapa = read_ocdb_file(f'{optical_constants_cache_dir}/240_H2O_(1)_25K_Mastrapa.txt') # h2otbs[('ocdb', 242, 25)] 242 is 50K....
 co2_gerakines = read_ocdb_file(f'{optical_constants_cache_dir}/55_CO2_(1)_8K_Gerakines.txt') # co2tbs[('ocdb', 55, 8)]
-ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_30.0K.txt')
-methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
+#ethanol = read_lida_file(f'{optical_constants_cache_dir}/87_CH3CH2OH_1_30.0K.txt')
+#methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
+ethanol = load_molecule_univap('ethanol')
+methanol = load_molecule_univap('methanol')
+
 ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
 co_gerakines = gerakines = retrieve_gerakines_co()
 nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/273_NH3_(1)_40K_Roser.txt')
 #nh3 = read_lida_file(f'{optical_constants_cache_dir}/116_NH3_1_27.0K.txt')
-nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
+#nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
 water_ammonia = read_ocdb_file(f'{optical_constants_cache_dir}/265_H2O:NH3_(4:1)_24K_Mukai.txt')
 co_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/85_CO_(1)_10K_Hudgins.txt')
 strong_icemix_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/119_H2O:CH3OH:CO:NH3_(100:50:1:1)_10K_Hudgins.txt')
-icemix_ehrenfreund = read_lida_file(f'{optical_constants_cache_dir}/35_H2O:CH3OH:CO2_(9:1:2)_10.0K.txt')
+#icemix_ehrenfreund = read_lida_file(f'{optical_constants_cache_dir}/35_H2O:CH3OH:CO2_(9:1:2)_10.0K.txt')
 
 
-def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, water_ammonia),
+def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
                         colors=None,
                         ylim=(1e-21, 6e-18)):
     for ii, tb in enumerate(opacity_tables):
@@ -100,7 +103,7 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                                        'CH3CH2OH': ethanol,
                                        'CH3OH': methanol,
                                        'OCN': ocn,
-                                       'NH4+': nh4p,
+                                       #'NH4+': nh4p,
                                        'NH3': nh3, },
                         mixture={'CO': 1},
                         colors=None,
@@ -249,12 +252,12 @@ if __name__ == "__main__":
 
     pl.close('all')
     # compare my mixture to real mixture
-    pl.figure()
-    plot_mixed_opacity(mixture={'H2O': 9, 'CH3OH': 1, 'CO2': 2},)
-    plot_opacity_tables(opacity_tables=(icemix_ehrenfreund,))
-    pl.xlim(2.71, 5.25);
-    pl.ylim(1e-22, 1e-18)
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix_ehrenfreund.png', dpi=150, bbox_inches='tight')
+    # not k-measured pl.figure()
+    # not k-measured plot_mixed_opacity(mixture={'H2O': 9, 'CH3OH': 1, 'CO2': 2},)
+    # not k-measured plot_opacity_tables(opacity_tables=(icemix_ehrenfreund,))
+    # not k-measured pl.xlim(2.71, 5.25);
+    # not k-measured pl.ylim(1e-22, 1e-18)
+    # not k-measured pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix_ehrenfreund.png', dpi=150, bbox_inches='tight')
 
     # pl.clf()
     # tb = plot_mixed_opacity(mixture={'H2O': 100, 'CH3OH': 50, 'CO': 1, 'NH3': 1},)

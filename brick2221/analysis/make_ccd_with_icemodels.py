@@ -346,9 +346,9 @@ mixes2 = [
     ('H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:1:1:1)', 25.0),
 ]
 
-molcomps_ch3 = [('CO:CH3OH 1:1', 15.0),
+molcomps_ch3 = [# comes from LIDA fraser; is bad ('CO:CH3OH 1:1', 15.0),
                 ('CO:HCOOH 1:1', 14.0),
-                ('CO:CH3CHO (20:1)', 15.0),
+                #('CO:CH3CHO (20:1)', 15.0),
                 ('CO:CH3OH:CH3CHO (20:20:1)', 15.0),
                 ('CO:CH3OH:CH3CH2OH (20:20:1)', 15.0),
                 ('CO:CH3OCH3 (20:1)', 15.0),
