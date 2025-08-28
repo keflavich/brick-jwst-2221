@@ -28,7 +28,8 @@ from astropy.wcs import WCS
 from matplotlib.ticker import Locator, FuncFormatter
 
 
-def ev(avfilts, ext=G21_MWAvg()):
+def ev(avfilts, ext=CT06_MWGC()):
+    # changed default to CT06_MWGC() for consistency's sake - reduces chance of weirdness
     av_wavelengths = [int(avf[1:-1])/100. * u.um for avf in avfilts]
     return (ext(av_wavelengths[0]) - ext(av_wavelengths[1]))
 
@@ -302,7 +303,8 @@ def makeplot(basetable,
                     for y in regions.Regions.read(x)
         ]
         cloudc_sel = np.any([reg.contains(crds_cloudc, ww) for reg in cloudc_regions], axis=0)
-        lactea_filament_regions = regions.Regions.read('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_long.region')[0]
+        #lactea_filament_regions = regions.Regions.read('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_long.region')[0]
+        lactea_filament_regions = regions.Regions.read('/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament/regions_/filament_short.region')[0]
         lactea_sel = lactea_filament_regions.contains(crds_cloudc, ww)
 
         av_cloudc = calc_av(avfilts=avfilts, basetable=cloudccat, ext=ext, return_av=(xax == 'AV'))

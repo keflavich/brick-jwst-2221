@@ -515,9 +515,10 @@ if __name__ == "__main__":
                                                                                             dmag_tbl=dmag_all,
                                                                                             abundance_wrt_h2=co_abundance_wrt_h2,
                                                                                             max_column=None,
-                                                                                            max_h2_column=5e22)
+                                                                                            max_h2_column=max_h2_column)
         pl.legend(**legend_kwargs)
         pl.axis(lims);
+        pl.title(f"CO/H$_2 = {texify_exponent(co_abundance_wrt_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
         pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_ch3mixes.png', bbox_inches='tight', )
         pl.close('all')
 

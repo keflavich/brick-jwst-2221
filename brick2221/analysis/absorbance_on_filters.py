@@ -14,7 +14,7 @@ from icemodels.core import (absorbed_spectrum, absorbed_spectrum_Gaussians, conv
                             read_lida_file,
                             download_all_lida,
                             composition_to_molweight,
-                            fluxes_in_filters, load_molecule, load_molecule_ocdb, atmo_model, molecule_data, read_ocdb_file)
+                            fluxes_in_filters, load_molecule_univap, load_molecule, load_molecule_ocdb, atmo_model, molecule_data, read_ocdb_file)
 from icemodels.absorbance_in_filters import make_mixtable
 
 from brick2221.analysis.analysis_setup import basepath

@@ -175,7 +175,7 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
             if column_density == 1e18:
                 enhanced_lines.append('\\label{tab:nircam_ice_absorption}')
             else:
-                enhanced_lines.append(f'\\label{{tab:nircam_ice_absorption_{{{log_column}}}}}')
+                enhanced_lines.append(f'\\label{{tab:nircam_ice_absorption_{{log_column}}}}')
             in_table = True
         elif '\\begin{tabular}' in line:
             enhanced_lines.append('\\begin{tabular}{|l|p{10cm}|p{6cm}|}')

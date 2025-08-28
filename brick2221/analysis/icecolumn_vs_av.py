@@ -305,14 +305,16 @@ def main():
     print(rf"Total Least Squares fit: [\mathrm{{CO}}/\mathrm{{H}}_2] = {output.beta[0]:.2f} Z {output.beta[1]:.2f}")
 
     pl.clf()
+    pl.figure(figsize=(4, 4))
     pl.errorbar(metallicities,
                 co_abundances,
                 yerr=co_errors,
                 xerr=metallicity_error,
-                marker='o', linestyle='none')
+                color='k',
+                marker='o', linestyle='none', capsize=3)
 
     yfit = slope_tls * metallicities + intercept_tls
-    pl.plot(metallicities, yfit, 'k--')
+    pl.plot(metallicities, yfit, alpha=0.75, linewidth=2.5, zorder=-10)
 
     pl.xlabel(r'Metallicity [Z/Z$_\odot$]')
     pl.ylabel('CO ice abundance [CO/H$_2$]')
@@ -328,19 +330,22 @@ def main():
     print(rf"Total Least Squares fit: [\mathrm{{CO}}/\mathrm{{H}}_2] = {output.beta[0]:.2f} R_{{gal}} {output.beta[1]:.2f}")
 
     pl.clf()
+    pl.figure(figsize=(4, 4))
     pl.errorbar(rgal,
                 co_abundances,
                 yerr=co_errors,
                 xerr=rgal_err,
-                marker='o', linestyle='none')
+                color='k',
+                marker='o', linestyle='none', capsize=3)
 
     yfit = slope_tls * rgal + intercept_tls
-    pl.plot(rgal, yfit, 'k--')
+    pl.plot(rgal, yfit, alpha=0.75, linewidth=2.5, zorder=-10)
 
     pl.xlabel(r'Galactocentric Radius [kpc]')
     pl.ylabel('CO ice abundance [CO/H$_2$]')
     pl.savefig(f'{basepath}/figures/abundance_vs_rgal.pdf', bbox_inches='tight')
 
+    pl.close('all')
 
 
 if __name__ == '__main__':
