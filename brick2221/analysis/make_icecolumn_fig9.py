@@ -543,6 +543,23 @@ def makeplot(basetable,
         fig.savefig(f"{outfn3}.png", dpi=250, bbox_inches='tight')
         print(f"Completed {outfn3}")
 
+    if xax == 'AV':
+        tb = Table([av, inferred_molecular_column], names=('av', 'inferred_molecular_column'))
+    else:
+        tb = Table([av, inferred_molecular_column], names=('color', 'inferred_molecular_column'))
+        e_v = ev(avfilts, ext)
+        tb['e_v'] = e_v
+    tb.meta['icemol'] = icemol
+    tb.meta['abundance'] = abundance
+    tb.meta['avfilts'] = avfilts
+    tb.meta['color_filter1'] = color_filter1
+    tb.meta['color_filter2'] = color_filter2
+    tb.meta['av_start'] = av_start
+    tb.meta['title'] = title
+    tb.meta['ext'] = ext.__class__.__name__
+    tb.meta['NHtoAV'] = NHtoAV
+    tb.write(f"{basepath}/paper_co/fig9s/N{icemol}_{title_to_save}_{color_filter1}-{color_filter2}_{avfilts[0]}-{avfilts[1]}_{xax}.ecsv", overwrite=True)
+
     return av, inferred_molecular_column, ax
 
 
