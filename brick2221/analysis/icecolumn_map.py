@@ -38,7 +38,9 @@ def icecolumn_map(
              NHtoAV=2.21e21,
              av_start=17,
              scatter=True,
+             scatter_abundance=False,
              hist=False,
+             hist_abundance=False,
              ext=CT06_MWGC(),
              color_filter1='F405N',
              color_filter2='F466N',
@@ -69,18 +71,36 @@ def icecolumn_map(
 
     NH2_of_AV = NHtoAV / 2. * (av - av_start)
 
-    abundance = inferred_molecular_column / NH2_of_AV
+    measured_abundance = inferred_molecular_column / NH2_of_AV
 
-    sel = av > av_start
+    # there's a lot of noise on the low end that obscures the maps
+    sel = av > av_start + 9
 
-    if scatter:
+    if scatter_abundance:
+        inds = np.argsort(measured_abundance[sel])
+        sc = ax.scatter(
+            basetable['skycoord_f410m'][sel][inds].dec.deg,
+            basetable['skycoord_f410m'][sel][inds].ra.deg,
+            c=np.log10(measured_abundance[sel][inds]),
+            s=7.5, alpha=0.75,
+            edgecolors='none',
+            cmap='inferno',
+            vmin=-5, vmax=-2.5,
+            )
+        cb = pl.colorbar(mappable=sc)
+        cb.set_label('log10(N(CO)/N(H$_2$))')
+
+        ax.set_aspect('equal')
+
+    elif scatter:
         inds = np.argsort(inferred_molecular_column[sel])
         sc = ax.scatter(
             basetable['skycoord_f410m'][sel][inds].dec.deg,
             basetable['skycoord_f410m'][sel][inds].ra.deg,
             c=np.log10(inferred_molecular_column[sel][inds]),
-            s=10, alpha=0.5,
+            s=7.5, alpha=0.75,
             cmap='viridis_r',
+            edgecolors='none',
             vmin=18,
             )
         cb = pl.colorbar(mappable=sc)
@@ -88,11 +108,14 @@ def icecolumn_map(
 
         ax.set_aspect('equal')
     elif hist:
+        weights = measured_abundance[sel] if hist_abundance else inferred_molecular_column[sel]
+        vmin = 1e-5 if hist_abundance else 1e18
+        text = 'abundance' if hist_abundance else 'column density'
         histdata, xbin, ybin = np.histogram2d(basetable['skycoord_f410m'][sel].ra.deg, basetable['skycoord_f410m'][sel].dec.deg,
-                       bins=[50, 100], weights=inferred_molecular_column[sel])
-        im = ax.imshow(histdata, origin='lower', norm=simple_norm(histdata, stretch='log', vmin=1e18))
+                       bins=[50, 100], weights=weights)
+        im = ax.imshow(histdata, origin='lower', norm=simple_norm(histdata, stretch='log', vmin=vmin))
         cb = pl.colorbar(mappable=im)
-        cb.set_label('CO column density')
+        cb.set_label(f'CO {text}')
         #ax.set_aspect(0.5)
 
 
@@ -111,11 +134,21 @@ def main():
 
     pl.figure(figsize=(12, 4))
     icecolumn_map(basetable=basetable, sel=ok2221, ok=ok2221, hist=False, scatter=True, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'])
-    pl.savefig(f'{basepath}/figures/icecolumn_map_CO.png', bbox_inches='tight')
+    pl.savefig(f'{basepath}/figures/icecolumn_map_CO.png', bbox_inches='tight', dpi=200)
 
     pl.figure(figsize=(12, 4))
     icecolumn_map(basetable=basetable, sel=ok2221, ok=ok2221, hist=True, scatter=False, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'])
-    pl.savefig(f'{basepath}/figures/icecolumn_map_CO_hist.png', bbox_inches='tight')
+    pl.savefig(f'{basepath}/figures/icecolumn_map_CO_hist.png', bbox_inches='tight', dpi=200)
+    pl.close('all')
+
+    pl.figure(figsize=(12, 4))
+    icecolumn_map(basetable=basetable, sel=ok2221, ok=ok2221, hist=False, scatter_abundance=True, scatter=False, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'])
+    pl.savefig(f'{basepath}/figures/icecolumn_map_CO_abundance.png', bbox_inches='tight', dpi=200)
+    pl.close('all')
+
+    pl.figure(figsize=(12, 4))
+    icecolumn_map(basetable=basetable, sel=ok2221, ok=ok2221, hist=True, hist_abundance=True, scatter_abundance=False, scatter=False, dmag_tbl=dmag_tbl.loc['H2O:CO:CO2 (10:1:1)'])
+    pl.savefig(f'{basepath}/figures/icecolumn_map_CO_abundance_hist.png', bbox_inches='tight', dpi=200)
     pl.close('all')
 
 

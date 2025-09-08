@@ -199,6 +199,7 @@ def blue_stars_on_rgb(basetable,
                       axlims=None,
                       cmap='Reds',
                       cbar=False,
+                      do_overlay=True,
                       ):
     if not rgb_imagename.startswith('/'):
         rgb_imagename = f'{basepath}/{rgb_imagename}'
@@ -256,16 +257,17 @@ def blue_stars_on_rgb(basetable,
     #lon.grid(color='red')
     #lat.grid(color='blue')
 
-    unextincted_color, blue_ice = overlay_stars(basetable=basetable,
-                  ax=ax,
-                  color_filter1=color_filter1,
-                  color_filter2=color_filter2,
-                  threshold=threshold,
-                  av_threshold=av_threshold,
-                  ref_filter=ref_filter,
-                  cbar=cbar,
-                  cmap=cmap,
-                  )
+    if do_overlay:
+        unextincted_color, blue_ice = overlay_stars(basetable=basetable,
+                    ax=ax,
+                    color_filter1=color_filter1,
+                    color_filter2=color_filter2,
+                    threshold=threshold,
+                    av_threshold=av_threshold,
+                    ref_filter=ref_filter,
+                    cbar=cbar,
+                    cmap=cmap,
+                    )
 
     if flip_y:
         ax.set_ylim(ax.get_ylim()[::-1])
@@ -274,6 +276,11 @@ def blue_stars_on_rgb(basetable,
 
     if axlims is not None:
         ax.axis(axlims)
+
+
+    if not do_overlay:
+        fig.savefig(f"{basepath}/paper_figures/{rgb_name}_before_overlay.png", dpi=200, bbox_inches='tight')
+        return
 
     fig.savefig(f"{basepath}/paper_figures/BlueStars_on_{rgb_name}_{color_filter1}-{color_filter2}.png", dpi=200, bbox_inches='tight')
 
@@ -327,6 +334,20 @@ if __name__ == '__main__':
         blue_stars_on_rgb(basetable=basetable,
                         wcsaxes=wcsaxes,
                         rgb_imagename=f'{basepath}/images/MUSTANG_ACES_cropped_to_brick.png',
+                        swapaxes_wcs=False,
+                        flip_y=False,
+                        flip_x=False,
+                        transform=PIL.Image.FLIP_TOP_BOTTOM,
+                        threshold=-0.4,
+                        rgb_name=rgb_name,
+                        axlims=axlims,
+                        cmap='Blues',
+                        cbar=True,
+                        do_overlay=False, # save a blank first
+                        )
+        blue_stars_on_rgb(basetable=basetable,
+                        wcsaxes=wcsaxes,
+                        rgb_imagename=f'{basepath}/images/MUSTANG_ACES_cropped_to_brick.png',
                         color_filter1='F444W',
                         color_filter2='F356W',
                         ref_filter='f444w',
@@ -362,6 +383,10 @@ if __name__ == '__main__':
 
     blue_stars_on_rgb(basetable=basetable, swapaxes_wcs=True, transform=None,
                       rgb_name='RGB_merged',
+                      threshold=-0.4)
+    blue_stars_on_rgb(basetable=basetable, swapaxes_wcs=True, transform=None,
+                      rgb_name='RGB_merged',
+                      do_overlay=False,
                       threshold=-0.4)
 
     nondetections_on_rgb(basetable=basetable,
@@ -408,7 +433,16 @@ if __name__ == '__main__':
                       flip_x=False,
                       transform=PIL.Image.FLIP_LEFT_RIGHT,
                       threshold=-0.4,
-                      rgb_name='RGB_merged'
+                      rgb_name='RGB_merged',
+                      )
+    blue_stars_on_rgb(basetable=basetable, rgb_imagename='pngs_444/Brick_RGB_444-356-200_log.png',
+                      swapaxes_wcs=False,
+                      flip_y=False,
+                      flip_x=False,
+                      transform=PIL.Image.FLIP_LEFT_RIGHT,
+                      threshold=-0.4,
+                      rgb_name='RGB_merged',
+                      do_overlay=False,
                       )
 
     pl.close('all')
@@ -421,4 +455,9 @@ if __name__ == '__main__':
                       color_filter2='F410M',
                       ref_filter='f410m',
                       avfilts=['F182M', 'F212N'],
+                      threshold=-0.2)
+
+    blue_stars_on_rgb(basetable=basetable, swapaxes_wcs=True, transform=None,
+                      rgb_name='RGB_merged',
+                      do_overlay=False,
                       threshold=-0.2)

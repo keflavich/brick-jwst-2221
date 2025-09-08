@@ -553,7 +553,7 @@ if __name__ == "__main__":
             pl.legend(**legend_kwargs)
             #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
             pl.axis(lims);
-            pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}{suffix_orion}.png', bbox_inches='tight', )
+            pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}{suffix_orion}{suffix_iso}.png', bbox_inches='tight', )
 
             try:
                 pl.figure()
