@@ -406,11 +406,12 @@ if __name__ == '__main__':
                 ax.set_xlabel("Wavelength [$\\mu m$]")
 
                 try:
-                    slit_coord = SkyCoord(fh[0].header['SLIT_RA'], fh[0].header['SLIT_DEC'], unit=(u.hourangle, u.deg))
+                    slit_coord = SkyCoord(fh[0].header['SLIT_RA'], fh[0].header['SLIT_DEC'], unit=(u.deg, u.deg))
                 except KeyError:
-                    slit_coord = SkyCoord(fh[1].header['SLIT_RA'], fh[1].header['SLIT_DEC'], unit=(u.hourangle, u.deg))
+                    slit_coord = SkyCoord(fh[1].header['SLIT_RA'], fh[1].header['SLIT_DEC'], unit=(u.deg, u.deg))
                 ax.set_title(f'{sp.specname}\n{slit_coord.to_string(sep=":", style="hmsdms", decimal=False)}')
 
+                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.png', dpi=150)
 
                 mags = {}
                 for key in filters:

@@ -429,297 +429,310 @@ if __name__ == "__main__":
         return f'{lead} \\times 10^{{{exp}}}'
 
 
-    # compare percents
-    # molcomps inherited from mixes2
-    color1, color2, lims = (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 2.1, -2.0, 0.5))
-    max_h2_column = 5e22
-    # 2e-3 is the absolute extreme, putting 100% of carbon in CO ice and having GC carbon = 2.5x Solar
-    for co_to_h2 in (1e-4, 2.5e-4, 5e-4, 1e-3, 2e-3):
-        print(f'color1: {color1}, color2: {color2} co_to_h2: {co_to_h2} [mixes2 abundance comparisons]', flush=True)
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                              dmag_tbl=dmag_all,
-                                                                                              molcomps=mixes2,
-                                                                                              abundance_wrt_h2=co_to_h2,
-                                                                                              max_column=None,
-                                                                                              max_h2_column=max_h2_column)
-        pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$ cm$^{{-2}}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_cotoh2{co_to_h2:0.1e}_nolegend.png', bbox_inches='tight', )
-        pl.close('all')
+    for hexbin, hexbin_suffix in zip([True, False], ['_hexbin', '']):
 
-    # Fiducial value
-    co_to_h2 = 2.5e-4
-
-
-
-    # pure ices
-    ice_abundance = {'CO 1': 1e-3, 'CO2 1': 1e-3, 'H2O 1': 1e-3, 'CH3OH 1': 1e-3, 'CH3CH2OH 1': 1e-3}
-    for color1, color2, lims in colors_and_lims:
-        print(f'color1: {color1}, color2: {color2} [pure ice comparisons]', flush=True)
-        pl.figure();
-        molcomps = [('CO 1', 25.0),
-                    ('CO2 1', 25.0),
-                    ('H2O 1', 25.0),
-                    ('CH3OH 1', 25.0),
-                    ('CH3CH2OH 1', 30.0), ]
-        for ii, molcomp in enumerate(molcomps):
+        # compare percents
+        # molcomps inherited from mixes2
+        color1, color2, lims = (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 2.1, -2.0, 0.5))
+        max_h2_column = 5e22
+        # 2e-3 is the absolute extreme, putting 100% of carbon in CO ice and having GC carbon = 2.5x Solar
+        for co_to_h2 in (1e-4, 2.5e-4, 5e-4, 1e-3, 2e-3):
+            print(f'color1: {color1}, color2: {color2} co_to_h2: {co_to_h2} [mixes2 abundance comparisons]', flush=True)
             a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                                molcomps=[molcomp],
                                                                                                 dmag_tbl=dmag_all,
-                                                                                                abundance_wrt_h2=ice_abundance[molcomp[0]],
-                                                                                                icemol=molcomp[0].split(' ')[0],
+                                                                                                molcomps=mixes2,
+                                                                                                abundance_wrt_h2=co_to_h2,
                                                                                                 max_column=None,
-                                                                                                nirspec_archive=False,
-                                                                                                iso_archive=False,
-                                                                                                av_scale=(30 if ii == 0 else 0),
+                                                                                                hexbin=hexbin,
                                                                                                 max_h2_column=max_h2_column)
-        pl.legend(**legend_kwargs)
-        pl.title(f"ice/H$_2 = 10^{{-3}}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_pureices.png', bbox_inches='tight', )
+            pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$ cm$^{{-2}}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_cotoh2{co_to_h2:0.1e}_nolegend{hexbin_suffix}.png', bbox_inches='tight', )
+            pl.close('all')
 
-        pl.close('all')
+        # Fiducial value
+        co_to_h2 = 2.5e-4
 
-    for color1, color2, lims in colors_and_lims:
-        print(f'color1: {color1}, color2: {color2} [mixes1 comparisons]', flush=True)
-        pl.figure();
-        molcomps = mixes1
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                              molcomps=molcomps,
-                                                                                              dmag_tbl=dmag_all.loc['database', 'mymix'],
-                                                                                              abundance_wrt_h2=co_to_h2,
-                                                                                              max_column=None,
-                                                                                              max_h2_column=max_h2_column)
-        pl.legend(**legend_kwargs)
-        pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1.png', bbox_inches='tight', )
 
-        pl.close('all')
 
-    for color1, color2, lims in ((['F115W', 'F200W'], ['F356W', 'F444W'], (0, 15, -0.5, 1.5)),
-                                 (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
-                                 (['F200W', 'F444W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
-                                 (['F405N', 'F466N'], ['F356W', 'F444W'], (-1.5, 1.0, -0.5, 1.5)),
-                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.2)),
-                                 (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -2.0, 0.5)),
-                                 ):
-        print(f'color1: {color1}, color2: {color2} [CH3 mixes comparisons]', flush=True)
-        pl.figure()
-
-        molcomps = molcomps_ch3
-        for mc, tt in molcomps:
-            assert len(dmag_all.loc['composition', mc]) > 0, f"Composition {mc} not found in dmag_all"
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                            molcomps=molcomps,
-                                                                                            dmag_tbl=dmag_all,
-                                                                                            abundance_wrt_h2=co_abundance_wrt_h2,
-                                                                                            max_column=None,
-                                                                                            max_h2_column=max_h2_column)
-        pl.legend(**legend_kwargs)
-        pl.axis(lims);
-        pl.title(f"CO/H$_2 = {texify_exponent(co_abundance_wrt_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_ch3mixes.png', bbox_inches='tight', )
-        pl.close('all')
-
-    for show_orion_2770, suffix_orion, show_iso, suffix_iso in zip([True, False, False],
-                                                                   ['_orion', '', ''],
-                                                                   [False, False, True],
-                                                                   ['', '', '_iso']):
-        pl.close('all')
+        # pure ices
+        ice_abundance = {'CO 1': 1e-3, 'CO2 1': 1e-3, 'H2O 1': 1e-3, 'CH3OH 1': 1e-3, 'CH3CH2OH 1': 1e-3}
         for color1, color2, lims in colors_and_lims:
-            print(f'color1: {color1}, color2: {color2} {suffix_orion}{suffix_iso} [mixes2 comparisons]', flush=True)
+            print(f'color1: {color1}, color2: {color2} [pure ice comparisons]', flush=True)
             pl.figure();
-            molcomps = mixes2
+            molcomps = [('CO 1', 25.0),
+                        ('CO2 1', 25.0),
+                        ('H2O 1', 25.0),
+                        ('CH3OH 1', 25.0),
+                        ('CH3CH2OH 1', 30.0), ]
+            for ii, molcomp in enumerate(molcomps):
+                a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                    molcomps=[molcomp],
+                                                                                                    dmag_tbl=dmag_all,
+                                                                                                    abundance_wrt_h2=ice_abundance[molcomp[0]],
+                                                                                                    icemol=molcomp[0].split(' ')[0],
+                                                                                                    max_column=None,
+                                                                                                    nirspec_archive=False,
+                                                                                                    iso_archive=False,
+                                                                                                    hexbin=hexbin,
+                                                                                                    av_scale=(30 if ii == 0 else 0),
+                                                                                                    max_h2_column=max_h2_column)
+            pl.legend(**legend_kwargs)
+            pl.title(f"ice/H$_2 = 10^{{-3}}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_pureices{hexbin_suffix}.png', bbox_inches='tight', )
+
+            pl.close('all')
+
+        for color1, color2, lims in colors_and_lims:
+            print(f'color1: {color1}, color2: {color2} [mixes1 comparisons]', flush=True)
+            pl.figure();
+            molcomps = mixes1
             a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
                                                                                                 molcomps=molcomps,
                                                                                                 dmag_tbl=dmag_all.loc['database', 'mymix'],
-            # molids=[0,1,2,3,4,5,18,24,25,26,27],
-                                                                                            #abundance=3e-4,
-                                                                                            abundance_wrt_h2=co_abundance_wrt_h2,
-                                                                                            max_column=None,
-                                                                                            max_h2_column=5e22,
-                                                                                            iso_archive=show_iso,
-                                                                                            show_orion_2770=show_orion_2770,)
-            #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
-            pl.axis(lims);
-            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2{suffix_orion}{suffix_iso}_nolegend.png', bbox_inches='tight', )
+                                                                                                abundance_wrt_h2=co_to_h2,
+                                                                                                max_column=None,
+                                                                                                hexbin=hexbin,
+                                                                                                max_h2_column=max_h2_column)
             pl.legend(**legend_kwargs)
-            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2{suffix_orion}{suffix_iso}.png', bbox_inches='tight', )
+            pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes1{hexbin_suffix}.png', bbox_inches='tight', )
 
+            pl.close('all')
+
+        for color1, color2, lims in ((['F115W', 'F200W'], ['F356W', 'F444W'], (0, 15, -0.5, 1.5)),
+                                    (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                    (['F200W', 'F444W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                    (['F405N', 'F466N'], ['F356W', 'F444W'], (-1.5, 1.0, -0.5, 1.5)),
+                                    (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.5, 0.2)),
+                                    (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -2.0, 0.5)),
+                                    ):
+            print(f'color1: {color1}, color2: {color2} [CH3 mixes comparisons]', flush=True)
             pl.figure()
-            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                                molcomps=[], iso_archive=show_iso, show_orion_2770=show_orion_2770,)
-            pl.legend(**legend_kwargs)
-            #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
-            pl.axis(lims);
-            pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}{suffix_orion}{suffix_iso}.png', bbox_inches='tight', )
 
-            try:
-                pl.figure()
+            molcomps = molcomps_ch3
+            for mc, tt in molcomps:
+                assert len(dmag_all.loc['composition', mc]) > 0, f"Composition {mc} not found in dmag_all"
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=molcomps,
+                                                                                                dmag_tbl=dmag_all,
+                                                                                                abundance_wrt_h2=co_abundance_wrt_h2,
+                                                                                                max_column=None,
+                                                                                                hexbin=hexbin,
+                                                                                                max_h2_column=max_h2_column)
+            pl.legend(**legend_kwargs)
+            pl.axis(lims);
+            pl.title(f"CO/H$_2 = {texify_exponent(co_abundance_wrt_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_ch3mixes{hexbin_suffix}.png', bbox_inches='tight', )
+            pl.close('all')
+
+        for show_orion_2770, suffix_orion, show_iso, suffix_iso in zip([True, False, False],
+                                                                    ['_orion', '', ''],
+                                                                    [False, False, True],
+                                                                    ['', '', '_iso']):
+            pl.close('all')
+            for color1, color2, lims in colors_and_lims:
+                print(f'color1: {color1}, color2: {color2} {suffix_orion}{suffix_iso} [mixes2 comparisons]', flush=True)
+                pl.figure();
+                molcomps = mixes2
                 a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
                                                                                                     molcomps=molcomps,
+                                                                                                    dmag_tbl=dmag_all.loc['database', 'mymix'],
                 # molids=[0,1,2,3,4,5,18,24,25,26,27],
                                                                                                 #abundance=3e-4,
                                                                                                 abundance_wrt_h2=co_abundance_wrt_h2,
-                                                                                                cloudc=True,
-                                                                                                dmag_tbl=dmag_all.loc['database', 'mymix'],
-                                                                                                nirspec_archive=False,
-                                                                                                cloudccat=cloudccat.catalog,
-                                                                                                iso_archive=show_iso,
-                                                                                                show_orion_2770=show_orion_2770,
                                                                                                 max_column=None,
                                                                                                 max_h2_column=5e22,
-                                                                                                )
-                pl.axis(lims);
-                pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC{suffix_orion}{suffix_iso}_nolegend.png', bbox_inches='tight', )
-                pl.legend(**legend_kwargs)
+                                                                                                iso_archive=show_iso,
+                                                                                                hexbin=hexbin,
+                                                                                                show_orion_2770=show_orion_2770,)
                 #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
                 pl.axis(lims);
-                pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC{suffix_orion}{suffix_iso}.png', bbox_inches='tight', )
+                pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2{suffix_orion}{suffix_iso}_nolegend{hexbin_suffix}.png', bbox_inches='tight', )
+                pl.legend(**legend_kwargs)
+                pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2{suffix_orion}{suffix_iso}{hexbin_suffix}.png', bbox_inches='tight', )
 
                 pl.figure()
                 a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                                    molcomps=[],
+                                                                                                    molcomps=[], iso_archive=show_iso, show_orion_2770=show_orion_2770, hexbin=hexbin,)
+                pl.legend(**legend_kwargs)
+                #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+                pl.axis(lims);
+                pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}{suffix_orion}{suffix_iso}{hexbin_suffix}.png', bbox_inches='tight', )
+
+                try:
+                    pl.figure()
+                    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                        molcomps=molcomps,
+                    # molids=[0,1,2,3,4,5,18,24,25,26,27],
+                                                                                                    #abundance=3e-4,
+                                                                                                    abundance_wrt_h2=co_abundance_wrt_h2,
                                                                                                     cloudc=True,
                                                                                                     dmag_tbl=dmag_all.loc['database', 'mymix'],
                                                                                                     nirspec_archive=False,
                                                                                                     cloudccat=cloudccat.catalog,
+                                                                                                    hexbin=hexbin,
                                                                                                     iso_archive=show_iso,
                                                                                                     show_orion_2770=show_orion_2770,
+                                                                                                    max_column=None,
+                                                                                                    max_h2_column=5e22,
                                                                                                     )
-                pl.legend(**legend_kwargs)
-                #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
-                pl.axis(lims);
-                pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_withCloudC{suffix_orion}{suffix_iso}.png', bbox_inches='tight', )
+                    pl.axis(lims);
+                    pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC{suffix_orion}{suffix_iso}_nolegend{hexbin_suffix}.png', bbox_inches='tight', )
+                    pl.legend(**legend_kwargs)
+                    #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+                    pl.axis(lims);
+                    pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_withCloudC{suffix_orion}{suffix_iso}{hexbin_suffix}.png', bbox_inches='tight', )
 
-            except KeyError:
-                print(f"No cloudc for {color1} {color2}")
-                continue
+                    pl.figure()
+                    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                        molcomps=[],
+                                                                                                        cloudc=True,
+                                                                                                        dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                                        nirspec_archive=False,
+                                                                                                        cloudccat=cloudccat.catalog,
+                                                                                                        iso_archive=show_iso,
+                                                                                                        show_orion_2770=show_orion_2770,
+                                                                                                        hexbin=hexbin,
+                                                                                                        )
+                    pl.legend(**legend_kwargs)
+                    #pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {2e20:.2e} cm$^{{-2}}$");
+                    pl.axis(lims);
+                    pl.savefig(f'{basepath}/figures/CCD_without_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_withCloudC{suffix_orion}{suffix_iso}{hexbin_suffix}.png', bbox_inches='tight', )
 
-            pl.close('all')
+                except KeyError:
+                    print(f"No cloudc for {color1} {color2}")
+                    continue
+
+                pl.close('all')
 
 
-    # Westerlund 1
-    for color1, color2, lims in (
-                                 (['F150W', 'F444W'], ['F444W', 'F466N'], (-0.5, 8, -0.5, 0.3)),
-                                 (['F212N', 'F444W'], ['F444W', 'F466N'], (-0.5, 6, -0.75, 0.3)),
-                                 (['F212N', 'F277W'], ['F444W', 'F466N'], (-0.5, 4, -0.5, 0.3)),
-                                 (['F150W', 'F212N'], ['F277W', 'F323N'], (-0.5, 4, -1.0, 1.0)),
-                                 (['F150W', 'F212N'], ['F212N', 'F323N'], (-0.5, 4, -1.0, 2.0)),
-        ):
-        print(f'color1: {color1}, color2: {color2} [Westerlund 1 comparisons]')
+        # Westerlund 1
+        for color1, color2, lims in (
+                                    (['F150W', 'F444W'], ['F444W', 'F466N'], (-0.5, 8, -0.5, 0.3)),
+                                    (['F212N', 'F444W'], ['F444W', 'F466N'], (-0.5, 6, -0.75, 0.3)),
+                                    (['F212N', 'F277W'], ['F444W', 'F466N'], (-0.5, 4, -0.5, 0.3)),
+                                    (['F150W', 'F212N'], ['F277W', 'F323N'], (-0.5, 4, -1.0, 1.0)),
+                                    (['F150W', 'F212N'], ['F212N', 'F323N'], (-0.5, 4, -1.0, 2.0)),
+            ):
+            print(f'color1: {color1}, color2: {color2} [Westerlund 1 comparisons]')
+            pl.figure()
+
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=molcomps,
+                                                                                                av_start=10,
+                                                                                                dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                                ext=G21_MWAvg(),
+                                                                                                iceage=False,
+                                                                                                plot_brick=False,
+                                                                                                abundance_wrt_h2=co_to_h2,
+                                                                                                max_column=None,
+                                                                                                hexbin=hexbin,
+                                                                                                max_h2_column=max_h2_column)
+            pl.legend(**legend_kwargs)
+            pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_Wd1{hexbin_suffix}.png', bbox_inches='tight', )
+
+        pl.close('all')
+
+        percent = 25
+
+        for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                    (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                    (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
+                                    (['F182M', 'F212N'], ['F356W', 'F444W'], (0, 3, -0.5, 1.5)),
+                                    (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                    (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
+                                    (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
+                                    (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
+                                    (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.4, 0.2)),
+                                    (['F200W', 'F212N'], ['F405N', 'F410M'], (-1, 1, -0.4, 0.2)),
+                                    ):
+            print(f'color1: {color1}, color2: {color2} [OCN mixes comparisons]')
+            pl.figure();
+            molcomps = [('CO:OCN (1:1)', 25.0),
+                        ('H2O:CO:OCN (1:1:1)', 25.0),
+                        ('H2O:CO:OCN (1:1:0.02)', 25.0),
+                        ('H2O:CO:OCN (2:1:0.1)', 25.0),
+                        ('H2O:CO:OCN (2:1:0.5)', 25.0), ]
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=molcomps,
+                                                                                                dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                            #abundance=3e-4,
+                                                                                            abundance_wrt_h2=(percent/100.)*carbon_abundance,
+                                                                                            hexbin=hexbin,
+                                                                                            max_column=5e19)
+            pl.legend(**legend_kwargs)
+            pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {5e19:.2e} cm$^{{-2}}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes{hexbin_suffix}.png', bbox_inches='tight', )
+            #print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
+
+        percent = 25
+
+        for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                    (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
+                                    #(['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
+                                    #(['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
+                                    (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
+                                    (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
+                                    ):
+            print(f'color1: {color1}, color2: {color2} [OCN mixes comparisons w/ CloudC]')
+            pl.figure();
+            molcomps = [('CO:OCN (1:1)', 25.0),
+                        ('H2O:CO:OCN (1:1:1)', 25.0),
+                        ('H2O:CO:OCN (1:1:0.02)', 25.0),
+                        ('H2O:CO:OCN (2:1:0.1)', 25.0),
+                        ('H2O:CO:OCN (2:1:0.5)', 25.0), ]
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=molcomps,
+                                                                                                dmag_tbl=dmag_all.loc['database', 'mymix'],
+                                                                                            #abundance_wrt_h2=3e-4,
+                                                                                            abundance_wrt_h2=co_to_h2,
+                                                                                            cloudc=True,
+                                                                                            nirspec_archive=False,
+                                                                                            cloudccat=cloudccat.catalog,
+                                                                                            max_column=None,
+                                                                                            max_h2_column=max_h2_column,
+                                                                                            hexbin=hexbin)
+            pl.legend(**legend_kwargs)
+            pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes_withCloudC{hexbin_suffix}.png', bbox_inches='tight', )
+            print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
+
+
+
         pl.figure()
-
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                              molcomps=molcomps,
-                                                                                              av_start=10,
-                                                                                              dmag_tbl=dmag_all.loc['database', 'mymix'],
-                                                                                              ext=G21_MWAvg(),
-                                                                                              iceage=False,
-                                                                                              plot_brick=False,
-                                                                                              abundance_wrt_h2=co_to_h2,
-                                                                                              max_column=None,
-                                                                                              max_h2_column=max_h2_column)
+        percent_ice = 20
+        color1 = ['F182M', 'F212N']
+        color2 = ['F405N', 'F410M']
+        molcomps = [
+            ('Hudgins', ('CO2 (1)', '70')),
+            ('Gerakines', ('CO2 (1)', '70')),
+            ('Hudgins', ('CO2 (1)', '10')),
+            ('Ehrenfreund', ('CO2 (1)', '10')),
+            ('Hudgins', ('CO2 (1)', '30')),
+            ('Hudgins', ('CO2 (1)', '50')),
+            ('Ehrenfreund', ('CO2 (1)', '50')),
+            ('Gerakines', ('CO2 (1)', '8')),
+        ]
+        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(
+            color1, color2,
+            molcomps=molcomps,
+            dmag_tbl=dmag_all,
+            axlims=(0, 3, -0.5, 0.2),
+            abundance_wrt_h2=(percent_ice/100.)*carbon_abundance,
+            icemol='CO2',
+            max_column=2e19,
+            label_author=True,
+            label_temperature=True,
+            hexbin=hexbin,
+        )
         pl.legend(**legend_kwargs)
-        pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_mixes2_Wd1.png', bbox_inches='tight', )
-
-    pl.close('all')
-
-    percent = 25
-
-    for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
-                                 (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
-                                 (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
-                                 (['F182M', 'F212N'], ['F356W', 'F444W'], (0, 3, -0.5, 1.5)),
-                                 (['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
-                                 (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
-                                 (['F182M', 'F212N'], ['F212N', 'F405N'], (0, 3, -0.1, 3.5)),
-                                 (['F182M', 'F212N'], ['F405N', 'F410M'], (0, 3, -0.4, 0.2)),
-                                 (['F200W', 'F212N'], ['F405N', 'F410M'], (-1, 1, -0.4, 0.2)),
-                                ):
-        print(f'color1: {color1}, color2: {color2} [OCN mixes comparisons]')
-        pl.figure();
-        molcomps = [('CO:OCN (1:1)', 25.0),
-                    ('H2O:CO:OCN (1:1:1)', 25.0),
-                    ('H2O:CO:OCN (1:1:0.02)', 25.0),
-                    ('H2O:CO:OCN (2:1:0.1)', 25.0),
-                    ('H2O:CO:OCN (2:1:0.5)', 25.0), ]
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                            molcomps=molcomps,
-                                                                                            dmag_tbl=dmag_all.loc['database', 'mymix'],
-                                                                                        #abundance=3e-4,
-                                                                                        abundance_wrt_h2=(percent/100.)*carbon_abundance,
-                                                                                        max_column=5e19)
-        pl.legend(**legend_kwargs)
-        pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {5e19:.2e} cm$^{{-2}}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes.png', bbox_inches='tight', )
-        #print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
-
-    percent = 25
-
-    for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
-                                 (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -1.5, 1.0)),
-                                 #(['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
-                                 #(['F356W', 'F410M'], ['F410M', 'F444W'], (-0.5, 2, -0.5, 0.5)),
-                                 (['F182M', 'F212N'], ['F212N', 'F466N'], (0, 3, -0.1, 3.0)),
-                                 (['F182M', 'F212N'], ['F212N', 'F410M'], (0, 3, -0.1, 3.5)),
-                                ):
-        print(f'color1: {color1}, color2: {color2} [OCN mixes comparisons w/ CloudC]')
-        pl.figure();
-        molcomps = [('CO:OCN (1:1)', 25.0),
-                    ('H2O:CO:OCN (1:1:1)', 25.0),
-                    ('H2O:CO:OCN (1:1:0.02)', 25.0),
-                    ('H2O:CO:OCN (2:1:0.1)', 25.0),
-                    ('H2O:CO:OCN (2:1:0.5)', 25.0), ]
-        a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
-                                                                                            molcomps=molcomps,
-                                                                                            dmag_tbl=dmag_all.loc['database', 'mymix'],
-                                                                                        #abundance_wrt_h2=3e-4,
-                                                                                        abundance_wrt_h2=co_to_h2,
-                                                                                        cloudc=True,
-                                                                                        nirspec_archive=False,
-                                                                                        cloudccat=cloudccat.catalog,
-                                                                                        max_column=None,
-                                                                                        max_h2_column=max_h2_column)
-        pl.legend(**legend_kwargs)
-        pl.title(f"CO/H$_2 = {texify_exponent(co_to_h2)}$, $N_{{max}}(\\mathrm{{H}}_2) = {texify_exponent(max_h2_column)}$");
-        pl.axis(lims);
-        pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes_withCloudC.png', bbox_inches='tight', )
-        print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
-
-
-
-    pl.figure()
-    percent_ice = 20
-    color1 = ['F182M', 'F212N']
-    color2 = ['F405N', 'F410M']
-    molcomps = [
-        ('Hudgins', ('CO2 (1)', '70')),
-        ('Gerakines', ('CO2 (1)', '70')),
-        ('Hudgins', ('CO2 (1)', '10')),
-        ('Ehrenfreund', ('CO2 (1)', '10')),
-        ('Hudgins', ('CO2 (1)', '30')),
-        ('Hudgins', ('CO2 (1)', '50')),
-        ('Ehrenfreund', ('CO2 (1)', '50')),
-        ('Gerakines', ('CO2 (1)', '8')),
-    ]
-    a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(
-        color1, color2,
-        molcomps=molcomps,
-        dmag_tbl=dmag_all,
-        axlims=(0, 3, -0.5, 0.2),
-        abundance_wrt_h2=(percent_ice/100.)*carbon_abundance,
-        icemol='CO2',
-        max_column=2e19,
-        label_author=True,
-        label_temperature=True,
-    )
-    pl.legend(**legend_kwargs)
-    pl.title(f"{percent_ice}% of C in ice, $N_{{max}}$ = 5e19 cm$^{{-2}}$")
-    pl.savefig(f'{basepath}/figures/CCD_icemodel_F182M-F212N_F405N-F410M_CO2only.png', bbox_inches='tight', )
-    pl.close()
+        pl.title(f"{percent_ice}% of C in ice, $N_{{max}}$ = 5e19 cm$^{{-2}}$")
+        pl.savefig(f'{basepath}/figures/CCD_icemodel_F182M-F212N_F405N-F410M_CO2only{hexbin_suffix}.png', bbox_inches='tight', )
+        pl.close()

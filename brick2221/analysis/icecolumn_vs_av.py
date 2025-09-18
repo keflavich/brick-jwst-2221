@@ -319,6 +319,7 @@ def main():
     pl.xlabel(r'Metallicity [Z/Z$_\odot$]')
     pl.ylabel('CO ice abundance [CO/H$_2$]')
     pl.savefig(f'{basepath}/figures/abundance_vs_metallicity.pdf', bbox_inches='tight')
+    pl.savefig(f'{basepath}/figures/abundance_vs_metallicity.png', bbox_inches='tight', dpi=300)
 
 
     # rgal
@@ -344,6 +345,7 @@ def main():
     pl.xlabel(r'Galactocentric Radius [kpc]')
     pl.ylabel('CO ice abundance [CO/H$_2$]')
     pl.savefig(f'{basepath}/figures/abundance_vs_rgal.pdf', bbox_inches='tight')
+    pl.savefig(f'{basepath}/figures/abundance_vs_rgal.png', bbox_inches='tight', dpi=300)
 
     pl.close('all')
 
