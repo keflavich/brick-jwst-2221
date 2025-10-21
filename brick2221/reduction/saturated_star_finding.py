@@ -187,7 +187,10 @@ def get_psf(header, path_prefix='.'):
     npsf = 16
     oversample = 2
     fov_pixels = 512
+    detector = header['DETECTOR']
     psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}_{module}.fits'
+    # this way, it doesn't have to write psf file again
+    psf_fn = f'{path_prefix}/nircam_{detector.lower()}_{filtername.lower()}_fovp{fov_pixels}_samp{oversample}_npsf{npsf}.fits'
     if module == 'merged':
         project_id = header['PROGRAM'][1:5]
         obs_id = header['OBSERVTN'].strip()
@@ -226,7 +229,7 @@ def get_psf(header, path_prefix='.'):
         big_grid = psfgen.psf_grid(num_psfs=npsf, oversample=oversample,
                                    all_detectors=True, fov_pixels=fov_pixels,
                                    outdir=path_prefix,
-                                   save=True, outfile=psf_fn, overwrite=True)
+                                   save=True, outfile=None, overwrite=True)
         # now the PSF should be written
         assert glob.glob(psf_fn.replace(".fits", "*"))
         if isinstance(big_grid, list):
