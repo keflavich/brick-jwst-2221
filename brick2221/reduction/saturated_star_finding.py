@@ -229,7 +229,7 @@ def get_psf(header, path_prefix='.'):
         big_grid = psfgen.psf_grid(num_psfs=npsf, oversample=oversample,
                                    all_detectors=True, fov_pixels=fov_pixels,
                                    outdir=path_prefix,
-                                   save=True, outfile=psf_fn, overwrite=True)
+                                   save=True, outfile=None, overwrite=True)
         # now the PSF should be written
         assert glob.glob(psf_fn.replace(".fits", "*"))
         if isinstance(big_grid, list):
