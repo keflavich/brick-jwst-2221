@@ -1007,6 +1007,40 @@ def main():
                                                     plot_brandt=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
                 pl.close('all')
 
+
+            for nhtoav, nhtoavname in zip((2.21e21, 2.21e21/2, 2.21e21/3), ('solar', 'halfNHtoAV', 'thirdNHtoAV')):
+                av, inferred_molecular_column, ax = makeplot_simpler(
+                                                    avfilts=['F182M', 'F212N'],
+                                                    ax=pl.figure().gca(), ylim=(17.0, 19.5),
+                                                    xlim=(-1, 80),
+                                                    title=f'H2O:CO:CO2 (10:1:1) N(H)={nhtoav:0.3e} A$_V$',
+                                                    hexbin=hexbin,
+                                                    scatter=not hexbin,
+                                                    av_start=17,
+                                                    grid=True,
+                                                    contour=False,
+                                                    NHtoAV=nhtoav,
+                                                    suffix=f'{hexbinlabel}',
+                                                    plot_brandt=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+                pl.close('all')
+
+            # No need.
+            # for coabundance, coabundancename in zip((1e-4, 2.5e-5, 5e-4), ('1e-4', '2.5e-5', '5e-4')):
+            #     av, inferred_molecular_column, ax = makeplot_simpler(
+            #                                         avfilts=['F182M', 'F212N'],
+            #                                         ax=pl.figure().gca(), ylim=(17.0, 19.5),
+            #                                         xlim=(-1, 80),
+            #                                         title=f'H2O:CO:CO2 (10:1:1) X(CO)={coabundance:0.1e}',
+            #                                         hexbin=hexbin,
+            #                                         scatter=not hexbin,
+            #                                         av_start=17,
+            #                                         grid=True,
+            #                                         contour=False,
+            #                                         abundance_wrt_h2=coabundance,
+            #                                         suffix=f'{hexbinlabel}',
+            #                                         plot_brandt=False, legend_kwargs={'loc': 'lower right'}, color_filter1=color_filter1, color_filter2=color_filter2)
+            #     pl.close('all')
+
             # Special case so the left edge matches
             ext = G23(Rv=5.5)
             extname = 'G23 $R_V=5.5$'

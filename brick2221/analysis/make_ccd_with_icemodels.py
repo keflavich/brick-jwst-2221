@@ -641,6 +641,7 @@ if __name__ == "__main__":
         percent = 25
 
         for color1, color2, lims in ((['F182M', 'F212N'], ['F410M', 'F466N'], (0, 3, -1.5, 1.0)),
+                                    (['F182M', 'F212N'], ['F405N', 'F466N'], (0, 3, -2.0, 0.5)),
                                     (['F115W', 'F200W'], ['F356W', 'F444W'], (0, 20, -0.5, 1.5)),
                                     (['F200W', 'F356W'], ['F356W', 'F444W'], (0, 5, -0.5, 1.5)),
                                     (['F182M', 'F212N'], ['F356W', 'F444W'], (0, 3, -0.5, 1.5)),
@@ -670,6 +671,23 @@ if __name__ == "__main__":
             pl.axis(lims);
             pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_OCNmixes{hexbin_suffix}.png', bbox_inches='tight', )
             #print(f"Saved {color1} {color2} ccd plot with OCN mixes using {molcomps}")
+
+            pl.close('all')
+            pl.figure()
+            print('kp5: ', dmag_all.loc[('database', 'kp5')])
+            a_color1, a_color2, c1, c2, sel, E_V_color1, E_V_color2, tb = plot_ccd_with_icemodels(color1, color2,
+                                                                                                molcomps=[('H2O:CO2:CO 72:25:2.7', -999)],
+                                                                                                dmag_tbl=dmag_all.loc[('database', 'kp5')],
+                                                                                            abundance_wrt_h2=5.4e-6,
+                                                                                            icemol='CO',
+                                                                                            hexbin=hexbin,
+                                                                                            # kp5 includes dust so we don't want to double-extinct
+                                                                                            pure_ice_no_dust=True,
+                                                                                            max_column=5e19)
+            pl.legend(**legend_kwargs)
+            pl.title(f"{percent}% of C in ice, $N_{{max}}$ = {5e19:.2e} cm$^{{-2}}$");
+            pl.axis(lims);
+            pl.savefig(f'{basepath}/figures/CCD_with_icemodel_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}_kp5{hexbin_suffix}.png', bbox_inches='tight', )
 
         percent = 25
 

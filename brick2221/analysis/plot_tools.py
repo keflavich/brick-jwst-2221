@@ -1,4 +1,5 @@
 import numpy as np
+import traceback
 import regions
 import warnings
 import glob
@@ -845,6 +846,7 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
             spitzermatch = spitzer[spitzindex]
     except Exception as ex:
         spitzer = []
+        spitzermatch = []
         log.debug(f"No matches for spitzer: {ex}")
 
 
@@ -893,21 +895,22 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
                 * u.Jy)
 
 
-    if len(spitzer) > 0:
+    if len(spitzermatch) > 0:
         for filtername,colname in [('I1', '_3.6mag'),
                                 ('I2', '_4.5mag'),
                                 ('I3', '_5.8mag'),
                                 ('I4', '_8.0mag')]:
-            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
-            wavelengths.append(eff_wavelength)
-            if spitzermatch[colname].mask:
-                fluxes.append(np.nan * u.Jy)
-                lims.append(mag2flux(lim_dict[filtername], filtername))
-            else:
-                fluxes.append(mag2flux(spitzermatch[colname], filtername))
-                lims.append(np.nan*u.Jy)
-            eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
-            widths.append(eff_width)
+            if colname in spitzermatch.colnames:
+                eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+                wavelengths.append(eff_wavelength)
+                if spitzermatch[colname].mask:
+                    fluxes.append(np.nan * u.Jy)
+                    lims.append(mag2flux(lim_dict[filtername], filtername))
+                else:
+                    fluxes.append(mag2flux(spitzermatch[colname], filtername))
+                    lims.append(np.nan*u.Jy)
+                eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+                widths.append(eff_width)
 
 
    # VVV
@@ -921,6 +924,7 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
             #print(len(vvvindex))
             vvvmatch = vvvdr4_[vvvindex]
     else:
+        vvvmatch = []
         log.debug("No VVV match")
 
 
@@ -933,23 +937,24 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
                 filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint']
                 * u.Jy)
 
-    if len(vvvdr4) > 0:
+    if len(vvvmatch) > 0:
         for filtername,colname in [('Z', 'Zmag3'),
                                 ('Y', 'Ymag3'),
                                 ('J', 'Jmag3'),
                                 ('H', 'Hmag3'),
                                 ('Ks', 'Ksmag3'),
                                 ]:
-            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
-            wavelengths.append(eff_wavelength)
-            if len(vvvdr4_) == 0 or vvvmatch[colname].mask:
-                fluxes.append(np.nan * u.Jy)
-                lims.append(mag2flux(lim_dict[filtername], filtername))
-            else:
-                fluxes.append(mag2flux(vvvmatch[colname], filtername))
-                lims.append(np.nan*u.Jy)
-            eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
-            widths.append(eff_width)
+            if colname in vvvmatch.colnames:
+                eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+                wavelengths.append(eff_wavelength)
+                if len(vvvdr4_) == 0 or vvvmatch[colname].mask:
+                    fluxes.append(np.nan * u.Jy)
+                    lims.append(mag2flux(lim_dict[filtername], filtername))
+                else:
+                    fluxes.append(mag2flux(vvvmatch[colname], filtername))
+                    lims.append(np.nan*u.Jy)
+                eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+                widths.append(eff_width)
 
     return wavelengths, widths, fluxes, lims
 
@@ -982,6 +987,7 @@ def sed_and_starzoom_plot(coord, basetable, idx=None, fignum=1, title=None, modu
             starzoom_spitzer(coord, fig=fig, axes=axes)
     except Exception as ex:
         print(ex)
+        traceback.print_exc()
 
     return fig, (wavelengths, widths, fluxes, lims)
 

@@ -98,7 +98,7 @@ def format_dmag_list(dmag_values, significant_figures=2):
     return formatted_values
 
 
-def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
+def create_latex_table(filter_ice_table, output_file=None, column_density=1e18, instrument='NIRCam'):
     """
     Create a LaTeX-formatted table from the filter ice table.
     """
@@ -160,22 +160,21 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
 
     log_column = int(np.round(np.log10(column_density)))
 
-    description = f'Molecules that absorb NIRCAM filters by at least 0.1 mag when their column density is 10$^{{{log_column}}}$ cm$^{{-2}}$.  This table is not comprehensive, since some molecules are potentially much more abundant (e.g., \\water), and the more complex molecules are likely to be rarer.  NIRCAM filters excluded from this table do not have significant ($>0.1$ mag) ice absorption at N(ice)=10$^{{{log_column}}}$ cm$^{{-2}}$.  '
+    description = f'Molecules that absorb {instrument} filters by at least 0.1 mag when their column density is 10$^{{{log_column}}}$ cm$^{{-2}}$.  This table is not comprehensive, since some molecules are potentially much more abundant (e.g., \\water), and the more complex molecules are likely to be rarer.  {instrument} filters excluded from this table do not have significant ($>0.1$ mag) ice absorption at N(ice)=10$^{{{log_column}}}$ cm$^{{-2}}$.  '
     if column_density == 1e18:
         description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, and HC$_3$N.  '
     if column_density == 1e19:
         description += 'Several molecules in the ice database are excluded because they have not been reported in the ISM, including NH$_4$CN, N$_2$H$_4$, N$_2$O, CH$_3$CH$_2$NH$_2$, CH$_3$NH$_2$, C$_6$H$_6$, C$_5$H$_5$N, C$_2$H$_6$O, C$_3$H$_8$, C$_3$H$_2$O, and HC$_3$N.  '
 
-    # the AI felt that this cruft was necessary
     for line in lines:
         if '\\begin{table}' in line:
             enhanced_lines.append('\\begin{table*}[ht]')
             enhanced_lines.append('\\centering')
-            enhanced_lines.append('\\caption{Ice molecules that significantly absorb NIRCAM filters}')
+            enhanced_lines.append(f'\\caption{{Ice molecules that significantly absorb {instrument} filters [N(ice)=10$^{{{log_column}}}$ cm$^{{-2}}$]}}')
             if column_density == 1e18:
-                enhanced_lines.append('\\label{tab:nircam_ice_absorption}')
+                enhanced_lines.append(f'\\label{{tab:{instrument.lower()}_ice_absorption}}')
             else:
-                enhanced_lines.append(f'\\label{{tab:nircam_ice_absorption_{{log_column}}}}')
+                enhanced_lines.append(f'\\label{{tab:{instrument.lower()}_ice_absorption_{log_column}}}')
             in_table = True
         elif '\\begin{tabular}' in line:
             enhanced_lines.append('\\begin{tabular}{|l|p{10cm}|p{6cm}|}')
@@ -211,7 +210,8 @@ def create_latex_table(filter_ice_table, output_file=None, column_density=1e18):
     return enhanced_content
 
 
-def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_column=False):
+def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_column=False,
+                            miri=False):
     """
     Create a table showing which ice molecules significantly affect each NIRCAM filter.
 
@@ -226,15 +226,17 @@ def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_col
     --------
     astropy.table.Table
         Table with columns 'filter_name' and 'ice_molecules'
-        Each row represents one NIRCAM filter and its list of significant ice molecules
+        Each row represents one NIRCam filter and its list of significant ice molecules
     """
     # Load the absorption data
     dmag_tbl = Table.read(f'{basepath}/tables/combined_ice_absorption_tables.ecsv')
     dmag_tbl = dmag_tbl[dmag_tbl['database'] != 'mymix']
     # LIDA k-values aren't trustworthy
-    dmag_tbl = dmag_tbl[dmag_tbl['database'] != 'lida']
+    # dmag_tbl = dmag_tbl[dmag_tbl['database'] != 'lida']
     # Hudgings 1993 is not the CO we want
     dmag_tbl = dmag_tbl[~((dmag_tbl['author'] == 'Hudgins') & (dmag_tbl['composition'] == 'CO (1)'))]
+    # ignore tholins
+    dmag_tbl = dmag_tbl[dmag_tbl['author'] != 'Khare']
 
     # Filter for the specified column density
     mask = dmag_tbl['column'] == column_density
@@ -273,7 +275,12 @@ def create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_col
     #print(f"After filtering out 'under' molecules: {len(filtered_data)} entries")
 
     # Get filter columns from the data (shortened names like F150W)
-    filter_cols = [col for col in dmag_tbl.colnames if col.startswith('F') and int(col[1:4]) < 500]
+    if miri:
+        filter_cols = [col for col in dmag_tbl.colnames if col.startswith('F') and (int(col[1:4]) >= 500 or col[4] in ('0', '5'))]
+    else:
+        filter_cols = [col for col in dmag_tbl.colnames if col.startswith('F') and (int(col[1:4]) < 500 and col[4] in 'NMW')]
+
+    print(f"Filter columns: {filter_cols}")
 
     # Helper function to normalize molecule names (handle unicode characters)
     def normalize_molecule_name(mol_name):
@@ -409,3 +416,26 @@ if __name__ == "__main__":
     pureco_check = dmag_tbl.loc[('CO (1)')].loc[('column', cols[13])]['molecule', 'mol_id', 'molwt', 'database', 'author', 'composition', 'temperature', 'density',  'F405N',  'F466N', 'F405N-F466N' ]
     print(pureco_check)
     dmag_tbl.loc[('composition', 'H2O:CO:CO2 (10:1:1)')]
+
+
+
+
+    # MIRI
+    filter_ice_table_miri, column_density_miri = create_filter_ice_table(dmag_threshold=0.1, column_density=1e18, nearest_column=True, miri=True)
+
+    output_filename = f'{basepath}/tables/miri_filter_ice_table.ecsv'
+    filter_ice_table_miri.write(output_filename, overwrite=True)
+    print(f"\nTable saved to: {output_filename}")
+
+    # Create and save LaTeX table
+    latex_output_file = f'{basepath}/tables/miri_filter_ice_table.tex'
+    latex_table = create_latex_table(filter_ice_table_miri, output_file=latex_output_file, instrument='MIRI')
+
+    #print("\nLaTeX table preview:")
+    #print(latex_table)
+
+    filter_ice_table_sensitive, column_density = create_filter_ice_table(dmag_threshold=0.1, column_density=1e19, nearest_column=True, miri=True)
+    output_filename = f'{basepath}/tables/miri_filter_ice_table_1e19.ecsv'
+    filter_ice_table_sensitive.write(output_filename, overwrite=True)
+    latex_output_file = f'{basepath}/tables/miri_filter_ice_table_1e19.tex'
+    latex_table = create_latex_table(filter_ice_table_sensitive, output_file=latex_output_file, column_density=column_density, instrument='MIRI')
