@@ -391,13 +391,13 @@ if __name__ == '__main__':
                         raise ValueError(f"There are multiple rows matching target={targ}, grating={grating}, object={srcname}.  There was no slitid {slitid} to distinguish them.")
 
                 if 'MSA_Cat' in targ:
-                    sp.specname = f'{program} {srcalias} {slitid} {grating} {grating2}'
+                    sp.specname = f'{program} {srcalias} {grating} {grating2}'
                 elif targ == 'Serpens_Targets':
                     sp.specname = f'Serpens {program} {srcalias} {slitid} {grating} {grating2}'
                 elif targ == 'Catalogue_4':
                     sp.specname = f'Orion {program} {srcalias} {grating} {grating2}'
                 else:
-                    sp.specname = f'{targ} {program} {srcalias} {grating} {grating2}'
+                    sp.specname = f'{program} {srcalias} {grating} {grating2}'
                 if not np.any(np.isfinite(sp.data)):
                     print(f'{fn} has no finite data')
                     continue
