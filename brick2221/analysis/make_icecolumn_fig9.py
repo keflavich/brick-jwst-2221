@@ -18,7 +18,8 @@ import matplotlib.lines as mlines
 from brick2221.analysis.analysis_setup import filternames
 from brick2221.analysis.selections import load_table
 from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-from brick2221.analysis.analysis_setup import basepath, compute_molecular_column, molscomps, compute_dmag_from_column
+from brick2221.analysis.analysis_setup import basepath, molscomps
+from icemodels.colorcolordiagrams import compute_molecular_column, compute_dmag_from_column
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg, F11_MWGC
 from dust_extinction.parameter_averages import G23
