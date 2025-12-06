@@ -14,7 +14,10 @@ license = { file = "licenses/LICENSE.rst" }
 authors = [
   { name = "adam ginsburg", email = "adam.g.ginsburg@gmail.com" },
 ]
-dependencies = []
+dependencies = [
+  "mpl_plot_templates",
+  "pyspeckit",
+]
 dynamic = ["version"]
 
 [project.optional-dependencies]
