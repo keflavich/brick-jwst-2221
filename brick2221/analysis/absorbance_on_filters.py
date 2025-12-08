@@ -231,19 +231,30 @@ if __name__ == "__main__":
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
     plot_filters(filternames=['F410M', 'F430M', 'F460M', 'F480M'])
-    pl.xlim(3.90, 5.20);
+    pl.text(4.10, 2e-18, 'F410M',)
+    pl.text(4.30, 2e-18, 'F430M',)
+    pl.text(4.60, 2e-18, 'F460M',)
+    pl.text(4.80, 2e-18, 'F480M',)
+    pl.xlim(3.80, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f410_f430_f460_f480.png', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
     plot_filters(filternames=['F250M', 'F300M', 'F335M', 'F360M'])
-    pl.xlim(2.00, 3.80);
+    pl.text(2.5, 2e-18, 'F250M',)
+    pl.text(3.0, 2e-18, 'F300M',)
+    pl.text(3.35, 2e-18, 'F335M',)
+    pl.text(3.6, 2e-18, 'F360M',)
+    pl.xlim(2.30, 3.90);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f250_f300_f335_f360.png', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
     plot_filters(filternames=['F277W', 'F356W', 'F444W'])
-    pl.xlim(2.00, 5.20);
+    pl.text(2.77, 2e-18, 'F277W',)
+    pl.text(3.56, 2e-18, 'F356W',)
+    pl.text(4.44, 2e-18, 'F444W',)
+    pl.xlim(2.20, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f356_f444.png', dpi=150, bbox_inches='tight')
 
 
