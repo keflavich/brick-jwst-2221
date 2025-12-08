@@ -116,7 +116,7 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
 
     authors = {mol: tb.meta['author'] for mol, tb in opacity_tables.items()}
 
-    grid = np.linspace(2.5*u.um, 5.0*u.um, 20000)
+    grid = np.linspace(2.5*u.um, 5.2*u.um, 20000)
     composition = ':'.join(mixture.keys()) + " (" + ":".join([str(val) for val in mixture.values()]) + ")"
     print(f"composition: {composition}")
     tb = make_mixtable(composition, moltbls=opacity_tables, grid=grid, density=1*u.g/u.cm**3, temperature=25*u.K,
@@ -232,7 +232,7 @@ if __name__ == "__main__":
 
 
     pl.figure()
-    plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
+    plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia, co2_gerakines))
     plot_filters(filternames=['F410M', 'F430M', 'F460M', 'F480M'])
     pl.text(4.10, 6e-18, 'F410M', ha='center')
     pl.text(4.30, 6e-18, 'F430M', ha='center')
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     pl.text(3.0, 6e-18, 'F300M', ha='center')
     pl.text(3.35, 6e-18, 'F335M', ha='center')
     pl.text(3.6, 6e-18, 'F360M', ha='center')
-    pl.ylim(1e-21, 1e-7)
+    pl.ylim(1e-21, 1e-17)
     pl.xlim(2.30, 3.90);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f250_f300_f335_f360.png', dpi=150, bbox_inches='tight')
 
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     pl.text(2.77, 6e-18, 'F277W', ha='center')
     pl.text(3.56, 6e-18, 'F356W', ha='center')
     pl.text(4.44, 6e-18, 'F444W', ha='center')
-    pl.ylim(1e-21, 1e-7)
+    pl.ylim(1e-21, 1e-17)
     pl.xlim(2.20, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f356_f444.png', dpi=150, bbox_inches='tight')
 
