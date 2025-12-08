@@ -43,7 +43,7 @@ def imshow_fits_cutout(hdu, reg, wcs, fig=None, margin=5):
     if fig is None:
         fig = plt.figure(figsize=(1, 1))
     ax = fig.add_axes([x_start, 0.05, cutout_size/available_width, 0.9], projection=ww)
-    ax.imshow(cutout_image, origin='lower', cmap='gray_r', aspect='equal', 
+    ax.imshow(cutout_image, origin='lower', cmap='gray_r', aspect='equal',
                 norm=simple_norm(cutout_image, stretch='asinh'))
 
     return ww, cutout_image, ax
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         create_region_cutouts(fits_files, regs)
 
     imgpath = '/Users/adam/Dropbox/brick2221/'
-    avm_files = [('starless', f'{imgpath}/BrickJWST_merged_longwave_narrowband_lighter.png', True), 
+    avm_files = [('starless', f'{imgpath}/BrickJWST_merged_longwave_narrowband_lighter.png', True),
                  ('405-410-466', f'{imgpath}/BrickJWST_merged_longwave_narrowband_rotated_withstars.png', True),
                  #('405-410-466', f'{imgpath}/BrickJWST_merged_longwave_narrowband_withstars.png', True),
                  ('200-187-115', f'{imgpath}/BrickJWST_1182p2221_200_187_115.png', False),
