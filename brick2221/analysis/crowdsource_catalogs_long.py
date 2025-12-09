@@ -6,7 +6,7 @@ import crowdsource
 import regions
 import numpy as np
 from functools import cache
-from astropy.convolution import convolve, Gaussian2DKernel
+from astropy.convolution import convolve, convolve_fft, Gaussian2DKernel, interpolate_replace_nans
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 from astropy.visualization import simple_norm
@@ -22,6 +22,7 @@ import requests
 import requests.exceptions
 import urllib3
 import urllib3.exceptions
+from jwst.datamodels import dqflags
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import IntegratedGaussianPRF, extract_stars, EPSFStars, EPSFModel
 try:
@@ -710,7 +711,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        visit_id=None, vgroup_id=None,
                        bg_boxsizes=None,
                        use_webbpsf=False,
+                       nsigma=5,
                        pupil='clear'):
+    """
+    nsigma is the threshold to multiply the error estimate by to get the detection threshold
+    """
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -788,11 +793,24 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     filtered_errest = np.nanmedian(err)
     print(f'Error estimate for DAO from median(err): {filtered_errest}', flush=True)
 
-    daofind_tuned = DAOStarFinder(threshold=5 * filtered_errest,
+    daofind_tuned = DAOStarFinder(threshold=nsigma * filtered_errest,
                                   fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                   sharplo=0.30, sharphi=1.40)
     print("Finding stars with daofind_tuned", flush=True)
-    finstars = daofind_tuned(np.nan_to_num(data))
+
+    # empirically determined in debugging session with Taehwa on 2025-12-09:
+    # with just nan_to_num, setting pixels to zero, some stars got "erased"
+    kernel = Gaussian2DKernel(x_stddev=fwhm_pix/2.355)
+    if 'DQ' in im1:
+        dqarr = im1['DQ'].data
+        is_saturated = (dqarr & dqflags.pixel['SATURATED']) != 0
+        data = data.copy()
+        data[is_saturated] = np.nan
+
+    nan_replaced_data = interpolate_replace_nans(data, kernel, convolve=convolve_fft)
+
+    finstars = daofind_tuned(nan_replaced_data,
+                             mask=np.isnan(data))
 
     print(f"Found {len(finstars)} with daofind_tuned", flush=True)
     # for diagnostic plotting convenience
@@ -862,7 +880,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         if False: # why do the unweighted version?
             print()
             print("starting crowdsource unweighted", flush=True)
-            results_unweighted = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
+            results_unweighted = fit_im(np.nan_to_num(data), psf_model,
+                                        weight=np.ones_like(data)*np.nanmedian(weight),
                                         # psfderiv=np.gradient(-psf_initial[0].data),
                                         dq=dq,
                                         nskyx=0, nskyy=0, refit_psf=False, verbose=True,
