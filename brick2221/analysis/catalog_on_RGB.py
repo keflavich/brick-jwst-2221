@@ -149,6 +149,7 @@ def overlay_stars(basetable,
                   **kwargs,
                   ):
 
+    print(f"DEBUG: avfilts={avfilts} color_filter1={color_filter1} color_filter2={color_filter2} ref_filter={ref_filter}")
     if ax is None:
         ax = pl.gca()
 
@@ -267,6 +268,7 @@ def blue_stars_on_rgb(basetable,
                     ref_filter=ref_filter,
                     cbar=cbar,
                     cmap=cmap,
+                    avfilts=avfilts,
                     )
 
     if flip_y:
@@ -279,9 +281,11 @@ def blue_stars_on_rgb(basetable,
 
 
     if not do_overlay:
-        fig.savefig(f"{basepath}/paper_figures/{rgb_name}_before_overlay.png", dpi=200, bbox_inches='tight')
+        print(f"{basepath}/paper_figures/{rgb_name}_{color_filter1}-{color_filter2}_before_overlay.png")
+        fig.savefig(f"{basepath}/paper_figures/{rgb_name}_{color_filter1}-{color_filter2}_before_overlay.png", dpi=200, bbox_inches='tight')
         return
 
+    print(f"{basepath}/paper_figures/BlueStars_on_{rgb_name}_{color_filter1}-{color_filter2}.png")
     fig.savefig(f"{basepath}/paper_figures/BlueStars_on_{rgb_name}_{color_filter1}-{color_filter2}.png", dpi=200, bbox_inches='tight')
 
     fig2 = pl.figure()
@@ -344,6 +348,11 @@ if __name__ == '__main__':
                         cmap='Blues',
                         cbar=True,
                         do_overlay=False, # save a blank first
+                        # these aren't used b/c do_overlay=False but they change the filename
+                        color_filter1='F444W',
+                        color_filter2='F356W',
+                        ref_filter='f444w',
+                        avfilts=['F200W', 'F444W'],
                         )
         blue_stars_on_rgb(basetable=basetable,
                         wcsaxes=wcsaxes,
@@ -423,6 +432,22 @@ if __name__ == '__main__':
     pl.close('all')
 
     print("Plotting 444-356-200")
+
+
+    # this one is a debug check to make sure the full 444/356 catalog is being shown, but it seems that it isn't.  It's getting downselected to just the overlap w/2221.  Why?
+    blue_stars_on_rgb(basetable=basetable, rgb_imagename='pngs_444/Brick_RGB_444-356-200_log.png',
+                      color_filter1='F444W',
+                      color_filter2='F356W',
+                      ref_filter='f444w',
+                      avfilts=['F200W', 'F444W'],
+                      swapaxes_wcs=False,
+                      flip_y=False,
+                      flip_x=False,
+                      transform=PIL.Image.FLIP_LEFT_RIGHT,
+                      threshold=0.4,
+                      rgb_name='RGB_merged_1182_all_stars',
+                      )
+
     blue_stars_on_rgb(basetable=basetable, rgb_imagename='pngs_444/Brick_RGB_444-356-200_log.png',
                       color_filter1='F444W',
                       color_filter2='F356W',
@@ -433,7 +458,7 @@ if __name__ == '__main__':
                       flip_x=False,
                       transform=PIL.Image.FLIP_LEFT_RIGHT,
                       threshold=-0.4,
-                      rgb_name='RGB_merged',
+                      rgb_name='RGB_merged_1182',
                       )
     blue_stars_on_rgb(basetable=basetable, rgb_imagename='pngs_444/Brick_RGB_444-356-200_log.png',
                       swapaxes_wcs=False,
@@ -441,7 +466,7 @@ if __name__ == '__main__':
                       flip_x=False,
                       transform=PIL.Image.FLIP_LEFT_RIGHT,
                       threshold=-0.4,
-                      rgb_name='RGB_merged',
+                      rgb_name='RGB_merged_1182',
                       do_overlay=False,
                       )
 
