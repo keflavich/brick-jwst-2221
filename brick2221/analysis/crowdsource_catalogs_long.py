@@ -801,16 +801,21 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     # empirically determined in debugging session with Taehwa on 2025-12-09:
     # with just nan_to_num, setting pixels to zero, some stars got "erased"
     kernel = Gaussian2DKernel(x_stddev=fwhm_pix/2.355)
+    mask = np.isnan(data)
     if 'DQ' in im1:
         dqarr = im1['DQ'].data
         is_saturated = (dqarr & dqflags.pixel['SATURATED']) != 0
-        data = data.copy()
-        data[is_saturated] = np.nan
+        # we want original data_ to be untouched for imshowing diagnostics etc.
+        data_ = data.copy()
+        data_[is_saturated] = np.nan
+        mask |= is_saturated
+    else:
+        data_ = data
 
-    nan_replaced_data = interpolate_replace_nans(data, kernel, convolve=convolve_fft)
+    nan_replaced_data = interpolate_replace_nans(data_, kernel, convolve=convolve_fft)
 
     finstars = daofind_tuned(nan_replaced_data,
-                             mask=np.isnan(data))
+                             mask=mask)
 
     print(f"Found {len(finstars)} with daofind_tuned", flush=True)
     # for diagnostic plotting convenience
@@ -880,8 +885,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         if False: # why do the unweighted version?
             print()
             print("starting crowdsource unweighted", flush=True)
-            results_unweighted = fit_im(np.nan_to_num(data), psf_model,
-                                        weight=np.ones_like(data)*np.nanmedian(weight),
+            results_unweighted = fit_im(nan_replaced_data, psf_model,
+                                        weight=np.ones_like(data)*np.nanmedian(weight)*(~mask),
                                         # psfderiv=np.gradient(-psf_initial[0].data),
                                         dq=dq,
                                         nskyx=0, nskyy=0, refit_psf=False, verbose=True,
@@ -939,11 +944,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 print()
                 print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky} & fpsf={fpsf} & blur={blur_}")
                 print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
-                results = fit_im(np.nan_to_num(data), psf_model, weight=weight,
-                                    nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
-                                    dq=dq,
-                                    **crowdsource_default_kwargs
-                                    )
+                results = fit_im(nan_replaced_data, psf_model, weight=weight * (~mask),
+                                 nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
+                                 dq=dq,
+                                 **crowdsource_default_kwargs
+                                 )
                 print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results
                 stars = save_crowdsource_results(results, ww, filename,
@@ -1003,7 +1008,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        (finstars['sharpness'] < 0.8))
 
             print(f"Extracting {epsfsel.sum()} stars")
-            stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars[epsfsel], size=25)
+            # TODO: we might need to figure out how to tell extract_stars what's masked
+            stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=25)
 
             # reject stars with negative pixels
             #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
@@ -1043,7 +1049,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                             )
 
         print("About to do BASIC photometry....")
-        result = phot_basic(np.nan_to_num(data))
+        result = phot_basic(nan_replaced_data, mask=mask)
         print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
 
         # remove negative-peak and zero-peak sources (they affect the residuals badly)
@@ -1124,7 +1130,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        (finstars['sharpness'] < 0.8))
 
             print(f"Extracting {epsfsel.sum()} stars")
-            stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars[epsfsel], size=35)
+            stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=35)
 
             # reject stars with negative pixels
             #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
@@ -1162,7 +1168,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                           )
 
         print("About to do ITERATIVE photometry....")
-        result2 = phot_iter(data)
+        result2 = phot_iter(nan_replaced_data, mask=mask)
         print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
         # need to flag stars near negative stars, so we don't want to exclude them _yet_
