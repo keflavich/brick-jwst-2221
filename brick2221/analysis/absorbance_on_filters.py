@@ -164,13 +164,13 @@ if __name__ == "__main__":
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa))
     plot_filters()
     pl.xlim(4.55, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins))
     plot_filters()
     pl.xlim(4.55, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withhudgins.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withhudgins.pdf', dpi=150, bbox_inches='tight')
 
     # BROKEN for no reason!?!?!?!?!?!?!?!?
     default_colors = list(pl.rcParams['axes.prop_cycle'].by_key()['color'])
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     )
     plot_filters()
     pl.xlim(4.55, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.pdf', dpi=150, bbox_inches='tight')
 
 
 
@@ -190,13 +190,13 @@ if __name__ == "__main__":
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
     plot_filters()
     pl.xlim(3.71, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_and_f410.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_and_f410.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
     plot_filters(['F466N', 'F410M', 'F405N'])
     pl.xlim(3.71, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,),
@@ -205,13 +205,13 @@ if __name__ == "__main__":
     #plot_filters()
     pl.xlim(1.11, 5.10);
     pl.ylim(1e-22, 6e-18);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_full_range.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_full_range.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia))
     plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
     pl.xlim(3.00, 5.05);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f356_and_f444.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f356_and_f444.pdf', dpi=150, bbox_inches='tight')
 
     ocn_mix1 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:1).ecsv')
     ocn_mix2 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(2:1:0.1).ecsv')
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
     plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
     pl.xlim(2.00, 5.20);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.pdf', dpi=150, bbox_inches='tight')
 
 
     pl.figure()
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     pl.text(4.80, 6e-18, 'F480M', ha='center')
     pl.ylim(1e-21, 1e-17)
     pl.xlim(3.80, 5.20);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f410_f430_f460_f480.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f410_f430_f460_f480.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     pl.text(3.6, 6e-18, 'F360M', ha='center')
     pl.ylim(1e-21, 1e-17)
     pl.xlim(2.30, 3.90);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f250_f300_f335_f360.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f250_f300_f335_f360.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     pl.text(4.44, 6e-18, 'F444W', ha='center')
     pl.ylim(1e-21, 1e-17)
     pl.xlim(2.20, 5.20);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f356_f444.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f356_f444.pdf', dpi=150, bbox_inches='tight')
 
 
     pl.close('all')
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     plot_opacity_tables(opacity_tables=(strong_icemix_hudgins,))
     pl.xlim(2.71, 5.25);
     pl.ylim(1e-22, 1e-18)
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix.pdf', dpi=150, bbox_inches='tight')
 
     pl.close('all')
     # compare the ingredients my mixture to real mixture
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     plot_opacity_tables(opacity_tables=(nh3,))
     pl.xlim(2.71, 5.25);
     pl.ylim(1e-22, 1e-17)
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_components_to_realmix.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_components_to_realmix.pdf', dpi=150, bbox_inches='tight')
 
     pl.close('all')
     # compare my mixture to real mixture
@@ -293,12 +293,12 @@ if __name__ == "__main__":
     # not k-measured plot_opacity_tables(opacity_tables=(icemix_ehrenfreund,))
     # not k-measured pl.xlim(2.71, 5.25);
     # not k-measured pl.ylim(1e-22, 1e-18)
-    # not k-measured pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix_ehrenfreund.png', dpi=150, bbox_inches='tight')
+    # not k-measured pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mix_to_realmix_ehrenfreund.pdf', dpi=150, bbox_inches='tight')
 
     # pl.clf()
     # tb = plot_mixed_opacity(mixture={'H2O': 100, 'CH3OH': 50, 'CO': 1, 'NH3': 1},)
     # pl.ylim(1e-35, 1e-10)
-    # pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/debug.png', dpi=150, bbox_inches='tight')
+    # pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/debug.pdf', dpi=150, bbox_inches='tight')
 
 
     pl.figure()
@@ -308,4 +308,4 @@ if __name__ == "__main__":
     plot_mixed_opacity(mixture={'H2O': 20, 'CO': 1, 'CO2': 1}, normalize_to_molecule='CO', linewidth=0.5)
     pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(CO_{ice})$]");
     pl.ylim(1e-22, 1e-19)
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mixtures_normalized.png', dpi=150, bbox_inches='tight')
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_longwavelength_compare_mixtures_normalized.pdf', dpi=150, bbox_inches='tight')

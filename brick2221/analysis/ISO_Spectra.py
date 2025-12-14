@@ -148,5 +148,5 @@ if __name__ == '__main__':
 
 
             save_specname = sp.specname.replace(" ", "_").replace("/", "_")
-            pl.savefig(f'{isodir}/pngs/{os.path.splitext(os.path.basename(fn))[0]}_{save_specname}_{setname}.png', dpi=150)
+            pl.savefig(f'{isodir}/pngs/{os.path.splitext(os.path.basename(fn))[0]}_{save_specname}_{setname}.pdf', dpi=150)
             pl.close('all')

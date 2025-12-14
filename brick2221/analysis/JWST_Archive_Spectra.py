@@ -411,7 +411,7 @@ if __name__ == '__main__':
                     slit_coord = SkyCoord(fh[1].header['SLIT_RA'], fh[1].header['SLIT_DEC'], unit=(u.deg, u.deg))
                 ax.set_title(f'{sp.specname}\n{slit_coord.to_string(sep=":", style="hmsdms", decimal=False)}')
 
-                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.png', dpi=150)
+                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.pdf', dpi=150)
 
                 mags = {}
                 for key in filters:
@@ -453,5 +453,5 @@ if __name__ == '__main__':
                 #     pl.plot([xlim[0], xlim[1]], [ylim[0], ylim[1]], 'r-', linewidth=2, alpha=0.7)
                 #     pl.plot([xlim[0], xlim[1]], [ylim[1], ylim[0]], 'r-', linewidth=2, alpha=0.7)
 
-                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.png', dpi=150)
+                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.pdf', dpi=150)
                 pl.close('all')

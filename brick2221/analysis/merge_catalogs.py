@@ -24,6 +24,8 @@ from astroquery.svo_fps import SvoFps
 from astropy.stats import sigma_clip, mad_std
 import dask
 import dask.array
+import yaml # DEBUG 2025-12-11
+import yaml.representer # DEBUG 2025-12-11
 
 from tqdm.auto import tqdm
 
@@ -213,6 +215,13 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
 
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
+        # corner case: some fits resulted in flagged x, y that propagate through.  A parallel edit to crowdsource_catalogs_long.py removes these at the source, but I'm adding a catch here too
+        bad = np.isnan(crds.ra) | np.isnan(crds.dec)
+        if np.any(bad):
+            tbl = tbl[~bad]
+            crds = crds[~bad]
+            tbls[ii] = tbl
+
         if ii == 0:
             basecrds = crds
         else:
@@ -601,9 +610,24 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable.write(f"{tablename}.fits", overwrite=True)
         print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds", flush=True)
 
+        # strip out bad metadata that the yaml serializer can't handle
+        for k, v in basetable.meta.items():
+            try:
+                yaml.dump({k: v})
+            except Exception as ex:
+                basetable.meta[k] = str(v)
+                print("BAD META:", k, type(v), v, ex)
+
         t0 = time.time()
         # takes FOR-EV-ER
-        basetable.write(f"{tablename}.ecsv", overwrite=True)
+        try:
+            basetable.write(f"{tablename}.ecsv", overwrite=True)
+        except yaml.representer.RepresenterError:
+            # DEBUG
+            print("YAML RepresenterError: trying again after removing masks")
+            for colname in basetable.colnames:
+                print(colname, type(basetable[colname]), hasattr(basetable[colname], 'mask'))
+            raise
         print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
         # keep any rows with at least two qf cut pass
@@ -1262,26 +1286,27 @@ def main():
                             if not options.skip_daophot:
                                 t0 = time.time()
                                 print("DAOPHOT")
+                                print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                 try:
-                                    print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                     merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                                   target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
-                                    print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}")
+                                    print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
+                                    print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}", flush=True)
                                     exc_tb = sys.exc_info()[2]
                                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}")
+                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
+                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}", flush=True)
                                     raise ex
                                 try:
-                                    print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
+                                    print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                     merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
                                                   target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
-                                    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
+                                    print(f"Exception running merge daophot iterative: {ex}, {type(ex)}, {str(ex)}", flush=True)
                                     exc_tb = sys.exc_info()[2]
                                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
+                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
                                 print(f'dao phase done.  time elapsed={time.time()-t0}')
                                 print()
 

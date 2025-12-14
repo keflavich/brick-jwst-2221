@@ -17,14 +17,23 @@ from dust_extinction.parameter_averages import CCM89
 
 from analysis_setup import filternames, basepath, img_nostars as img
 from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-from selections import load_table
+from selections import load_table, make_downselected_table_20250721, make_downselected_table_20251211
 
 from analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
 #basetable_merged1182_indivexp = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
-basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits')
+# basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits')
 #result = selections_main(basetable_merged1182_indivexp, ww=ww)
 #result = load_table(basetable_merged1182_indivexp, ww=ww)
+# result = load_table(basetable, ww=ww)
+
+# This version was used in the "Colors of Ices" paper
+#basetable = make_downselected_table_20250721()
+
+# This version should, in theory, supersede the above
+# I'm leaving it commented out right now b/c the Colors of Ices paper is under review
+basetable = make_downselected_table_20251211()
 result = load_table(basetable, ww=ww)
+
 globals().update(result)
 #basetable = basetable_merged1182_indivexp
 #print("Loaded merged1182_daophot_indivexp", flush=True)

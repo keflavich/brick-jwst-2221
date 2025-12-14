@@ -2,7 +2,6 @@ print("Starting crowdsource_catalogs_long", flush=True)
 import glob
 import time
 import numpy
-import crowdsource
 import regions
 import numpy as np
 from functools import cache
@@ -45,6 +44,7 @@ from astropy.utils.exceptions import AstropyWarning, AstropyDeprecationWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 
+import crowdsource
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
 
@@ -56,7 +56,7 @@ pl.rcParams['image.origin'] = 'lower'
 
 import os
 print("Importing webbpsf", flush=True)
-import webbpsf
+import stpsf as webbpsf
 print(f"Webbpsf version: {webbpsf.__version__}")
 from webbpsf.utils import to_griddedpsfmodel
 import datetime
@@ -260,6 +260,9 @@ def save_photutils_results(result, ww, filename,
 
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
     if 'x_fit' in result.colnames:
+        bad = result['x_fit'].mask
+        print(f'Found and removed {np.sum(bad)} bad fits out of {len(result)} total [fit resulted in masked x_fit, y_fit]', flush=True)
+        result = result[~bad]
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         result['skycoord_centroid'] = coords
     elif 'xcentroid' in result.colnames:
@@ -275,9 +278,10 @@ def save_photutils_results(result, ww, filename,
     if options.each_exposure:
         result.meta['exposure'] = exposure_
     if visitid_ is not None:
-        result.meta['visit'] = int(visitid_[-3:])
+        result.meta['visit'] = int(visitid_[-3:]) if visitid_ is not '' else None
     if vgroupid_ is not None:
-        result.meta['vgroup'] = int(vgroupid_[-4:])
+        result.meta['vgroup'] = int(vgroupid_[-4:]) if vgroupid_ is not '' else None
+        
     result.meta['filename'] = filename
     result.meta['filter'] = filtername
     result.meta['module'] = module
@@ -386,7 +390,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
 def load_data(filename):
     fh = fits.open(filename)
     im1 = fh
-    data = im1[1].data
+    data = im1['SCI'].data
     try:
         wht = im1['WHT'].data
     except KeyError:
@@ -425,6 +429,7 @@ def get_psf_model(filtername, proposal_id, field,
     #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
     #         grid = grid[0]
 
+    # TODO: factor this out into its own downloading function and make it work with NIRCAM and MIRI both
     if use_webbpsf:
         with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
             api_token = fh.read().strip()
@@ -557,7 +562,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     default='F466N,F405N,F410M',
                     help="filter name list", metavar="filternames")
     parser.add_option("-m", "--modules", dest="modules",
-                    default='nrca,nrcb,merged,merged-reproject',
+                    default='nrca,nrcb,merged',
                     help="module list", metavar="modules")
     parser.add_option("-d", "--desaturated", dest="desaturated",
                     default=False,
@@ -1050,6 +1055,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         print("About to do BASIC photometry....")
         result = phot_basic(nan_replaced_data, mask=mask)
+        # I want to use daofind params in the future
+        result['roundness1'] = finstars['roundness1']
+        result['roundness2'] = finstars['roundness2']
+        result['sharpness'] = finstars['sharpness']
         print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
 
         # remove negative-peak and zero-peak sources (they affect the residuals badly)
@@ -1076,7 +1085,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
-        modsky = phot_basic.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        modsky = phot_basic.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
         residual = data - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
@@ -1195,7 +1204,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['y'] = stars['y_fit']
 
         print("Creating iterative residual")
-        modsky = phot_iter.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        modsky = phot_iter.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
         residual = data - modsky
         print("finished iterative residual")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(

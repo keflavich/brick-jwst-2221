@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import sys
 import importlib as imp
 import regions
@@ -725,6 +726,58 @@ def main():
 
     assert 'blue_410m405_466' in globals()
     return globals()
+
+
+def make_downselected_table_20250721():
+    if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits'):
+        basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits')
+        print("Loaded merged1182_daophot_basic_indivexp (2025-07-21 version)", flush=True)
+    else:
+        from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from brick2221.analysis.selections import load_table as load_table_
+        basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+        result = load_table_(basetable_merged1182_daophot, ww=ww)
+        ok2221 = result['ok2221']
+        ok1182 = result['ok1182']
+        #globals().update(result)
+        basetable = basetable_merged1182_daophot[ok2221 | ok1182]
+        del result
+        print("Loaded merged1182_daophot_basic_indivexp")
+
+        try:
+            basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits', overwrite=False)
+        except:
+            pass
+
+    return basetable
+
+
+def make_downselected_table_20251211():
+    """
+    Rerun of full each-field cataloging after correcting the nan-pixels-hide-stars issue Taehwa and I identified.
+
+    The new cataloging approach infills the nans with interpolation (instead of zeros) before running starfinder.
+    """
+    if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits'):
+        basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits')
+        print("Loaded merged1182_daophot_basic_indivexp (2025-12-11 version)", flush=True)
+    else:
+        from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from brick2221.analysis.selections import load_table as load_table_
+        basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+        result = load_table_(basetable_merged1182_daophot, ww=ww)
+        ok2221 = result['ok2221']
+        ok1182 = result['ok1182']
+        basetable = basetable_merged1182_daophot[ok2221 | ok1182]
+        del result
+        print("Loaded merged1182_daophot_basic_indivexp")
+
+        try:
+            basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits', overwrite=False)
+        except:
+            pass
+
+    return basetable
 
 
 if __name__ == "__main__":
