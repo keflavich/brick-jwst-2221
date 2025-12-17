@@ -803,7 +803,7 @@ if __name__ == "__main__":
 
             # Wideband 4-panel figure
             pl.figure(figsize=(8.5, 8.5))
-            colors_lims_for_final_fig = colors_and_lims[2:6] + [colors_and_lims[-2]]
+            colors_lims_for_final_fig = colors_and_lims[2:6] + (colors_and_lims[-2],)
             for ii, (color1, color2, lims) in enumerate(colors_and_lims_for_final_fig):
                 print(f'color1: {color1}, color2: {color2} {suffix_orion}{suffix_iso} [mixes2 comparisons]', flush=True)
                 pl.subplot(2, 2, ii+1)

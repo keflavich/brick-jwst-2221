@@ -63,7 +63,9 @@ strong_icemix_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/119_H2O:C
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
                         colors=None,
-                        ylim=(1e-21, 6e-18)):
+                        ylim=(1e-21, 6e-18),
+                        legend=True
+                        ):
     for ii, tb in enumerate(opacity_tables):
 
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
@@ -84,7 +86,8 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
                 )
         # DEBUG if colors is not None:
         # DEBUG     print(f"table {ii} plotted with color {colors[ii]} [{tb.meta['composition']}].  colors={colors}")
-    pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+    if legend:
+        pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
     pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
     pl.semilogy();
@@ -112,6 +115,7 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                         colors=None,
                         normalize_to_molecule=False,
                         ylim=(1e-21, 6e-18),
+                        legend=True,
                         **kwargs):
 
     authors = {mol: tb.meta['author'] for mol, tb in opacity_tables.items()}
@@ -144,7 +148,8 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
             **kwargs,
             )
 
-    pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+    if legend:
+        pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
     pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
     pl.semilogy();
@@ -160,13 +165,15 @@ if __name__ == "__main__":
         print("DANGER: default colors broke.  Setting them back to normal.")
         pl.rcParams['axes.prop_cycle'] = cycler(color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'])
 
-    pl.figure()
+    pl.rcParams['figure.figsize'] = (8.5, 4)
+
+    pl.figure(figsize=(4.25, 4))
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa))
     plot_filters()
     pl.xlim(4.55, 4.75);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466.pdf', dpi=150, bbox_inches='tight')
 
-    pl.figure()
+    pl.figure(figsize=(8.5, 4))
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins))
     plot_filters()
     pl.xlim(4.55, 4.75);
@@ -192,10 +199,14 @@ if __name__ == "__main__":
     pl.xlim(3.71, 4.75);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_and_f410.pdf', dpi=150, bbox_inches='tight')
 
-    pl.figure()
+    pl.figure(figsize=(8.5, 4))
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
     plot_filters(['F466N', 'F410M', 'F405N'])
+    pl.text(4.66, 6e-18, 'F466N', ha='center')
+    pl.text(4.10, 6e-18, 'F410M', ha='center')
+    pl.text(4.05, 6e-18, 'F405N', ha='center')
     pl.xlim(3.71, 4.75);
+    pl.ylim(1e-21, 1e-17)
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
@@ -207,11 +218,45 @@ if __name__ == "__main__":
     pl.ylim(1e-22, 6e-18);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_full_range.pdf', dpi=150, bbox_inches='tight')
 
-    pl.figure()
+    pl.figure(figsize=(8.5, 4))
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia))
     plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
+    pl.text(3.56, 6e-18, 'F356W', ha='center')
+    pl.text(4.44, 6e-18, 'F444W', ha='center')
     pl.xlim(3.00, 5.05);
+    pl.ylim(1e-21, 1e-17)
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f356_and_f444.pdf', dpi=150, bbox_inches='tight')
+
+
+    # special: merge figure 3+4 for paper
+    pl.figure(figsize=(8.5, 6))
+    pl.subplot(2,1,1)
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
+    plot_filters(['F466N', 'F410M', 'F405N'])
+    pl.text(4.66, 6e-18, 'F466N', ha='center')
+    pl.text(4.15, 6e-18, 'F410M', ha='center')
+    pl.text(4.05, 6e-18, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75);
+    pl.ylim(1e-21, 1.2e-17)
+    pl.subplot(2,1,2)
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
+    plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
+    pl.text(3.56, 6e-18, 'F356W', ha='center')
+    pl.text(4.44, 6e-18, 'F444W', ha='center')
+    pl.xlim(3.00, 5.05);
+    pl.ylim(1e-21, 1.2e-17)
+    handles, labels = pl.gca().get_legend_handles_labels()
+    pl.subplot(2,1,1)
+    leg = pl.legend(handles=handles,
+            labels=labels,
+            loc='lower left',
+            bbox_to_anchor=(0, 1, 0, 0),
+            ncol=2,
+            mode=None,
+    )
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_figure3plus4merge.pdf', dpi=150, bbox_inches='tight')
+
+
 
     ocn_mix1 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:1).ecsv')
     ocn_mix2 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(2:1:0.1).ecsv')
@@ -227,6 +272,11 @@ if __name__ == "__main__":
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
     plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
+    pl.text(2.77, 6e-18, 'F277W', ha='center')
+    pl.text(3.23, 6e-18, 'F323N', ha='center')
+    pl.text(3.60, 6e-18, 'F360M', ha='center')
+    pl.text(4.80, 6e-18, 'F480M', ha='center')
+    pl.ylim(1e-21, 1e-17)
     pl.xlim(2.00, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.pdf', dpi=150, bbox_inches='tight')
 

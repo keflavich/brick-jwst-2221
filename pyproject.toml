@@ -17,6 +17,7 @@ authors = [
 dependencies = [
   "mpl_plot_templates",
   "pyspeckit",
+  "grid_strategy"
 ]
 dynamic = ["version"]
 
