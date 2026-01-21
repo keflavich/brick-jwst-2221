@@ -213,6 +213,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         skycoord_colname = 'skycoord_centroid'
         column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec', )
 
+    # Loop 1: Add new sources, which are any that don't have a match in the existing catalog closer than min_offset
+    # this loop _only_ adds new sources
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
         # corner case: some fits resulted in flagged x, y that propagate through.  A parallel edit to crowdsource_catalogs_long.py removes these at the source, but I'm adding a catch here too
@@ -228,10 +230,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
             reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
-            # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-            # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-            # even if the match is not mutual, consider it the same star as an existing one because it's too close.
-            # keep = (sep > max_offset) | ((~mutual_matches) & (sep  > min_offset))
+            # add new sources to the cat iff their separation from an existing source in the catalog is >min
             keep = sep > min_offset
 
             newcrds = crds[keep]
@@ -240,21 +239,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
         print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
 
-        # correct for missing data [should only be needed for a brief period in July 2024]
-        # if 'dra' not in tbl.colnames:
-        #     with warnings.catch_warnings():
-        #         warnings.simplefilter('ignore')
-        #         ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
-        #     pixscale = ww.proj_plane_pixel_area().to(u.arcsec**2)**0.5
-        #     if dao:
-        #         tbl['dra'] = tbl['x_err'] * pixscale.value
-        #         tbl['ddec'] = tbl['y_err'] * pixscale.value
-        #     else:
-        #         # in crowdsource, dy, dx are swapped if we haven't done this fix
-        #         tbl['dra'] = tbl['dy'] * pixscale.value
-        #         tbl['ddec'] = tbl['dx'] * pixscale.value
-
     # do one loop of re-matching
+    # We use only mutual best-matches for the realignment measurement to avoid spurious matches, e.g., if there are three stars in a line, we only want to match two if they are each other's best match
     print("Starting re-matching", flush=True)
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
@@ -269,7 +255,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         decdiff = (crds.dec[reverse_match_inds[mutual_reverse_matches]] - basecrds[mutual_reverse_matches].dec).to(u.arcsec)
 
         # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
-        # print(f"len(crds) = {len(crds)} len(basecrds) = {len(basecrds)} len(match_inds)={len(match_inds)} match_inds.max={match_inds.max()} len(reverse_match_inds)={len(reverse_match_inds)} reverse_match_inds.max={reverse_match_inds.max()} len(mutual_matches)={len(mutual_matches)}")
+        # DEBUG print(f"len(crds) = {len(crds)} len(basecrds) = {len(basecrds)} len(match_inds)={len(match_inds)} match_inds.max={match_inds.max()} len(reverse_match_inds)={len(reverse_match_inds)} reverse_match_inds.max={reverse_match_inds.max()} len(mutual_matches)={len(mutual_matches)}")
         if dao:
             oksep = (reverse_sep[mutual_reverse_matches] < max_offset) & (reverse_sep[mutual_reverse_matches] != 0) & (tbl[reverse_match_inds[mutual_reverse_matches]][qfcn] < 0.40) & (tbl[reverse_match_inds[mutual_reverse_matches]][ffcn] < 0.40)
         else:
@@ -302,17 +288,13 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 basecrds = crds
             else:
                 matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-                # reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-
-                # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-                # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-                # keep = (sep > max_offset) | (~mutual_matches)
+                
+                # add new sources to the cat iff their separation from an existing source in the catalog is >min
                 keep = (sep > min_offset)
 
                 newcrds = crds[keep]
                 basecrds = SkyCoord([basecrds, newcrds])
                 print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']}")
-                # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     print(f"There are a total of {len(basecrds)} sources in the base coordinate list after rematching")
 
