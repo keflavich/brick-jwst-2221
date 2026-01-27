@@ -63,6 +63,13 @@ def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
 
+def tryint(x):
+    try:
+        return int(x)
+    except:
+        return -1
+
+
 def sanity_check_individual_table(tbl):
     wl = filtername = tbl.meta['filter']
     print(f"SANITY CHECK {wl}")
@@ -314,7 +321,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     # this segment, from arrays = down to the end, uses a lot of memory
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec')}
+              for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec', 'detector', 'visit', 'exposure')}
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl[skycoord_colname]
@@ -332,6 +339,9 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 arrays[key][match_inds[keep], ii] = tbl[key][keep]
         arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
         arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
+        arrays['detector'][match_inds[keep], ii] = tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''
+        arrays['visit'][match_inds[keep], ii] = tbl.meta['VISIT'] if 'VISIT' in tbl.meta else -1
+        arrays['exposure'][match_inds[keep], ii] = tryint(tbl.meta['EXPOSURE'][-5:]) if 'EXPOSURE' in tbl.meta else ''
         print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]", flush=True)
 
     print("Compiling arrays into table", flush=True)
