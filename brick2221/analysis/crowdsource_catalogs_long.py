@@ -57,8 +57,9 @@ pl.rcParams['image.origin'] = 'lower'
 import os
 print("Importing webbpsf", flush=True)
 import stpsf as webbpsf
+import stpsf
 print(f"Webbpsf version: {webbpsf.__version__}")
-from webbpsf.utils import to_griddedpsfmodel
+from stpsf.utils import to_griddedpsfmodel
 import datetime
 print("Done with imports", flush=True)
 
@@ -260,7 +261,10 @@ def save_photutils_results(result, ww, filename,
 
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
     if 'x_fit' in result.colnames:
-        bad = result['x_fit'].mask
+        if hasattr(result['x_fit'], 'mask'):
+            bad = result['x_fit'].mask
+        else:
+            bad = ~np.isfinite(result['x_fit'])
         print(f'Found and removed {np.sum(bad)} bad fits out of {len(result)} total [fit resulted in masked x_fit, y_fit]', flush=True)
         result = result[~bad]
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
@@ -278,9 +282,9 @@ def save_photutils_results(result, ww, filename,
     if options.each_exposure:
         result.meta['exposure'] = exposure_
     if visitid_ is not None:
-        result.meta['visit'] = int(visitid_[-3:]) if visitid_ is not '' else None
+        result.meta['visit'] = int(visitid_[-3:]) if visitid_ != '' else None
     if vgroupid_ is not None:
-        result.meta['vgroup'] = int(vgroupid_[-4:]) if vgroupid_ is not '' else None
+        result.meta['vgroup'] = int(vgroupid_[-4:]) if vgroupid_ != '' else None
         
     result.meta['filename'] = filename
     result.meta['filter'] = filtername

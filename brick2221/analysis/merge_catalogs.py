@@ -321,7 +321,11 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     # this segment, from arrays = down to the end, uses a lot of memory
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec', 'detector', 'visit', 'exposure')}
+              for key in column_names if key in tbls[0].colnames 
+              or key in ('skycoord', 'ra', 'dec')}
+    arrays['detector'] = np.empty([len(basecrds), len(tbls)], dtype='U6')
+    arrays['visit'] = np.empty([len(basecrds), len(tbls)], dtype=int)
+    arrays['exposure'] = np.empty([len(basecrds), len(tbls)], dtype=int)
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl[skycoord_colname]
@@ -335,8 +339,9 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         keep = (sep < max_offset) & (mutual_matches)
 
         for key in arrays:
-            if key not in ('skycoord', skycoord_colname, 'ra', 'dec'):
-                arrays[key][match_inds[keep], ii] = tbl[key][keep]
+            if key not in ('skycoord', skycoord_colname, 'ra', 'dec', 'detector', 'visit', 'exposure'):
+                if key in tbl.colnames:
+                    arrays[key][match_inds[keep], ii] = tbl[key][keep]
         arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
         arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
         arrays['detector'][match_inds[keep], ii] = tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''
@@ -345,7 +350,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]", flush=True)
 
     print("Compiling arrays into table", flush=True)
-    print(f"Column names are {arrays.keys()} and should be {column_names}", flush=True)
+    print(f"Table lengths are {len(tbl) for tbl in tbls}", flush=True)
+    print(f"Column names are {arrays.keys()} and should be {column_names} (plus detector, visit, exposure)", flush=True)
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
     del arrays['dec']
@@ -506,7 +512,11 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
             meta[f'{wl[1:-1]}pxas'.upper()] = tbl.meta['pixelscale_arcsec']
             for key in tbl.meta:
-                meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
+                if isinstance(tbl.meta[key], (str, int, float)):
+                    meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
+                else:
+                    # specifically to handle the case of astropy.io.fits.card objects that are unserializable
+                    meta[f'{wl[1:-1]}{key[:4]}'.upper()] = str(tbl.meta[key])
 
             print(f"Basetable has length {len(basetable)} and ncols={len(basetable.colnames)} after stack")
             print(f"merging tables step: max flux for {wl} in merged table is {basetable['flux_'+wl].max()}"
@@ -614,21 +624,32 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
 
         # strip out bad metadata that the yaml serializer can't handle
         for k, v in basetable.meta.items():
+            # Check for astropy.io.fits.card.Undefined objects explicitly
             try:
-                yaml.dump({k: v})
+                yaml.dump({k: v}, )
             except Exception as ex:
-                basetable.meta[k] = str(v)
-                print("BAD META:", k, type(v), v, ex)
+                if isinstance(v, fits.card.Undefined):
+                    basetable.meta[k] = str(v)
+                    print("BAD META (Undefined):", k, type(v), v)
+                    continue
+                else:
+                    basetable.meta[k] = str(v)
+                    print("BAD META:", k, type(v), v, ex)
 
         t0 = time.time()
         # takes FOR-EV-ER
         try:
             basetable.write(f"{tablename}.ecsv", overwrite=True)
         except yaml.representer.RepresenterError:
+            import astropy
+            print("astropy version: ", astropy.__version__)
+            # https://github.com/astropy/astropy/pull/18677 ?
             # DEBUG
             print("YAML RepresenterError: trying again after removing masks")
-            for colname in basetable.colnames:
-                print(colname, type(basetable[colname]), hasattr(basetable[colname], 'mask'))
+            # for colname in basetable.colnames:
+            #     print("DEBUG Column: ", colname, type(basetable[colname]), hasattr(basetable[colname], 'mask'))
+            # for key in basetable.meta:
+            #     print("DEBUG Meta: ", key, type(basetable.meta[key]), basetable.meta[key])
             raise
         print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
@@ -695,7 +716,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
               for visitid in range(1, max_visitid+1)
               for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
+                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_vgroup*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
                                  f"_{method_suffix}{suffix}.fits")
               ]
     tblfns = sorted(set(tblfns))
@@ -1175,6 +1196,10 @@ def main():
                       default=False,
                       action="store_true",
                       help="skip_daophot", metavar="skip_daophot")
+    parser.add_option("--strict-require-blur", dest="strict_require_blur",
+                      default=False,
+                      action="store_true",
+                      help="Fail if blur files are not found?", metavar="strict_require_blur")
     parser.add_option("--make-refcat", dest='make_refcat', default=False,
                       action='store_true')
     parser.add_option('--max-expnum', dest='max_expnum', default=24, type='int')
@@ -1223,20 +1248,26 @@ def main():
                                                       'daoiterative': '_iterative',
                                                       'iterative': '_iterative',
                                                       }[method]
-                                            merge_individual_frames(module=module,
-                                                                    desat=desat,
-                                                                    filtername=filtername,
-                                                                    progid=progid,
-                                                                    bgsub=bgsub,
-                                                                    epsf=epsf,
-                                                                    fitpsf=fitpsf,
-                                                                    blur=blur,
-                                                                    suffix=suffix,
-                                                                    target=target,
-                                                                    exposure_numbers=np.arange(1, options.max_expnum + 1),
-                                                                    offsets_table=offsets_tables[progid],
-                                                                    method=method,
-                                                                    basepath=basepath)
+                                            try:
+                                                merge_individual_frames(module=module,
+                                                                        desat=desat,
+                                                                        filtername=filtername,
+                                                                        progid=progid,
+                                                                        bgsub=bgsub,
+                                                                        epsf=epsf,
+                                                                        fitpsf=fitpsf,
+                                                                        blur=blur,
+                                                                        suffix=suffix,
+                                                                        target=target,
+                                                                        exposure_numbers=np.arange(1, options.max_expnum + 1),
+                                                                        offsets_table=offsets_tables[progid],
+                                                                        method=method,
+                                                                        basepath=basepath)
+                                            except ValueError as ex:
+                                                if blur and not options.strict_require_blur:
+                                                    print("Skipping missing blur files")
+                                                else:
+                                                    raise ex
                                             print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")
                                             if os.getenv('SLURM_ARRAY_TASK_ID') is not None:
                                                 singlefield_done = True
@@ -1290,25 +1321,33 @@ def main():
                                 print("DAOPHOT")
                                 print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                 try:
-                                    merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
+                                    merge_daophot(daophot_type='basic', module=module, desat=desat,
+                                                  bgsub=bgsub, epsf=epsf,
                                                   target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
                                     print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
-                                    print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}", flush=True)
-                                    exc_tb = sys.exc_info()[2]
-                                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}", flush=True)
-                                    raise ex
+                                    if blur and not options.strict_require_blur:
+                                        print("Skipping missing blur files")
+                                    else:
+                                        print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}", flush=True)
+                                        exc_tb = sys.exc_info()[2]
+                                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                                        print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
+                                        print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}", flush=True)
+                                        raise ex
                                 try:
                                     print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
-                                    merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
+                                    merge_daophot(daophot_type='iterative', module=module, desat=desat,
+                                                  bgsub=bgsub, epsf=epsf,
                                                   target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
-                                    print(f"Exception running merge daophot iterative: {ex}, {type(ex)}, {str(ex)}", flush=True)
-                                    exc_tb = sys.exc_info()[2]
-                                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
+                                    if blur and not options.strict_require_blur:
+                                        print("Skipping missing blur files")
+                                    else:
+                                        print(f"Exception running merge daophot iterative: {ex}, {type(ex)}, {str(ex)}", flush=True)
+                                        exc_tb = sys.exc_info()[2]
+                                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                                        print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
                                 print(f'dao phase done.  time elapsed={time.time()-t0}')
                                 print()
 
