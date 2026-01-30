@@ -1,8 +1,13 @@
+# original file : https://github.com/keflavich/brick-jwst-2221/blob/main/brick2221/reduction/saturated_star_finding.py
+import os
+os.environ['STPSF_PATH'] = '/blue/adamginsburg/t.yoo/from_red/stpsf-data'
+
 import glob
 from astropy.io import fits
 from scipy.ndimage import label, find_objects, center_of_mass, sum_labels
 from astropy.modeling.fitting import LevMarLSQFitter
-
+from jwst.datamodels import dqflags
+import matplotlib.pyplot as plt
 try:
     # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
     from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
@@ -29,153 +34,26 @@ from filtering import get_filtername, get_fwhm
 import functools
 import requests
 import urllib3
-
-def debug_wrap(function):
-    @functools.wraps(function)
-    def wrapper(*args, **kwargs):
-        print(function.__name__, flush=True)
-        return function(*args, **kwargs)
-    return wrapper
-
-import os
-os.environ['WEBBPSF_PATH'] = '/orange/adamginsburg/jwst/webbpsf-data/'
-import webbpsf
-from webbpsf.utils import to_griddedpsfmodel
-
-def is_star(data, sources, srcid, slc, rindsize=3, min_flux=500, require_gradient=False):
-    """
-    Attempt to determine if a collection of blank pixels is actually a star by
-    assuming the pixels closest to the center will be brighter than their
-    surroundings
-    """
-    slc = tuple(slice(max(ss.start-rindsize, 0),
-                      min(ss.stop+rindsize, shp)) for ss,shp in zip(slc, data.shape))
-
-    labelmask = sources[slc] == srcid
-    assert np.any(labelmask)
-
-    rind1 = ndimage.binary_dilation(labelmask, iterations=2).astype('bool')
-    rind2 = ndimage.binary_dilation(rind1, iterations=2).astype('bool')
-    rind2sum = np.nansum(data[slc][rind2 & ~rind1])
-    rind1sum = np.nansum(data[slc][rind1 & ~labelmask])
-
-    rind3 = ndimage.binary_dilation(labelmask, iterations=rindsize)
-    rind3sum = np.nansum(data[slc][rind3 & ~labelmask])
-
-    return ((rind1sum > rind2sum) or not require_gradient) and rind3sum > min_flux
-
-def finder_maker(max_size=100, min_size=0, min_sep_from_edge=5, min_flux=500,
-                 edge_npix=10000,
-                 progressbar=False,
-                 rindsize=3, require_gradient=False, raise_for_nosources=True, *args, **kwargs):
-    """
-    Create a saturated star finder that can select on the number of saturated pixels and the
-    distance from the edge of the image
-    """
-    # criteria are based on examining some plots; they probably don't hold universally
-    def saturated_finder(data, *args, raise_for_nosources=raise_for_nosources, rind_threshold=1000, **kwargs):
-        """
-        Wrap the star finder to reject bad stars
-        """
-        saturated = np.logical_or((data==0), np.isnan(data))
-        if not np.any(saturated):
-            raise ValueError("No saturated (data==0) pixels found")
-        sources_, nsources_ = label(saturated)
-        if raise_for_nosources and nsources_ == 0:
-            raise ValueError("No saturated sources found")
-
-        sizes = sum_labels(saturated, sources_, np.arange(nsources_)+1)
-        msfe = min_sep_from_edge
-
-        # which sources are edge sources?  Anything w/ more than edge_npix contiguous "saturated" pixels
-        # add +1 because 0 is the non-saturated zone that we've excluded
-        edge_ids = np.where(sizes > edge_npix)[0] + 1
-        edge_mask = np.isin(sources_, edge_ids)
-        no_edge_saturated = saturated & (~ndimage.binary_dilation(edge_mask, iterations=msfe))
-
-        # now re-calculate sources
-        sources, nsources = label(no_edge_saturated)
-        print(f"Reduced nsources from {nsources_} to {nsources} by excluding edge zone with size {msfe}", flush=True)
-        if raise_for_nosources and nsources == 0:
-            raise ValueError("No saturated sources found")
-
-        slices = find_objects(sources)
-        sizes = sum_labels(saturated, sources, np.arange(nsources)+1)
-
-        coms = center_of_mass(saturated, sources, np.arange(nsources)+1)
-        coms = np.array(coms)
-
-        # Create additional mask for rind threshold check using scipy tools
-        def check_rind_threshold(label_id, rindsz=3):
-            # Get the slice for this source using find_objects
-            src_slice = slices[label_id - 1]  # label_id is 1-indexed, slices is 0-indexed
-            # Expand slice by 3 pixels on each side
-            src_slice = (slice(max(0, src_slice[0].start - rindsz),
-                               min(data.shape[0], src_slice[0].stop + rindsz)),
-                        slice(max(0, src_slice[1].start - rindsz),
-                              min(data.shape[1], src_slice[1].stop + rindsz)))
-            src_mask = sources[src_slice] == label_id
-            # Create 3-pixel rind around the source
-            rind = ndimage.binary_dilation(src_mask, iterations=rindsz) & ~src_mask
-            # Check if sum of values in rind exceeds threshold
-            rind_sum = np.nansum(data[src_slice][rind])
-            return rind_sum > rind_threshold
-
-        # Apply rind threshold check to all sources
-        rind_ok = np.array([check_rind_threshold(label_id) for label_id in range(1, nsources + 1)])
-
-        # Update sources to only include those that pass rind threshold
-        print(f"Reduced nsources from {len(slices)} to {rind_ok.sum()} by applying rind threshold {rind_threshold}", flush=True)
-
-
-        # progressbar isn't super necessary as this is rarely the bottleneck
-        # (but I included it because I didn't know that up front)
-        if progressbar:
-            pb = tqdm
-        else:
-            pb = lambda x: x
-
-        sizes_ok = (sizes < max_size) & (sizes >= min_size)
-        coms_finite = np.isfinite(coms).all(axis=1)
-        coms_inbounds = (
-            (coms[:,1] > msfe) & (coms[:,0] > msfe) &
-            (coms[:,1] < data.shape[1]-msfe) &
-            (coms[:,0] < data.shape[0]-msfe)
-        )
-        all_ok = sizes_ok & coms_finite & coms_inbounds & rind_ok
-        is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
-                               for srcid, (szok, slcs) in enumerate(pb(zip(all_ok, slices)))])
-        all_ok &= is_star_ok
-        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="", flush=True)
-        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates", flush=True)
-
-
-        print("Creating table", flush=True)
-        tbl = Table()
-        tbl['id'] = np.arange(1,all_ok.sum()+1)
-        tbl['xcentroid'] = [cc[1] for cc, ok in zip(coms, all_ok) if ok]
-        tbl['ycentroid'] = [cc[0] for cc, ok in zip(coms, all_ok) if ok]
-        print("Table created; returning table", flush=True)
-
-        return tbl
-    return saturated_finder
-
 def get_psf(header, path_prefix='.'):
     if header['INSTRUME'].lower() == 'nircam':
-        psfgen = webbpsf.NIRCam()
+        psfgen = stpsf.NIRCam()
         fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='NIRCam')
     elif header['INSTRUME'].lower() == 'miri':
-        psfgen = webbpsf.MIRI()
+        psfgen = stpsf.MIRI()
         fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='MIRI')
     instrument = header['INSTRUME']
     filtername = get_filtername(header)
-    module = header['MODULE']
+    try:
+        module = header['MODULE']
+    except KeyError:
+        module = header['DETECTOR']
+    detector = header['DETECTOR']
 
     ww = wcs.WCS(header)
     try:
         assert ww.wcs.cdelt[1] != 1, "This is not a valid WCS!!! CDELT is wrong!! how did this HAPPEN!?!?"
     except AssertionError as ex:
-        print(ex)
+        print(ex) 
         print("ignoring WCS failure so check that stuff is right...")
 
     psfgen.filter = filtername
@@ -187,10 +65,14 @@ def get_psf(header, path_prefix='.'):
     npsf = 16
     oversample = 2
     fov_pixels = 512
-    detector = header['DETECTOR']
-    psf_fn = f'{path_prefix}/{instrument.lower()}_{filtername}_samp{oversample}_nspsf{npsf}_npix{fov_pixels}_{module}.fits'
-    # this way, it doesn't have to write psf file again
-    psf_fn = f'{path_prefix}/nircam_{detector.lower()}_{filtername.lower()}_fovp{fov_pixels}_samp{oversample}_npsf{npsf}.fits'
+    if detector == 'NRCALONG':
+        detector = 'nrca5'
+    elif detector == 'NRCBLONG':
+        detector = 'nrcb5'
+    if detector.lower() == 'mirimage':
+        detector = 'mirim'
+    psf_fn = f'{path_prefix}/{instrument.lower()}_{detector.lower()}_{filtername.lower()}_fovp{fov_pixels}_samp{oversample}_npsf{npsf}.fits'
+
     if module == 'merged':
         project_id = header['PROGRAM'][1:5]
         obs_id = header['OBSERVTN'].strip()
@@ -198,7 +80,7 @@ def get_psf(header, path_prefix='.'):
         if os.path.exists(psf_fn):
             psf_fn = merged_psf_fn
         else:
-            print("webbPSF is being used for merged data because merged PSF does not exist", flush=True)
+            print("stpsf is being used for merged data because merged PSF does not exist", flush=True)
 
     if os.path.exists(str(psf_fn)):
         # As a file
@@ -224,8 +106,8 @@ def get_psf(header, path_prefix='.'):
             print(ex)
 
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
-        # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/webbpsf_core.py#L640
-        # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/gridded_library.py#L424
+        # https://github.com/spacetelescope/stpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/stpsf/stpsf_core.py#L640
+        # https://github.com/spacetelescope/stpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/stpsf/gridded_library.py#L424
         big_grid = psfgen.psf_grid(num_psfs=npsf, oversample=oversample,
                                    all_detectors=True, fov_pixels=fov_pixels,
                                    outdir=path_prefix,
@@ -241,59 +123,37 @@ def get_psf(header, path_prefix='.'):
             # which is untenable with this approach.  It's a huge project.
 
     return big_grid
+def debug_wrap(function):
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        print(function.__name__, flush=True)
+        return function(*args, **kwargs)
+    return wrapper
+
+import os
+#os.environ['stpsf_PATH'] = '/orange/adamginsburg/jwst/stpsf-data/'
+import stpsf
+from stpsf.utils import to_griddedpsfmodel
 
 
-def iteratively_remove_saturated_stars(data, header,
-                                       fit_sizes=[351, 351, 201, 201, 101, 51],
-                                       nsaturated=[(100, 500), (50, 100), (25, 50), (10, 25), (5, 10), (0, 5)],
-                                       min_flux=[1000, 750, 500, 250, 200, 150],
-                                       ap_rad=[15, 15, 15, 15, 10, 5],
-                                       require_gradient=[False, False, False, False, False, True],
-                                       dilations=[3, 3, 3, 2, 2, 1],
-                                       rindsize=[6, 5, 5, 4, 4, 3],
-                                       path_prefix='.',
-                                       verbose=False
-                                      ):
-    """
-    Iteratively remove the most saturated down to the least saturated stars until all such stars are fitted & subtracted.
 
-    Parameters
-    ----------
-    fit_sizes : list of integers
-        The size along each axis to cut out around the bright star to fit the
-        PSF and subtract it.  Bigger ``fit_sizes`` are _much_ more expensive,
-        but they are also needed for the brightest sources that affect large
-        areas on the image
-    nsaturated : list of tuples of integer pairs
-        The minimum and maximum number of saturated pixels for stars included in
-        each iteration.
-        For example, the range 100-500 will include all saturated sources with
-        100 < npixels < 500 contiguous saturated pixels.
-    min_flux : list of floats
-        The minimum flux value to consider an object a star.  This is to reject
-        regions that are set to zero but are not saturated.  It includes a region
-        that is by default from the saturated zone edge to a region 3 pixels away
-        using binary dilation.
-    ap_rad : list of integers
-        The aperture radius in which to perform aperture photometry.  It's not
-        clear that this parameter is at all important.
-    require_gradient : list of booleans
-        Check that the "star" pixels around the saturated pixels are brighter
-        than those inside.  This can be used to reject "fake" saturated stars
-        caused by other problems in the image.  It's not clear that this parameter
-        should ever be set, but it should likely be limited to the smallest
-        (~few saturated pixel) sources, since those are the only ones likely to
-        be fake sources.  I think these usually arise from places where the dither
-        failed to fill in bad pixels.
-    dilations : list of integers
-        Dilate the mask to be used when calculating photometry?
-        This masks out pixels around the saturated pixels, which are themselves
-        often unreliable.  This is probably most important for aperture
-        photometry, but it likely also affects PSF fitting.
-    """
-    print("Beginning to iteratively remove saturated stars", flush=True)
+def get_saturated_stars(fitsdata,path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=30, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=1, plot=True, rindsz=3):
+    header = fitsdata[0].header
+    data = fitsdata['SCI'].data
+    data[np.isnan(fitsdata['VAR_POISSON'].data)] = 0
+    dq = fitsdata['DQ'].data
+    saturated = (dq & dqflags.pixel['SATURATED'])>0 
+    sources, nsource = label(saturated)
+    print('nsources=', nsource, flush=True)
+    sizes = sum_labels(saturated, sources, np.arange(nsource)+1)
+    msfe = min_sep_from_edge
 
-    assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
+    # which sources are edge sources?  Anything w/ more than edge_npix contiguous "saturated" pixels
+    # add +1 because 0 is the non-saturated zone that we've excluded
+    edge_ids = np.where(sizes > edge_npix)[0] + 1
+    edge_mask = np.isin(sources, edge_ids)
+    saturated = saturated & (~ndimage.binary_dilation(edge_mask, iterations=msfe))
+
 
     big_grid = get_psf(header, path_prefix=path_prefix)
     ww = wcs.WCS(header)
@@ -319,129 +179,278 @@ def iteratively_remove_saturated_stars(data, header,
     # lmfitter._run_fitter = levmarverbosewrapper
 
     if header['INSTRUME'].lower() == 'nircam':
-        psfgen = webbpsf.NIRCam()
+        psfgen = stpsf.NIRCam()
         fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='NIRCam')
     elif header['INSTRUME'].lower() == 'miri':
-        psfgen = webbpsf.MIRI()
+        psfgen = stpsf.MIRI()
         fwhm, fwhm_pix = get_fwhm(header, instrument_replacement='MIRI')
 
-    satpix = data == 0
+    
+    slices = find_objects(saturated)
+    
+        # define pad/size/fwhm_pix (choose sensible defaults if not already set)
+    size = pad = 81
 
-    for (minsz, maxsz), minflx, grad, fitsz, apsz, diliter, rsz in zip(nsaturated, min_flux, require_gradient, fit_sizes, ap_rad, dilations, rindsize):
-        finder = finder_maker(min_size=minsz, max_size=maxsz, require_gradient=grad, min_flux=minflx)
-        print(f"Created finder {finder}", flush=True)
+    index = 0
+    print(f"Found {nsource} saturated sources to process", flush=True)
+    for i in range(nsource):
+        if True:
+            # get the center of pixels with this label
+            
+            com = center_of_mass(saturated, labels=sources, index=i+1)
+            # center_of_mass can return (nan, nan) for degenerate labels; guard against that
+            if com is None:
+                print(f"Source {i+1}: center_of_mass returned None; skipping", flush=True)
+                continue
+            yf, xf = com
+            if not (np.isfinite(yf) and np.isfinite(xf)):
+                print(f"Source {i+1}: center_of_mass returned NaN or infinite values ({yf}, {xf}); skipping", flush=True)
+                continue
+            ycen = int(round(yf))
+            xcen = int(round(xf))
+            print(f"Source {i+1}: center at (x, y) = ({xcen}, {ycen})")
+            y0 = int(max(0, ycen - pad))
+            y1 = int(min(data.shape[0], ycen + pad))
+            x0 = int(max(0, xcen - pad))
+            x1 = int(min(data.shape[1], xcen + pad))
+            size_saturated = int(np.sqrt(sum_labels(saturated, labels=sources, index=i+1))/2)
+            area_saturated = sum_labels(saturated, labels=sources, index=i+1)
+            cutout = data[y0:y1, x0:x1]
+            init_params = QTable()
+            init_params['x'] = [xcen - x0]
+            init_params['y'] = [ycen - y0]
+            cutout[np.isnan(cutout)] = 0.0
+            # if isinstance(grid, list):
+            #     print(f"Grid is a list: {grid}")
+            #     psf_model = WrappedPSFModel(grid[0])
+            #     dao_psf_model = grid[0]
+            # else:
 
-        # do the search on data b/c PSF subtraction can change zeros to non-zeros
-        if np.any(np.logical_or(resid == 0, np.isnan(resid))):
-            sources = finder(resid,
-                             mask=ndimage.binary_dilation(resid==0, iterations=1),
-                             raise_for_nosources=False, rindsize=rsz)
-            print(f"Found {len(sources)} sources running finder {finder}", flush=True)
-        else:
-            log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
-            continue
+            #psf_model = WrappedPSFModel(grid, stampsz=(size,size))
 
-        if len(sources) == 0:
-            log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz}")
-            continue
+           
 
-        if verbose:
-            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}", flush=True)
+           
+            psfphot = PSFPhotometry(
+                                        localbkg_estimator=LocalBackground(15, 30),
+                                        fitter=lmfitter,
+                                        psf_model=big_grid,
+                                        fit_shape=size,
+                                        aperture_radius=15*fwhm_pix)
+            low_x  = xcen - x0 - size_saturated
+            high_x = xcen - x0 + size_saturated
+            low_y  = ycen - y0 - size_saturated
+            high_y = ycen - y0 + size_saturated
 
-        phot = PSFPhotometry(finder=finder,
-                             # grouping disabled b/c it apepars to be a major bottleneck grouper=daogroup,
-                             localbkg_estimator=None, # must be none or it un-saturates pixels
-                             #psf_model=epsf_model,
-                             psf_model=big_grid,
-                             fitter=lmfitter,
-                             fit_shape=fitsz,
-                             aperture_radius=apsz*fwhm_pix,
-                             )
+            # get the underlying model and set bounds there
+            model = getattr(psfphot, "psf_model", None)
+            if model is None:
+                raise RuntimeError("psfphot.psf_model is None — can't set parameter bounds")
 
-        # Mask out the inner portion of the PSF when fitting it
-        if diliter > 0:
-            mask = ndimage.binary_dilation(np.logical_or(resid==0, np.isnan(resid)), iterations=diliter)
-        else:
-            mask = np.logical_or(resid==0, np.isnan(resid))
+            for pname, bounds in (("x_0", (low_x, high_x)), ("y_0", (low_y, high_y))):
+                if hasattr(model, pname):
+                    param = getattr(model, pname)
+                    # try the supported API first
+                    try:
+                        param.bounds = bounds
+                        print(f"Set {pname}.bounds = {bounds}")
+                    except Exception:
+                        # fallback (private attribute) if necessary
+                        try:
+                            param._bounds = bounds
+                            print(f"Set {pname}._bounds = {bounds} (fallback)")
+                        except Exception:
+                            print(f"Could not set bounds for {pname}; parameter object: {param}")
+                else:
+                    print(f"Model does not have parameter '{pname}'; param_names={getattr(model,'param_names',None)}")
+            # let x_0 be bounds at saturated pixels
+            #psfphot.x_0.bounds = (xcen - x0 - size_saturated , xcen - x0 + size_saturated)
+            #psfphot.y_0.bounds = (ycen - y0 - size_saturated, ycen - y0 + size_saturated)
+            saturated_mask = saturated[y0:y1, x0:x1]
+            
 
-        #log.info("Doing photometry")
-        try:
-            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
-            result = phot(resid, mask=mask, progressbar=tqdm)
-        except TypeError:
-            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
-            result = phot(resid, mask=mask)
 
-        result['skycoord_fit'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
-        results.append(result)
-        #log.info(f"Done; len(result) = {len(result)})")
-        print(result, flush=True)
+            # expand a few pixels of saturated area to be masked
+            saturated_mask_expanded = ndimage.binary_dilation(saturated_mask, iterations=mask_buffer)
+            mask = np.logical_or(cutout==0, np.isnan(cutout), saturated_mask_expanded)
+            try:
+                result = psfphot(cutout, init_params=init_params, mask=mask)
+            except Exception as ex:
+                print(f"PSF photometry failed for source {i+1} at (x,y)=({xcen},{ycen}): {ex}", flush=True)
+                continue
+            
+            result['xcentroid'] = result['x_fit'] + x0
+            result['ycentroid'] = result['y_fit'] + y0
+            result['skycoord_fit'] = ww.pixel_to_world(result['xcentroid'], result['ycentroid'])
 
-        # manually subtract off PSFs because get_residual_image seems to (never?) work
-        # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
-        #resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
-        print(f"Making residual image.", flush=True)
-        resid = phot.make_residual_image(resid, (fitsz, fitsz), include_localbkg=False)
+            
+            result.pprint(max_width=-1)
 
-        # reset saturated pixels back to zero
-        resid[satpix] = 0
+            ny = cutout.shape[0]
+            nx = cutout.shape[1]
+            model_image = np.zeros_like(cutout)
+          
 
-        # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
-        # pixels with the values from the fitted model.  This will be tricky.
-        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True, end='\n\n')
+           
+            
 
-    final_table = table.vstack(results)
 
-    return final_table, resid
 
+            for x_fit, y_fit, flux in zip(result['x_fit'], result['y_fit'], result['flux_fit']):
+                # Make a local grid around the source
+                if np.isnan(flux):
+                    raise ValueError("Flux is NaN; cannot build PSF model image")
+                y, x = np.mgrid[0:ny, 0:nx]
+                #psf_eval = big_grid(x, y, flux=flux, x_0=x0, y_0=y0)  # works for analytic PSF
+                psf_eval = big_grid(x-x_fit, y-y_fit) * flux  # works for GriddedPSFModel
+                # cut psf_eval to the image size
+                model_image += psf_eval[0:ny, 0:nx]
+            
+            threshold_image = np.zeros_like(cutout)
+
+            #count the number of pixels above local background in the model_image
+            threshold = np.nanpercentile(cutout, 99)
+            threshold_image[model_image>threshold]=1
+            num_pixels_above_threshold = np.nansum(threshold_image)
+            print(np.nanmax(model_image), flush=True)
+            print(f"Number of pixels above threshold ({threshold}): {num_pixels_above_threshold}", flush=True)
+           
+            if len(result) > 0:
+                flux = result['flux_fit'][0]
+                fluxerr = result['flux_err'][0]
+                snr = result['flux_fit'][0] / result['flux_err'][0]
+                qfit = result['qfit'][0]
+                cfit = result['cfit'][0]
+
+            if plot:
+                fig = plt.figure(figsize=(12,12))
+                ax1 = fig.add_subplot(2,3,1)
+                ax1.imshow(cutout, origin='lower', cmap='viridis', vmin=0, vmax=np.nanpercentile(cutout, 99))
+                ax1.set_title('Cutout')
+                ax2 = fig.add_subplot(2,3,2)
+                ax2.set_title('Model')
+                ax2.imshow(model_image, origin='lower', cmap='viridis', vmin=0, vmax=np.nanpercentile(cutout, 99))
+                ax3 = fig.add_subplot(2,3,3)
+                resid_image = cutout - model_image
+                ax3.imshow(resid_image, origin='lower', cmap='viridis', vmin=0, vmax=np.nanpercentile(cutout, 99))
+                ax3.set_title('Residual')
+                ax4 = fig.add_subplot(2,3,4)
+                ax4.imshow(mask, origin='lower', cmap='gray')
+                ax4.set_title('Mask')
+                ax5 = fig.add_subplot(2,3,5)
+                ax5.imshow(threshold_image, origin='lower', cmap='gray')
+                ax5.set_title('Thresholded Model Pixels')
+                # print flux, fluxerr, snr, cfit in the title
+                if len(result) > 0:
+                    
+                
+                    ax1.set_title(f'Cutout\nFlux={flux:.2f}, FluxErr={fluxerr:.2f}, SNR={snr:.2f}, qfit={qfit:.2f}, cfit={cfit:.2f}')
+
+                plt.show()
+                plt.close()
+            
+            # check whether the pixels with dqflag = saturated are also flagged as HOT, DEAD, and RC
+            # this is a sanity check to make sure that the saturated pixels are not being used in the fit
+            idx_saturated_in_cutout = (dq[y0:y1, x0:x1] & dqflags.pixel['SATURATED']) > 0
+            saturated_dqflags = dq[y0:y1, x0:x1][idx_saturated_in_cutout]
+            if np.any((saturated_dqflags & dqflags.pixel['HOT'])!=0):
+                print(f"Warning: Some saturated pixels are flagged as HOT; skipping source", flush=True)
+                continue
+            if np.any((saturated_dqflags & dqflags.pixel['DEAD'])!=0):
+                print(f"Warning: Some saturated pixels are flagged as DEAD; skipping source", flush=True)
+                continue
+            #if np.any((saturated_dqflags & dqflags.pixel['RC'])!=0):
+            #    print(f"Warning: Some saturated pixels are flagged as RC; skipping source", flush=True)
+            #    continue
+            
+            
+            
+            # compare FWHM of the model and the size of saturated pixels
+            #if area_saturated > num_pixels_above_threshold:
+            #    print(f"Warning: Saturated mask area ({area_saturated}) is larger than number of pixels above threshold ({num_pixels_above_threshold}); skipping source", flush=True)
+            #    continue
+                
+            # process the result
+            if result is not None and np.isfinite(fluxerr) and snr > 1 and flux > 0:
+                print(f"Accepting source {i+1} with flux={flux}, fluxerr={fluxerr}, snr={snr}", flush=True)
+                if index == 0:
+                    base_tab = result
+                else:
+                    base_tab = table.vstack([base_tab, result])
+                
+                index += 1
+            else:
+                print(f"Skipping source {i+1} due to non-finite flux error or low SNR", flush=True)
+                print(f"  fluxerr={fluxerr}, snr={snr}", flush=True)
+            
+    # if base_tab is not defined, return None
+    # this happens if no saturated stars are found
+    if index == 0:
+        print('No saturated stars found after processing all sources', flush=True)
+        return None
+    else:
+        return base_tab
 
 def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     print(f"Removing saturated stars from {filename}", flush=True)
     fh = fits.open(filename)
     data = fh['SCI'].data
 
-    # there are examples, especially in F405, where the variance is NaN but the value
+    # there are examples, especially in Faaaaa405, where the variance is NaN but the value
     # is negative
     print(f"Setting NaN variance to 0", flush=True)
-    data[np.isnan(fh['VAR_POISSON'].data)] = 0
+    #data[np.isnan(fh['VAR_POISSON'].data)] = 0
 
     header = fh[0].header
     if 'CRPIX1' not in header:
         header.update(wcs.WCS(fh['SCI'].header).to_header())
-    print("Running iteratively_remove_saturated_stars", flush=True)
-    satstar_table, satstar_resid = iteratively_remove_saturated_stars(data, header, **kwargs)
-    satstar_table.meta.update(header)
-    print("Finished iteratively_remove_saturated_stars", flush=True)
+    print("Running get_saturated_stars", flush=True)
+    satstar_table = get_saturated_stars(fh,)
+    if satstar_table is not None:
+        satstar_table.meta.update(header)
+        print("Finished get_saturated_stars", flush=True)
 
-    satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=True)
-    fh['SCI'].data = satstar_resid
-    fh.writeto(filename.replace(".fits", save_suffix+".fits"), overwrite=True)
-
+        satstar_table.write(filename.replace(".fits", '_satstar_catalog_newnewnewnew.fits'), overwrite=True)
+        print(f"Saved saturated star catalog to {filename.replace('.fits', '_satstar_catalog_newnewnewnew.fits')}", flush=True)
+    else:
+        print("No saturated stars found", flush=True)
+        return
+    
+    
 
 def main():
+    import os
+    os.environ['STPSF_PATH'] = '/blue/adamginsburg/t.yoo/from_red/stpsf-data'
 
-    #with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
-    #    api_token = fh.read().strip()
-    #from astroquery.mast import Mast
-    #Mast.login(api_token.strip())
-    #os.environ['MAST_API_TOKEN'] = api_token.strip()
-
-    fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
-    remove_saturated_stars(fn, verbose=True)
-
-
-    # skipping 'merged' b/c we don't expect PSFs to fit well enough
-    for module in ('nrca', 'nrcb', ):#'merged'):
-        for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*{module}*crf.fits"):
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option("-f", "--filter", dest="filter",
+                      default='F140M',
+                      help="filter list", metavar="filter")
+    (options, args) = parser.parse_args()
+    filt = options.filter
+    if filt in ['F140M', 'F162M', 'F182M', 'F187N', 'F210M', 'F335M', 'F360M', 'F405N', 'F410M', 'F480M']:
+        modules = ('nrca', 'nrcb')
+    else:
+        modules = ('mirim',)
+    for module in modules:
+        if filt in ['F140M', 'F162M', 'F182M', 'F187N', 'F210M', 'F335M', 'F360M', 'F405N', 'F410M', 'F480M']:
+            globlist = glob.glob(f"/orange/adamginsburg/jwst/w51/{filt}/pipeline/*{module}*align*crf.fits")
+        else:
+            globlist = glob.glob(f"/orange/adamginsburg/jwst/w51/{filt}/pipeline/*mirimage_cal.fits")
+        for i, fn in enumerate(globlist):
             print()
             print(fn)
-            remove_saturated_stars(fn, verbose=True)
+            if True:
+                remove_saturated_stars(fn)
 
-    for module in ('nrca', 'nrcb', ):#'merged'):
-        for fn in glob.glob(f"/orange/adamginsburg/jwst/cloudc/F*/pipeline/*{module}*crf.fits"):
-            print()
-            print(fn)
-            remove_saturated_stars(fn, verbose=True)
+    #for module in ('nrca', 'nrcb', 'merged'):
+    #    for fn in glob.glob(f"/orange/adamginsburg/jwst/w51/F*/pipeline/*{module}*crf.fits"):
+    #        print()
+    #        print(fn)
+    #        remove_saturated_stars(fn, verbose=True)
+
+
 
 
 if __name__ == "__main__":
