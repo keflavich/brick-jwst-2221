@@ -1,6 +1,5 @@
 # original file : https://github.com/keflavich/brick-jwst-2221/blob/main/brick2221/reduction/saturated_star_finding.py
 import os
-os.environ['STPSF_PATH'] = '/blue/adamginsburg/t.yoo/from_red/stpsf-data'
 
 import glob
 from astropy.io import fits
