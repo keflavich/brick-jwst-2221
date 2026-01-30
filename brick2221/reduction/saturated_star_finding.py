@@ -1,5 +1,7 @@
 # original file : https://github.com/keflavich/brick-jwst-2221/blob/main/brick2221/reduction/saturated_star_finding.py
 import os
+if not os.get('STPSF_PATH'):
+    raise ValueError("STPSF_PATH must be specified")
 
 import glob
 from astropy.io import fits
@@ -52,7 +54,7 @@ def get_psf(header, path_prefix='.'):
     try:
         assert ww.wcs.cdelt[1] != 1, "This is not a valid WCS!!! CDELT is wrong!! how did this HAPPEN!?!?"
     except AssertionError as ex:
-        print(ex) 
+        print(ex)
         print("ignoring WCS failure so check that stuff is right...")
 
     psfgen.filter = filtername
@@ -105,12 +107,12 @@ def get_psf(header, path_prefix='.'):
             print(ex)
 
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
-        # https://github.com/spacetelescope/stpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/stpsf/stpsf_core.py#L640
-        # https://github.com/spacetelescope/stpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/stpsf/gridded_library.py#L424
+        # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/webbpsf_core.py#L640
+        # https://github.com/spacetelescope/webbpsf/blob/cc16c909b55b2a26e80b074b9ab79ed9a312f14c/webbpsf/gridded_library.py#L424
         big_grid = psfgen.psf_grid(num_psfs=npsf, oversample=oversample,
                                    all_detectors=True, fov_pixels=fov_pixels,
                                    outdir=path_prefix,
-                                   save=True, outfile=psf_fn, overwrite=True)
+                                   save=True, outfile=None, overwrite=True)
         # now the PSF should be written
         assert glob.glob(psf_fn.replace(".fits", "*"))
         if isinstance(big_grid, list):
@@ -395,7 +397,7 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh = fits.open(filename)
     data = fh['SCI'].data
 
-    # there are examples, especially in Faaaaa405, where the variance is NaN but the value
+    # there are examples, especially in F405, where the variance is NaN but the value
     # is negative
     print(f"Setting NaN variance to 0", flush=True)
     #data[np.isnan(fh['VAR_POISSON'].data)] = 0
@@ -418,9 +420,8 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     
 
 def main():
-    import os
-if not os.environ.get('STPSF_PATH'):
-    raise ValueError("You have to specify the STPSF_PATH variable before running this code.")
+    if not os.get('STPSF_PATH'):
+        raise ValueError("STPSF_PATH must be specified")
 
     from optparse import OptionParser
     parser = OptionParser()
