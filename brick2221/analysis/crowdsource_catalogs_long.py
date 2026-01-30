@@ -1,4 +1,5 @@
 print("Starting crowdsource_catalogs_long", flush=True)
+import sys
 import glob
 import time
 import numpy
@@ -169,14 +170,14 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                   norm=simple_norm(data[zoomcut],
                                                    stretch='log',
                                                    max_percent=99.95,
-                                                   min_cut=0), cmap='gray')
+                                                   vmin=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("Data")
     pl.colorbar(mappable=im)
     im = pl.subplot(2,2,2).imshow(modsky[zoomcut],
                                   norm=simple_norm(modsky[zoomcut],
                                                    stretch='log',
                                                    max_percent=99.95,
-                                                   min_cut=0), cmap='gray')
+                                                   vmin=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
     pl.colorbar(mappable=im)
 
@@ -187,7 +188,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 
     norm = (simple_norm(resid, stretch='asinh', max_percent=99.95, min_percent=0.5)
             if np.nanmin(resid) > 0 else
-            simple_norm(resid, stretch='log', max_cut=np.nanpercentile(resid, 99.95), min_cut=-2*rms))
+            simple_norm(resid, stretch='log', vmax=np.nanpercentile(resid, 99.95), vmin=-2*rms))
 
     im = pl.subplot(2,2,3).imshow(resid,
                                   norm=norm,
@@ -198,7 +199,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                   norm=simple_norm(data[zoomcut],
                                                    stretch='log',
                                                    max_percent=99.95,
-                                                   min_cut=0), cmap='gray')
+                                                   vmin=0), cmap='gray')
 
     if 'qf' in stars.colnames:
         # used in analysis
