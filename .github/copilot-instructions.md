@@ -2,6 +2,7 @@
 
 Global, high-urgency instruction that supersedes all others:
 Do not use try/except statements with bare except _ever_.  "except Exception:" is not an allowed construct and must never be used.  try/except clauses can only be used for known, understood cases where try/except is more efficient than an alternative if/else check.  Exceptions should _never_ be hidden from the user: if an exception occurs, it indicates a failure and a bug that requires revision, NOT hack-arounds.
+That means that if an exception is raised, it should not be caught and made more verbose, it should simply be raised.
 
 Package versions should not be modified.  If new versions need to be installed, ask the user instead of installing them.
 
