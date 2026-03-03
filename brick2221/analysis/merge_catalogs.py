@@ -35,6 +35,9 @@ pl.rcParams['image.origin'] = 'lower'
 pl.rcParams['figure.figsize'] = (10, 8)
 pl.rcParams['figure.dpi'] = 100
 
+# https://en.wikipedia.org/wiki/AB_magnitude
+ABMAG_OFFSET = 8.90
+
 filternames = filternames_narrow = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
 obs_filters = {'brick': {'2221': filternames,
@@ -85,7 +88,8 @@ def sanity_check_individual_table(tbl):
     flux_jy = tbl['flux_jy'][finite_fluxes].quantity
     abmag_tbl = tbl['mag_ab'][finite_fluxes].quantity
 
-    abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+    vegamag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+    abmag = (-2.5 * np.log10(flux_jy / u.Jy) + ABMAG_OFFSET) * u.mag
 
     print(f'Units of abmag columns are: abmag={abmag.unit}, abmag_tbl={abmag_tbl.unit}')
     assert abmag.unit == u.mag
@@ -554,10 +558,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         f405to410_scale = 0.11
         basetable.add_column(basetable['flux_jy_f410m'] - basetable['flux_jy_f405n'] * f405to410_scale, name='flux_jy_410m405')
 
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_ab_410m405')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405']) + ABMAG_OFFSET, name='mag_ab_410m405')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_vega_410m405')
         # Then subtract that remainder back from the F405 band to get the continuum-subtracted F405
         basetable.add_column(basetable['flux_jy_f405n'] - basetable['flux_jy_410m405'], name='flux_jy_405m410')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_ab_405m410')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410']) + ABMAG_OFFSET, name='mag_ab_405m410')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_vega_405m410')
 
         # Line-subtract the F182 continuum band
         # 0.11 is the theoretical bandwidth fraction
@@ -565,11 +571,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # 0.18 is closer to the histogram mode
         f187to182_scale = 0.11
         basetable.add_column(basetable['flux_jy_f182m'] - basetable['flux_jy_f187n'] * f187to182_scale, name='flux_jy_182m187')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_ab_182m187')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187']) + ABMAG_OFFSET, name='mag_ab_182m187')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_vega_182m187')
         # Then subtract that remainder back from the F187 band to get the continuum-subtracted F187
         basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_ab_187m182')
-
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182']) + ABMAG_OFFSET, name='mag_ab_187m182')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_vega_187m182')
         """ # this adds to the file size too much
         # Add some important colors
 
@@ -972,7 +979,8 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
-            abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+            vegamag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+            abmag = (-2.5 * np.log10(flux_jy) + ABMAG_OFFSET) * u.mag
             try:
                 eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             except KeyError:
@@ -980,6 +988,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
             abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy * u.mag
         tbl.add_column(Column(flux_jy, name='flux_jy', unit=u.Jy))
         tbl.add_column(Column(abmag, name='mag_ab', unit=u.mag))
+        tbl.add_column(Column(vegamag, name='mag_vega', unit=u.mag))
         tbl.add_column(Column(eflux_jy, name='eflux_jy', unit=u.Jy))
         tbl.add_column(Column(abmag_err, name='emag_ab', unit=u.mag))
 
@@ -1062,9 +1071,11 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
     except KeyError:
         eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    abmag = -2.5*np.log10(flux_jy / zeropoint) * u.mag
+    abmag = (-2.5*np.log10(flux_jy) + ABMAG_OFFSET) * u.mag
+    abvega = -2.5*np.log10(flux_jy / zeropoint) * u.mag
     abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
     satstar_cat['mag_ab'] = abmag
+    satstar_cat['mag_vega'] = abvega
     satstar_cat['emag_ab'] = abmag_err
 
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
@@ -1097,6 +1108,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
             cat['dy'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        cat['mag_vega'][idx_cat] = abvega[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
 
         # ID the stars that are saturated-only (not INCluded in the orig cat)
@@ -1135,6 +1147,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
             cat['y_err'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        cat['mag_vega'][idx_cat] = abvega[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
 
         # ID the stars that are saturated-only (not INCluded in the orig cat)
