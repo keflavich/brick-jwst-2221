@@ -247,24 +247,31 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
         sel=None, axlims=None, xlim_percentiles=None, ext=None, extvec_scale=None,
         head_width=None, markersize=None, alpha=None, alpha_sel=None,
         rasterized=None, color='k', selcolor='r', hexbin=False,
-        n_hexbin_bins=100, hexbin_cmap='gray',
+        n_hexbin_bins=100, hexbin_cmap='gray', sel_hexbin_cmap='Reds',
         zorder=None,
         sel_zorder=None,
+        extvec_start=None,
         ):
     if ax is None:
         ax = pl.gca()
 
     colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
     magp = basetable[f'mag_ab_{f1}']
+    if axlims is not None and axlims[2] > axlims[3]:
+        # hexbin extent requires ymin < ymax; axis inversion is applied via ax.axis()
+        extent = axlims[0], axlims[1], axlims[3], axlims[2]
+    else:
+        extent = axlims
     if hexbin:
-        if axlims[2] > axlims[3]:
-            # binning doesn't allow reverse axes, but we manually set that below
-            extent = axlims[0], axlims[1], axlims[3], axlims[2]
         ax.hexbin(colorp[include], magp[include], mincnt=1, gridsize=n_hexbin_bins, extent=extent, cmap=hexbin_cmap, zorder=zorder)
     else:
         ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, zorder=zorder)
     if sel is not None and any(sel):
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, zorder=sel_zorder)
+        if hexbin:
+            ax.hexbin(colorp[sel], magp[sel], mincnt=1, gridsize=n_hexbin_bins, extent=extent,
+                      cmap=sel_hexbin_cmap, alpha=0.75, zorder=sel_zorder)
+        else:
+            ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, zorder=sel_zorder)
     ax.set_xlabel(f"{f1} - {f2}")
     ax.set_ylabel(f"{f1}")
     ax.axis(axlims)
@@ -285,7 +292,8 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
         e_1 = ext(w1) * extvec_scale
         e_2 = ext(w2) * extvec_scale
 
-        ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=head_width)
+        x0, y0 = extvec_start if extvec_start is not None else (0, 18)
+        ax.arrow(x0, y0, e_1-e_2, e_2, color='y', head_width=head_width)
 
 
 def color_plot(basetable,
