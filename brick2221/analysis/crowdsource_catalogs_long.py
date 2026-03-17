@@ -24,21 +24,21 @@ import urllib3
 import urllib3.exceptions
 from jwst.datamodels import dqflags
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import IntegratedGaussianPRF, extract_stars, EPSFStars, EPSFModel
+from photutils.psf import extract_stars, EPSFStars, EPSFBuilder
+# IntegratedGaussianPRF was renamed to CircularGaussianPRF in photutils 2.0
 try:
-    # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
-    from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
-except:
-    # version 1.6.0, which works
-    from photutils.psf import BasicPSFPhotometry as PSFPhotometry, IterativelySubtractedPSFPhotometry as IterativePSFPhotometry, DAOGroup as SourceGrouper
+    from photutils.psf import CircularGaussianPRF as IntegratedGaussianPRF
+except ImportError:
+    from photutils.psf import IntegratedGaussianPRF
+# EPSFModel was deprecated in photutils 2.0 in favour of ImagePSF
 try:
-    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
-except:
-    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D
-    from photutils.background import MMMBackground as LocalBackground
-
-from photutils.psf import EPSFBuilder
-from photutils.psf import extract_stars
+    from photutils.psf import ImagePSF as EPSFModel
+except ImportError:
+    from photutils.psf import EPSFModel
+# PSFPhotometry, IterativePSFPhotometry, SourceGrouper present since photutils 1.9
+from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
+# LocalBackground present since photutils 1.9
+from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
 
 import warnings
 from astropy.utils.exceptions import AstropyWarning, AstropyDeprecationWarning
@@ -308,9 +308,15 @@ def save_photutils_results(result, ww, filename,
 
     tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_{basic_or_iterative}.fits"
 
-    result.write(tblfilename, overwrite=True)
+    # FITS header keywords are limited to 8 characters. photutils 2.x stores
+    # configuration objects (localbkg_estimator, psf_model, fitter, etc.) in
+    # result.meta with long key names that cause a ValueError on write.
+    long_keys = [k for k in result.meta if len(k) > 8]
+    for k in long_keys:
+        result.meta[k[:8]] = result.meta[k]
+        del result.meta[k]
 
-    print("tblfilename={tblfilename}, filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
+    print(f"tblfilename={tblfilename}, filename={filename}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
 
     result.write(tblfilename, overwrite=True)
     print(f"Completed {basic_or_iterative} photometry, and wrote out file {tblfilename}")
