@@ -604,6 +604,375 @@ def plot_distance_vs_reddening_overplot(dist_brick, ak_brick, dist_cloudc, ak_cl
 	print(f"Wrote overplotted distance-vs-reddening plot to {outpath}")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# RC Peak Analysis  (after Nogueras-Lara+ 2021, 2021A&A...647L...6N)
+#
+# Project CMD stars along the extinction vector via:
+#   m_dered = F182M - alpha * (F182M - F212N)
+# where alpha = A_F182M / (A_F182M - A_F212N) = k_182 / (k_182 - k_212).
+# When alpha is correct, all RC stars collapse to the same m_dered regardless
+# of individual extinction → narrowest possible Gaussian peak.
+# We iterate CMD-window selection to converge on the minimum-width solution.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _rc_peak_extinction_slopes():
+	"""Return CMD slopes alpha for G21 and CT06 extinction laws.
+
+	alpha = A_F182M / (A_F182M - A_F212N) = k_182 / (k_182 - k_212),
+	i.e. dF182M / d(F182M-F212N) along the reddening vector.
+	"""
+	g21_ext = G21_MWAvg()
+	ct06_ext = CT06_MWGC()
+	k182_g21  = float(g21_ext(1.82 * u.um))
+	k212_g21  = float(g21_ext(2.12 * u.um))
+	k182_ct06 = float(ct06_ext(1.82 * u.um))
+	k212_ct06 = float(ct06_ext(2.12 * u.um))
+	alpha_g21  = k182_g21  / (k182_g21  - k212_g21)
+	alpha_ct06 = k182_ct06 / (k182_ct06 - k212_ct06)
+	return dict(alpha_g21=alpha_g21, k182_g21=k182_g21, k212_g21=k212_g21,
+	            alpha_ct06=alpha_ct06, k182_ct06=k182_ct06, k212_ct06=k212_ct06)
+
+
+def _rc_peak_gauss_fit(data, n_sigma_range=5):
+	"""Fit a Gaussian to binned 1-D data via scipy.optimize.curve_fit.
+
+	Returns (peak, sigma, amplitude).
+	"""
+	from scipy.optimize import curve_fit
+
+	med = np.median(data)
+	mad = max(np.median(np.abs(data - med)) * 1.4826, 1e-4)
+	bins = np.linspace(med - n_sigma_range * mad, med + n_sigma_range * mad, 80)
+	counts, edges = np.histogram(data, bins=bins)
+	centers = 0.5 * (edges[:-1] + edges[1:])
+
+	def gauss(x, amp, mu, sig):
+		return amp * np.exp(-0.5 * ((x - mu) / sig) ** 2)
+
+	p0 = [float(counts.max()), med, mad]
+	bounds = ([0, med - 3 * mad, 1e-4], [float(counts.sum()) * 2, med + 3 * mad, 5 * mad])
+	popt, _ = curve_fit(gauss, centers, counts.astype(float), p0=p0, bounds=bounds, maxfev=4000)
+	return float(popt[1]), abs(float(popt[2])), float(popt[0])
+
+
+def rc_peak_fit_slope(basetable, name,
+	                  alpha_min=1.5, alpha_max=12.0, n_alpha=800,
+	                  n_iter=8, sigma_clip=2.5,
+	                  color_range=(0.3, 1.5), mag_range=(14.5, 19.7),
+	                  sigma_clip_max_mag=0.80,
+	                  seed_from_rc_selection=True):
+	"""Iteratively fit the CMD extinction slope to minimise dereddened RC width.
+
+	Parameters
+	----------
+	basetable : Table
+	name : str
+	alpha_min, alpha_max, n_alpha : grid-search bounds and density for slope
+	n_iter : maximum selection iterations
+	sigma_clip : keep stars within this many MAD-sigmas of the RC peak each iter
+	color_range, mag_range : initial CMD window for RC candidates
+	seed_from_rc_selection : if True, seed the iterative selection from the
+	    existing RC strip determined by rc_selection_and_distances() so that
+	    the distance spread does not dominate the width metric.
+
+	Returns
+	-------
+	dict  — see inline keys for documentation
+	"""
+	from scipy.optimize import minimize_scalar
+
+	slopes = _rc_peak_extinction_slopes()
+
+	mag182 = _filled_float(basetable['mag_ab_f182m'])
+	mag212 = _filled_float(basetable['mag_ab_f212n'])
+	valid = np.isfinite(mag182) & np.isfinite(mag212)
+	color = mag182 - mag212
+	mag   = mag182
+
+	in_window = (
+		valid
+		& (color >= color_range[0]) & (color <= color_range[1])
+		& (mag   >= mag_range[0])   & (mag   <= mag_range[1])
+	)
+
+	alpha_grid = np.linspace(alpha_min, alpha_max, n_alpha)
+
+	# Seed from the existing geometrically-selected RC strip when possible,
+	# intersected with the CMD window.  This constrains the distance spread
+	# so that the width-vs-alpha curve reflects the extinction-law slope
+	# rather than the line-of-sight depth of the field.
+	if seed_from_rc_selection:
+		rc_tbl = rc_selection_and_distances(basetable)
+		rc_sel_mask = np.asarray(rc_tbl['rc_selected'], dtype=bool)
+		sel = in_window & rc_sel_mask
+		if sel.sum() < 50:
+			print(f"[rc_peak/{name}] RC-seeded window has only {sel.sum()} stars; "
+			      f"falling back to full CMD window")
+			sel = in_window.copy()
+	else:
+		sel = in_window.copy()
+
+	alpha_prev_stored = np.nan
+	for iteration in range(n_iter):
+		color_sel = color[sel]
+		mag_sel   = mag[sel]
+		n_sel = int(np.sum(sel))
+		if n_sel < 20:
+			print(f"[rc_peak/{name}] iter {iteration}: {n_sel} stars — stopping early")
+			break
+
+		# Width metric at each candidate slope: normalised MAD of m_dered
+		widths = np.empty(n_alpha)
+		peaks  = np.empty(n_alpha)
+		for ii, alpha in enumerate(alpha_grid):
+			m_d = mag_sel - alpha * color_sel
+			med = np.median(m_d)
+			mad = np.median(np.abs(m_d - med)) * 1.4826
+			peaks[ii]  = med
+			widths[ii] = mad if mad > 0 else 1e9
+
+		best_idx   = int(np.argmin(widths))
+		best_alpha = float(alpha_grid[best_idx])
+		best_sigma = float(widths[best_idx])
+		best_peak  = float(peaks[best_idx])
+
+		m_dered_all = mag - best_alpha * color
+		# Clip radius is sigma_clip * current MAD, but never exceed sigma_clip_max_mag
+		clip_rad = min(sigma_clip * best_sigma, sigma_clip_max_mag)
+		new_sel = in_window & (np.abs(m_dered_all - best_peak) < clip_rad)
+
+		converged = (iteration > 0) and (abs(best_alpha - alpha_prev_stored) < 0.02)
+		sel = new_sel
+		alpha_prev_stored = best_alpha
+		print(f"[rc_peak/{name}] iter {iteration}: alpha={best_alpha:.3f}, "
+		      f"sigma={best_sigma:.4f}, N={n_sel}"
+		      + (" (converged)" if converged else ""))
+		if converged:
+			break
+
+	# Precise minimum via bounded scalar optimisation on final selection
+	color_sel = color[sel]
+	mag_sel   = mag[sel]
+
+	def _width(a):
+		m_d = mag_sel - a * color_sel
+		mad = np.median(np.abs(m_d - np.median(m_d))) * 1.4826
+		return mad if mad > 0 else 1e9
+
+	opt = minimize_scalar(_width, bounds=(alpha_min, alpha_max), method='bounded')
+	best_alpha = float(opt.x)
+
+	# Final width curve over the entire grid at the converged selection
+	widths_final = np.array([_width(a) for a in alpha_grid])
+	best_sigma = float(widths_final[np.argmin(widths_final)])
+
+	m_dered_sel = mag_sel - best_alpha * color_sel
+
+	# Gaussian fit for precise peak and width
+	peak_fit, sigma_fit, _ = _rc_peak_gauss_fit(m_dered_sel)
+
+	# Uncertainty: curvature of the width(alpha) parabola near the minimum
+	near = np.abs(alpha_grid - best_alpha) < 1.0
+	if near.sum() >= 5:
+		pcoeff = np.polyfit(alpha_grid[near], widths_final[near], 2)
+		curvature = pcoeff[0]
+		delta_w = best_sigma / np.sqrt(max(len(color_sel), 1))
+		alpha_err = float(np.sqrt(delta_w / curvature)) if curvature > 0 else 0.05
+	else:
+		alpha_err = 0.05
+
+	print(f"[rc_peak/{name}] FINAL: alpha={best_alpha:.3f} ± {alpha_err:.3f}, "
+	      f"peak={peak_fit:.3f}, sigma={sigma_fit:.4f}, N={int(np.sum(sel))}")
+
+	return dict(
+		name=name,
+		best_alpha=best_alpha,
+		alpha_err=alpha_err,
+		peak_m_dered=peak_fit,
+		sigma_m_dered=sigma_fit,
+		n_selected=int(np.sum(sel)),
+		color_sel=color_sel,
+		mag_sel=mag_sel,
+		m_dered_sel=m_dered_sel,
+		alpha_grid=alpha_grid,
+		widths=widths_final,
+		sel_mask_full=sel,
+		color_range=color_range,
+		mag_range=mag_range,
+		**slopes,
+	)
+
+
+def plot_rc_peak_cmd(basetable, rc_peak_result, name, outpath,
+	                 axlims=(0, 2.5, 21, 14.5)):
+	"""Hexbin CMD with best-fit, G21, and CT06 slope lines and uncertainty band."""
+	mag182 = _filled_float(basetable['mag_ab_f182m'])
+	mag212 = _filled_float(basetable['mag_ab_f212n'])
+	valid  = np.isfinite(mag182) & np.isfinite(mag212)
+	color  = (mag182 - mag212)[valid]
+	mag    = mag182[valid]
+	extent = (axlims[0], axlims[1], min(axlims[2], axlims[3]), max(axlims[2], axlims[3]))
+
+	r          = rc_peak_result
+	best_alpha = r['best_alpha']
+	alpha_err  = r['alpha_err']
+	alpha_g21  = r['alpha_g21']
+	alpha_ct06 = r['alpha_ct06']
+	peak       = r['peak_m_dered']
+
+	# Anchor all slope lines at color0=1.0 and the RC peak
+	color0 = 1.0
+	color_line = np.array([axlims[0], axlims[1]])
+
+	def _mag_line(alpha):
+		"""Observed F182M for an RC star of dereddened magnitude `peak` as a function of color."""
+		return peak + alpha * (color_line - color0) + alpha * color0
+
+	fig, ax = pl.subplots(figsize=(9, 7))
+	ax.hexbin(color, mag, mincnt=1, gridsize=90, extent=extent,
+	          cmap='Greys', bins='log', rasterized=True)
+
+	# RC selection used by the slope fit
+	sel = r['sel_mask_full']
+	ax.hexbin((mag182 - mag212)[sel], mag182[sel], mincnt=1, gridsize=60,
+	          extent=extent, cmap='Reds', alpha=0.75, rasterized=True)
+
+	# Best-fit slope with uncertainty band
+	ml           = _mag_line(best_alpha)
+	ml_lo        = _mag_line(best_alpha - alpha_err)
+	ml_hi        = _mag_line(best_alpha + alpha_err)
+	ax.plot(color_line, ml, 'y-', linewidth=2.5, zorder=6,
+	        label=rf'Best fit  $\alpha={best_alpha:.2f}\pm{alpha_err:.2f}$')
+	ax.fill_between(color_line, ml_lo, ml_hi, color='yellow', alpha=0.25, zorder=5)
+
+	ax.plot(color_line, _mag_line(alpha_g21),  'b--', linewidth=1.8, zorder=6,
+	        label=rf'G21   $\alpha={alpha_g21:.2f}$')
+	ax.plot(color_line, _mag_line(alpha_ct06), 'c--', linewidth=1.8, zorder=6,
+	        label=rf'CT06  $\alpha={alpha_ct06:.2f}$')
+
+	ax.set_xlim(axlims[0], axlims[1])
+	ax.set_ylim(axlims[2], axlims[3])
+	ax.set_xlabel('F182M \u2212 F212N')
+	ax.set_ylabel('F182M')
+	ax.set_title(f'RC peak slope fit (rc_peak): {name}')
+	ax.legend(loc='lower right', fontsize=9)
+	ax.grid(alpha=0.2)
+	fig.tight_layout()
+	fig.savefig(outpath, dpi=200)
+	print(f"Wrote rc_peak CMD to {outpath}")
+
+
+def plot_rc_peak_histogram(rc_peak_result, name, outpath):
+	"""Histogram of m_dered at the best-fit slope with Gaussian overlay."""
+	r         = rc_peak_result
+	m_d       = r['m_dered_sel']
+	peak      = r['peak_m_dered']
+	sigma     = r['sigma_m_dered']
+	alpha     = r['best_alpha']
+	alpha_err = r['alpha_err']
+	n         = r['n_selected']
+
+	mad  = max(np.median(np.abs(m_d - np.median(m_d))) * 1.4826, 1e-4)
+	bins = np.linspace(peak - 6 * mad, peak + 6 * mad, 80)
+
+	fig, ax = pl.subplots(figsize=(8, 5))
+	counts, edges, _ = ax.hist(m_d, bins=bins, histtype='stepfilled',
+	                            color='steelblue', alpha=0.7,
+	                            label=f'Data  N={n:,}')
+	x_fine = np.linspace(bins[0], bins[-1], 600)
+	ax.plot(x_fine,
+	        counts.max() * np.exp(-0.5 * ((x_fine - peak) / sigma) ** 2),
+	        'r-', linewidth=2,
+	        label=rf'Gaussian  $\mu={peak:.3f}$, $\sigma={sigma:.4f}$')
+	ax.axvline(peak, color='r', linestyle='--', alpha=0.6)
+	ax.set_xlabel(rf'$m_\mathrm{{dered}}$ = F182M $-$ {alpha:.2f}$\times$(F182M$-$F212N)')
+	ax.set_ylabel('N')
+	ax.set_title(rf'RC peak histogram ($\alpha={alpha:.2f}\pm{alpha_err:.2f}$, rc_peak): {name}')
+	ax.legend(loc='best')
+	ax.grid(alpha=0.3)
+	fig.tight_layout()
+	fig.savefig(outpath, dpi=200)
+	print(f"Wrote rc_peak histogram to {outpath}")
+
+
+def plot_rc_peak_width_vs_alpha(rc_peak_result, name, outpath):
+	"""Width of the dereddened RC distribution vs slope -- shows clean minimum."""
+	r          = rc_peak_result
+	alpha_grid = r['alpha_grid']
+	widths     = r['widths']
+	best_alpha = r['best_alpha']
+	alpha_err  = r['alpha_err']
+	alpha_g21  = r['alpha_g21']
+	alpha_ct06 = r['alpha_ct06']
+
+	fig, ax = pl.subplots(figsize=(8, 5))
+	ax.plot(alpha_grid, widths, 'k-', linewidth=1.5, label='RC width (normalised MAD)')
+	ax.axvline(best_alpha, color='y', linewidth=2.5,
+	           label=rf'Best fit  $\alpha={best_alpha:.2f}\pm{alpha_err:.2f}$')
+	ax.axvspan(best_alpha - alpha_err, best_alpha + alpha_err,
+	           color='yellow', alpha=0.25)
+	ax.axvline(alpha_g21,  color='b', linestyle='--', linewidth=1.8,
+	           label=rf'G21   $\alpha={alpha_g21:.2f}$')
+	ax.axvline(alpha_ct06, color='c', linestyle='--', linewidth=1.8,
+	           label=rf'CT06  $\alpha={alpha_ct06:.2f}$')
+	ax.set_xlabel(r'CMD slope  $\alpha$ = d(F182M)/d(F182M$-$F212N)')
+	ax.set_ylabel(r'RC width  (normalised MAD, mag)')
+	ax.set_title(f'Width vs slope (rc_peak): {name}')
+	ax.legend(loc='best')
+	ax.grid(alpha=0.3)
+	fig.tight_layout()
+	fig.savefig(outpath, dpi=200)
+	print(f"Wrote rc_peak width-vs-alpha to {outpath}")
+
+
+def plot_rc_peak_vs_color(rc_peak_result, name, outpath, n_bins=10):
+	"""RC peak position vs colour (extinction proxy).
+
+	If alpha is correct the peak should be flat across all colour bins,
+	confirming the extinction law slopes is correct.
+	"""
+	r          = rc_peak_result
+	color_sel  = r['color_sel']
+	m_dered    = r['m_dered_sel']
+	best_alpha = r['best_alpha']
+	alpha_err  = r['alpha_err']
+	peak       = r['peak_m_dered']
+	sigma      = r['sigma_m_dered']
+
+	edges = np.linspace(color_sel.min(), color_sel.max(), n_bins + 1)
+	centers = 0.5 * (edges[:-1] + edges[1:])
+	bin_peaks = np.full(n_bins, np.nan)
+	bin_errs  = np.full(n_bins, np.nan)
+
+	for ii in range(n_bins):
+		mask = (color_sel >= edges[ii]) & (color_sel < edges[ii + 1])
+		if mask.sum() < 10:
+			continue
+		md = m_dered[mask]
+		med = np.median(md)
+		mad = np.median(np.abs(md - med)) * 1.4826
+		bin_peaks[ii] = med
+		bin_errs[ii]  = mad / np.sqrt(mask.sum())
+
+	finite = np.isfinite(bin_peaks)
+	fig, ax = pl.subplots(figsize=(8, 5))
+	ax.errorbar(centers[finite], bin_peaks[finite], yerr=bin_errs[finite],
+	            fmt='o', color='steelblue', capsize=4,
+	            label=rf'RC peak per bin  ($\alpha={best_alpha:.2f}\pm{alpha_err:.2f}$)')
+	ax.axhline(peak, color='r', linestyle='--', linewidth=1.5,
+	           label=f'Global peak = {peak:.3f}')
+	ax.fill_between([color_sel.min(), color_sel.max()],
+	                peak - sigma, peak + sigma,
+	                color='r', alpha=0.15, label=f'$\\pm\\sigma={sigma:.4f}$')
+	ax.set_xlabel('F182M \u2212 F212N (observed colour, proxy for extinction)')
+	ax.set_ylabel(rf'$m_\mathrm{{dered}}$ = F182M $-$ {best_alpha:.2f}$\times$(colour)')
+	ax.set_title(f'RC peak vs extinction — flatness test (rc_peak): {name}')
+	ax.legend(loc='best', fontsize=9)
+	ax.grid(alpha=0.3)
+	fig.tight_layout()
+	fig.savefig(outpath, dpi=200)
+	print(f"Wrote rc_peak vs-colour flatness plot to {outpath}")
 def main():
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 
@@ -714,5 +1083,41 @@ def main():
 	}
 
 
+def main_rc_peak():
+	"""Run rc_peak analysis for Brick and Cloud C."""
+	os.makedirs(f'{basepath}/distance', exist_ok=True)
+
+	brick_table  = make_downselected_table_20251211()
+	cloudc_table = load_cloudc_catalog()
+
+	brick_rc_peak  = rc_peak_fit_slope(brick_table,  'Brick')
+	cloudc_rc_peak = rc_peak_fit_slope(cloudc_table, 'Cloud C')
+
+	for rc_peak_result, basetable, tag in [
+		(brick_rc_peak,  brick_table,  'brick'),
+		(cloudc_rc_peak, cloudc_table, 'cloudc'),
+	]:
+		nm = rc_peak_result['name']
+		plot_rc_peak_cmd(
+			basetable, rc_peak_result, nm,
+			outpath=f'{basepath}/distance/rc_peak_cmd_{tag}.png',
+		)
+		plot_rc_peak_histogram(
+			rc_peak_result, nm,
+			outpath=f'{basepath}/distance/rc_peak_histogram_{tag}.png',
+		)
+		plot_rc_peak_width_vs_alpha(
+			rc_peak_result, nm,
+			outpath=f'{basepath}/distance/rc_peak_width_vs_alpha_{tag}.png',
+		)
+		plot_rc_peak_vs_color(
+			rc_peak_result, nm,
+			outpath=f'{basepath}/distance/rc_peak_vs_color_{tag}.png',
+		)
+
+	return {'brick': brick_rc_peak, 'cloudc': cloudc_rc_peak}
+
+
 if __name__ == '__main__':
 	main()
+	main_rc_peak()
