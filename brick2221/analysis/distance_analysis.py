@@ -18,12 +18,16 @@ Workflow:
 import functools
 import os
 import sys
+import glob
 import numpy as np
 import pylab as pl
 from astropy.table import Table
 from astropy import units as u
+from astropy.coordinates import SkyCoord
 from astropy.modeling.models import BlackBody
 from astroquery.svo_fps import SvoFps
+import regions
+from matplotlib.path import Path
 
 from dust_extinction.averages import CT06_MWGC, G21_MWAvg
 
@@ -98,7 +102,7 @@ def _compute_mk_to_mf212n_ab_offset():
 
 	def _mean_fnu(trans_table, bb):
 		"""Photon-counting mean B_ν: ∫ T·B_ν·λ dλ / ∫ T·λ dλ  (λ in Å).
-		Units of B_ν cancel when computing Vega-normalised colour ratios.
+		Units of B_ν cancel when computing Vega-normalised color ratios.
 		"""
 		lam_aa = np.array(trans_table['Wavelength'], dtype=float)
 		T      = np.array(trans_table['Transmission'], dtype=float)
@@ -438,7 +442,7 @@ def plot_cmd_with_rc_selection(basetable, rc_table, name, outpath):
 		selcolor='red',
 		rasterized=True,
 		hexbin=True,
-		n_hexbin_bins=90,
+		n_hexbin_bins=150,
 		hexbin_cmap='Greys',
 		sel_hexbin_cmap='Reds',
 		extvec_start=(1.2, 15.0),
@@ -656,6 +660,254 @@ def _rc_peak_gauss_fit(data, n_sigma_range=5):
 	return float(popt[1]), abs(float(popt[2])), float(popt[0])
 
 
+def _m182_dered_to_dist_kpc(m_dered):
+	"""Convert dereddened F182M RC magnitude to distance (kpc)."""
+	_, m182_abs_rc = _calibrated_rc_track_parameters()
+	mu = np.asarray(m_dered, dtype=float) - m182_abs_rc
+	d_pc = 10.0 ** ((mu + 5.0) / 5.0)
+	return d_pc / 1e3
+
+
+def _dist_kpc_to_m182_dered(d_kpc):
+	"""Inverse of _m182_dered_to_dist_kpc()."""
+	_, m182_abs_rc = _calibrated_rc_track_parameters()
+	d_pc = np.asarray(d_kpc, dtype=float) * 1e3
+	d_pc = np.clip(d_pc, 1e-6, None)
+	return 5.0 * np.log10(d_pc) - 5.0 + m182_abs_rc
+
+
+def _fit_gmm_1d_em(data, n_components=3, n_init=8, max_iter=300, tol=1e-6,
+	               min_sigma=None, max_sigma=None,
+	               mean_center=None, mean_halfwidth=None):
+	"""Fit a 1-D Gaussian mixture model with EM.
+
+	Returns sorted (by mean) component parameters and fit metrics.
+	"""
+	x = np.asarray(data, dtype=float)
+	x = x[np.isfinite(x)]
+	n = x.size
+	assert n > n_components * 5, f"Not enough points for {n_components}-component GMM: N={n}"
+
+	sigma0 = max(np.std(x), 1e-3)
+	if min_sigma is None:
+		min_sigma = max(0.03, 0.05 * sigma0)
+	else:
+		min_sigma = float(min_sigma)
+	if max_sigma is None:
+		max_sigma = np.inf
+	else:
+		max_sigma = float(max_sigma)
+	assert max_sigma >= min_sigma, "max_sigma must be >= min_sigma"
+
+	base_means = np.quantile(x, np.linspace(0.2, 0.8, n_components))
+	if mean_center is not None and mean_halfwidth is not None:
+		mean_lo = float(mean_center) - float(mean_halfwidth)
+		mean_hi = float(mean_center) + float(mean_halfwidth)
+		base_means = np.clip(base_means, mean_lo, mean_hi)
+	else:
+		mean_lo = -np.inf
+		mean_hi = np.inf
+
+	offset_scale = 0.18 * sigma0
+	inits = [
+		np.linspace(-1.0, 1.0, n_components) * offset_scale,
+		np.linspace(-0.5, 0.5, n_components) * offset_scale,
+		np.zeros(n_components),
+		np.linspace(-1.5, 1.5, n_components) * offset_scale,
+	]
+
+	best = None
+	log2pi = np.log(2.0 * np.pi)
+
+	for ii in range(max(n_init, len(inits))):
+		offset = inits[ii % len(inits)]
+		means = np.sort(np.clip(base_means + offset, mean_lo, mean_hi))
+		sigmas = np.full(n_components, min(max(0.35 * sigma0, min_sigma), max_sigma), dtype=float)
+		weights = np.full(n_components, 1.0 / n_components, dtype=float)
+		prev_ll = -np.inf
+
+		for _ in range(max_iter):
+			logpdf = np.empty((n, n_components), dtype=float)
+			for kk in range(n_components):
+				inv_sig = 1.0 / sigmas[kk]
+				z = (x - means[kk]) * inv_sig
+				logpdf[:, kk] = np.log(weights[kk]) - np.log(sigmas[kk]) - 0.5 * (z * z + log2pi)
+
+			maxlog = np.max(logpdf, axis=1, keepdims=True)
+			exps = np.exp(logpdf - maxlog)
+			norm = np.sum(exps, axis=1, keepdims=True)
+			resp = exps / norm
+			ll = float(np.sum(maxlog + np.log(norm)))
+
+			if np.isfinite(prev_ll) and abs(ll - prev_ll) < tol:
+				break
+			prev_ll = ll
+
+			Nk = np.sum(resp, axis=0)
+			Nk = np.clip(Nk, 1e-8, None)
+			weights = Nk / n
+			means = np.sum(resp * x[:, None], axis=0) / Nk
+			means = np.clip(means, mean_lo, mean_hi)
+			var = np.sum(resp * (x[:, None] - means[None, :]) ** 2, axis=0) / Nk
+			sigmas = np.sqrt(np.clip(var, min_sigma ** 2, max_sigma ** 2))
+
+		order = np.argsort(means)
+		weights = weights[order]
+		means = means[order]
+		sigmas = sigmas[order]
+
+		if (best is None) or (ll > best['log_likelihood']):
+			p = (n_components - 1) + n_components + n_components
+			best = {
+				'weights': weights.copy(),
+				'means': means.copy(),
+				'sigmas': sigmas.copy(),
+				'log_likelihood': ll,
+				'bic': p * np.log(n) - 2.0 * ll,
+				'aic': 2.0 * p - 2.0 * ll,
+			}
+
+	assert best is not None, "GMM fit failed to converge"
+	return best
+
+
+def _fit_constrained_bin_peaks(m_d_bin, overall_peak,
+	                           n_components=3,
+	                           mean_halfwidth=0.1,
+	                           sigma_min=0.05,
+	                           sigma_max=0.25):
+	"""Constrained per-bin GMM used for peak-vs-color visualisation.
+
+	Constraints requested by user:
+	- component means within overall_peak ± 0.1 mag
+	- component widths 0.05 < sigma < 0.25
+	"""
+	m_d_bin = np.asarray(m_d_bin, dtype=float)
+	m_d_bin = m_d_bin[np.isfinite(m_d_bin)]
+	if len(m_d_bin) < max(20, n_components * 6):
+		return None
+	return _fit_gmm_1d_em(
+		m_d_bin,
+		n_components=n_components,
+		n_init=6,
+		min_sigma=sigma_min,
+		max_sigma=sigma_max,
+		mean_center=overall_peak,
+		mean_halfwidth=mean_halfwidth,
+	)
+
+
+def _adaptive_color_bin_edges(c_min, c_max,
+	                          color_bin_size_blue=0.1,
+	                          color_bin_size_red=0.5,
+	                          color_transition=1.0):
+	"""Build adaptive colour-bin edges with an exact transition edge.
+
+	- Bins below `color_transition` use `color_bin_size_blue`
+	- Bins above `color_transition` use `color_bin_size_red`
+	- Always includes an exact edge at `color_transition` when the range spans it
+	"""
+	if not np.isfinite(c_min) or not np.isfinite(c_max) or c_max <= c_min:
+		return np.array([c_min, c_max], dtype=float)
+
+	edges = []
+
+	if c_min < color_transition:
+		# Fixed 0.1-mag grid in the blue regime, anchored to 0.1 multiples.
+		blue_start = np.floor(c_min / color_bin_size_blue) * color_bin_size_blue
+		blue_stop = min(color_transition, c_max)
+		blue_edges = np.arange(blue_start, blue_stop + color_bin_size_blue * 0.5, color_bin_size_blue)
+		edges.extend(blue_edges.tolist())
+
+	if c_max > color_transition:
+		# Fixed 0.5-mag grid in the red regime, starting exactly at transition.
+		if not edges:
+			edges.append(color_transition)
+		elif abs(edges[-1] - color_transition) > 1e-8:
+			edges.append(color_transition)
+		red_edges = np.arange(color_transition + color_bin_size_red,
+		                     c_max + color_bin_size_red * 1.5,
+		                     color_bin_size_red)
+		edges.extend(red_edges.tolist())
+
+	edges = np.array(edges, dtype=float)
+	# Robust de-duplication to remove floating-point near-duplicates (e.g. 1.0, 1.0000000002)
+	edges = np.unique(np.round(edges, 8))
+
+	# Ensure domain coverage without creating tiny partial bins inside the range.
+	if edges[0] > c_min:
+		edges = np.insert(edges, 0, c_min)
+	if edges[-1] < c_max:
+		edges = np.append(edges, c_max)
+
+	return edges
+
+
+def _color_bin_bright_peak_selection(mag, color, in_window, best_alpha,
+	                                   color_bin_size_blue=0.1,
+	                                   color_bin_size_red=0.5,
+	                                   color_transition=1.0,
+	                                   sigma_clip=2.0):
+	"""Refine RC selection by isolating the bright m_dered peak in each color bin.
+
+	For each color bin, fit a Gaussian mixture to the dereddened magnitudes and
+	keep only stars within `sigma_clip` sigma of the brightest (lowest m_dered)
+	component.  Bin widths are fine (`color_bin_size_blue`) below
+	`color_transition` and coarse (`color_bin_size_red`) above, because reddened
+	(high-extinction) stars are sparse and need wider bins for robust GMM fitting.
+
+	Returns a boolean mask with the same length as `mag`/`color`.
+	"""
+	m_dered_all = mag - best_alpha * color
+
+	color_in_w = color[in_window]
+	c_min = float(np.percentile(color_in_w, 2))
+	c_max = float(np.percentile(color_in_w, 98))
+	color_edges = _adaptive_color_bin_edges(
+		c_min, c_max,
+		color_bin_size_blue=color_bin_size_blue,
+		color_bin_size_red=color_bin_size_red,
+		color_transition=color_transition,
+	)
+
+	refined = np.zeros(len(mag), dtype=bool)
+
+	for ii in range(len(color_edges) - 1):
+		c_lo, c_hi = color_edges[ii], color_edges[ii + 1]
+		bin_mask = in_window & (color >= c_lo) & (color < c_hi)
+		n_bin = int(bin_mask.sum())
+		if n_bin < 10:
+			continue
+
+		m_d_bin = m_dered_all[bin_mask]
+		bin_indices = np.where(bin_mask)[0]
+
+		# Choose number of components based on sample size
+		if n_bin >= 50:
+			n_comp = 3
+		elif n_bin >= 25:
+			n_comp = 2
+		else:
+			n_comp = 1
+
+		if n_bin > n_comp * 5:
+			gmm = _fit_gmm_1d_em(m_d_bin, n_components=n_comp, n_init=5)
+			bright_idx = int(np.argmin(gmm['means']))
+			peak_m = float(gmm['means'][bright_idx])
+			peak_s = max(float(gmm['sigmas'][bright_idx]), 0.03)
+		else:
+			# Too few stars for GMM: fall back to histogram mode
+			hist, edges = np.histogram(m_d_bin, bins=max(5, n_bin // 3))
+			hist_peak = int(np.argmax(hist))
+			peak_m = float(0.5 * (edges[hist_peak] + edges[hist_peak + 1]))
+			peak_s = max(float(np.median(np.abs(m_d_bin - peak_m)) * 1.4826), 0.03)
+
+		near_peak = np.abs(m_d_bin - peak_m) < sigma_clip * peak_s
+		refined[bin_indices[near_peak]] = True
+
+	return refined
+
+
 def rc_peak_fit_slope(basetable, name,
 	                  alpha_min=1.5, alpha_max=12.0, n_alpha=800,
 	                  n_iter=8, sigma_clip=2.5,
@@ -751,7 +1003,7 @@ def rc_peak_fit_slope(basetable, name,
 		if converged:
 			break
 
-	# Precise minimum via bounded scalar optimisation on final selection
+	# Precise minimum via bounded scalar optimisation on iterative selection
 	color_sel = color[sel]
 	mag_sel   = mag[sel]
 
@@ -763,14 +1015,45 @@ def rc_peak_fit_slope(basetable, name,
 	opt = minimize_scalar(_width, bounds=(alpha_min, alpha_max), method='bounded')
 	best_alpha = float(opt.x)
 
-	# Final width curve over the entire grid at the converged selection
-	widths_final = np.array([_width(a) for a in alpha_grid])
-	best_sigma = float(widths_final[np.argmin(widths_final)])
+	# ── Bright-peak refinement ───────────────────────────────────────────────
+	# Within the already-converged RC selection (sel), divide into ~0.1-mag
+	# color bins and keep only stars near the brightest (lowest m_dered)
+	# GMM component in each bin.  Working from sel (not in_window) means we
+	# refine the existing RC strip rather than mixing in unrelated populations.
+	refined_sel = _color_bin_bright_peak_selection(
+		mag, color, sel, best_alpha,
+		color_bin_size_blue=0.1, color_bin_size_red=0.5,
+		color_transition=1.0, sigma_clip=2.0,
+	)
+	n_refined = int(refined_sel.sum())
+	print(f"[rc_peak/{name}] Bright-peak refinement: {n_refined} stars retained")
 
+	if n_refined >= 50:
+		color_sel = color[refined_sel]
+		mag_sel   = mag[refined_sel]
+		sel       = refined_sel
+
+		def _width_r(a):
+			m_d = mag_sel - a * color_sel
+			mad = np.median(np.abs(m_d - np.median(m_d))) * 1.4826
+			return mad if mad > 0 else 1e9
+
+		opt2 = minimize_scalar(_width_r, bounds=(alpha_min, alpha_max), method='bounded')
+		best_alpha = float(opt2.x)
+		widths_final = np.array([_width_r(a) for a in alpha_grid])
+	else:
+		print(f"[rc_peak/{name}] Bright-peak step retained <50 stars; keeping iterative selection")
+		widths_final = np.array([_width(a) for a in alpha_grid])
+	# ── End bright-peak refinement ────────────────────────────────────────────
+
+	best_sigma = float(widths_final[np.argmin(widths_final)])
 	m_dered_sel = mag_sel - best_alpha * color_sel
 
-	# Gaussian fit for precise peak and width
+	# Single-Gaussian summary fit for peak and width
 	peak_fit, sigma_fit, _ = _rc_peak_gauss_fit(m_dered_sel)
+
+	# 3-component Gaussian-mixture fit on the refined selection
+	gmm3 = _fit_gmm_1d_em(m_dered_sel, n_components=3, n_init=10)
 
 	# Uncertainty: curvature of the width(alpha) parabola near the minimum
 	near = np.abs(alpha_grid - best_alpha) < 1.0
@@ -784,6 +1067,7 @@ def rc_peak_fit_slope(basetable, name,
 
 	print(f"[rc_peak/{name}] FINAL: alpha={best_alpha:.3f} ± {alpha_err:.3f}, "
 	      f"peak={peak_fit:.3f}, sigma={sigma_fit:.4f}, N={int(np.sum(sel))}")
+	print(f"[rc_peak/{name}] GMM3 means={gmm3['means']}, sigmas={gmm3['sigmas']}, weights={gmm3['weights']}")
 
 	return dict(
 		name=name,
@@ -800,6 +1084,7 @@ def rc_peak_fit_slope(basetable, name,
 		sel_mask_full=sel,
 		color_range=color_range,
 		mag_range=mag_range,
+		gmm3=gmm3,
 		**slopes,
 	)
 
@@ -830,12 +1115,12 @@ def plot_rc_peak_cmd(basetable, rc_peak_result, name, outpath,
 		return peak + alpha * (color_line - color0) + alpha * color0
 
 	fig, ax = pl.subplots(figsize=(9, 7))
-	ax.hexbin(color, mag, mincnt=1, gridsize=90, extent=extent,
+	ax.hexbin(color, mag, mincnt=1, gridsize=150, extent=extent,
 	          cmap='Greys', bins='log', rasterized=True)
 
 	# RC selection used by the slope fit
 	sel = r['sel_mask_full']
-	ax.hexbin((mag182 - mag212)[sel], mag182[sel], mincnt=1, gridsize=60,
+	ax.hexbin((mag182 - mag212)[sel], mag182[sel], mincnt=1, gridsize=100,
 	          extent=extent, cmap='Reds', alpha=0.75, rasterized=True)
 
 	# Best-fit slope with uncertainty band
@@ -864,7 +1149,7 @@ def plot_rc_peak_cmd(basetable, rc_peak_result, name, outpath,
 
 
 def plot_rc_peak_histogram(rc_peak_result, name, outpath):
-	"""Histogram of m_dered at the best-fit slope with Gaussian overlay."""
+	"""Histogram of m_dered with single-Gaussian and 3-component GMM overlays."""
 	r         = rc_peak_result
 	m_d       = r['m_dered_sel']
 	peak      = r['peak_m_dered']
@@ -872,24 +1157,47 @@ def plot_rc_peak_histogram(rc_peak_result, name, outpath):
 	alpha     = r['best_alpha']
 	alpha_err = r['alpha_err']
 	n         = r['n_selected']
+	gmm3      = r['gmm3']
 
 	mad  = max(np.median(np.abs(m_d - np.median(m_d))) * 1.4826, 1e-4)
 	bins = np.linspace(peak - 6 * mad, peak + 6 * mad, 80)
+	bin_width = float(bins[1] - bins[0])
 
 	fig, ax = pl.subplots(figsize=(8, 5))
 	counts, edges, _ = ax.hist(m_d, bins=bins, histtype='stepfilled',
-	                            color='steelblue', alpha=0.7,
+	                            color='steelblue', alpha=0.5,
 	                            label=f'Data  N={n:,}')
 	x_fine = np.linspace(bins[0], bins[-1], 600)
+
+	# Single-Gaussian summary
 	ax.plot(x_fine,
 	        counts.max() * np.exp(-0.5 * ((x_fine - peak) / sigma) ** 2),
-	        'r-', linewidth=2,
-	        label=rf'Gaussian  $\mu={peak:.3f}$, $\sigma={sigma:.4f}$')
-	ax.axvline(peak, color='r', linestyle='--', alpha=0.6)
+	        'r-', linewidth=1.8,
+	        label=rf'Single Gaussian  $\mu={peak:.3f}$, $\sigma={sigma:.4f}$')
+	ax.axvline(peak, color='r', linestyle='--', alpha=0.5)
+
+	# 3-component Gaussian mixture model
+	weights = gmm3['weights']
+	means = gmm3['means']
+	sigmas = gmm3['sigmas']
+	comp_colors = ['darkorange', 'purple', 'forestgreen']
+	total_model = np.zeros_like(x_fine)
+	M_RC_dered = 2.485 - float(alpha)  # absolute dereddened F182M of RC at fitted slope
+	for kk in range(3):
+		pdf_k = np.exp(-0.5 * ((x_fine - means[kk]) / sigmas[kk]) ** 2) / (sigmas[kk] * np.sqrt(2.0 * np.pi))
+		model_counts_k = n * bin_width * weights[kk] * pdf_k
+		total_model += model_counts_k
+		d_comp_kpc = 10.0 ** ((means[kk] - M_RC_dered + 5.0) / 5.0) / 1e3
+		ax.plot(x_fine, model_counts_k, color=comp_colors[kk], linestyle='--', linewidth=1.5,
+		        label=rf'GMM C{kk+1}: $w={weights[kk]:.2f}$, $\mu={means[kk]:.3f}$, $\sigma={sigmas[kk]:.3f}$ ({d_comp_kpc:.1f} kpc)')
+
+	ax.plot(x_fine, total_model, color='k', linewidth=2.0,
+	        label='GMM total (3 components)')
+
 	ax.set_xlabel(rf'$m_\mathrm{{dered}}$ = F182M $-$ {alpha:.2f}$\times$(F182M$-$F212N)')
 	ax.set_ylabel('N')
-	ax.set_title(rf'RC peak histogram ($\alpha={alpha:.2f}\pm{alpha_err:.2f}$, rc_peak): {name}')
-	ax.legend(loc='best')
+	ax.set_title(rf'RC peak histogram + 3-GMM ($\alpha={alpha:.2f}\pm{alpha_err:.2f}$, rc_peak): {name}')
+	ax.legend(loc='best', fontsize=8)
 	ax.grid(alpha=0.3)
 	fig.tight_layout()
 	fig.savefig(outpath, dpi=200)
@@ -926,10 +1234,44 @@ def plot_rc_peak_width_vs_alpha(rc_peak_result, name, outpath):
 	print(f"Wrote rc_peak width-vs-alpha to {outpath}")
 
 
-def plot_rc_peak_vs_color(rc_peak_result, name, outpath, n_bins=10):
-	"""RC peak position vs colour (extinction proxy).
+def _make_m_dered_to_dist_funcs(best_alpha):
+	"""Build (m_dered -> dist_kpc) and (dist_kpc -> m_dered) callables for a
+	secondary y-axis using a plain distance-modulus relation.
 
-	If alpha is correct the peak should be flat across all colour bins,
+	Physical basis:
+	  m_dered = M_RC_dered + DM(d)
+	where M_RC_dered(alpha) is anchored at the 8 kpc CMD point:
+	  m_dered(8 kpc) = F182M(8 kpc) - alpha * color(8 kpc)
+	                 = 17.0 - alpha * 1.0       (by construction of our track)
+	  DM(8 kpc)      = 5 * log10(8000) - 5 = 14.515
+	  => M_RC_dered  = (17 - alpha) - 14.515 = 2.485 - alpha
+	For alpha ~ 4 this gives M ~ -1.5, consistent with the known RC absolute mag.
+
+	Using the empirical reddening track to invert m_dered(d) is non-monotonic
+	(extinction grows faster than DM beyond ~8 kpc), so we use this analytic
+	relation instead.
+	"""
+	M_RC_dered = 2.485 - float(best_alpha)
+
+	def _m_to_d(m):
+		mu = np.asarray(m, dtype=float) - M_RC_dered
+		d_pc = 10.0 ** ((mu + 5.0) / 5.0)
+		return d_pc / 1e3
+
+	def _d_to_m(d):
+		d_pc = np.clip(np.asarray(d, dtype=float), 1e-6, None) * 1e3
+		return M_RC_dered + 5.0 * np.log10(d_pc) - 5.0
+
+	return _m_to_d, _d_to_m
+
+
+def plot_rc_peak_vs_color(rc_peak_result, name, outpath,
+	                      color_bin_size_blue=0.1,
+	                      color_bin_size_red=0.5,
+	                      color_transition=1.0):
+	"""RC peak position vs color (extinction proxy).
+
+	If alpha is correct the peak should be flat across all color bins,
 	confirming the extinction law slopes is correct.
 	"""
 	r          = rc_peak_result
@@ -939,40 +1281,332 @@ def plot_rc_peak_vs_color(rc_peak_result, name, outpath, n_bins=10):
 	alpha_err  = r['alpha_err']
 	peak       = r['peak_m_dered']
 	sigma      = r['sigma_m_dered']
+	comp_colors = ['darkorange', 'purple', 'forestgreen']
 
-	edges = np.linspace(color_sel.min(), color_sel.max(), n_bins + 1)
+	c_min = float(np.min(color_sel))
+	c_max = float(np.max(color_sel))
+	edges = _adaptive_color_bin_edges(
+		c_min, c_max,
+		color_bin_size_blue=color_bin_size_blue,
+		color_bin_size_red=color_bin_size_red,
+		color_transition=color_transition,
+	)
+
+	n_bins = len(edges) - 1
 	centers = 0.5 * (edges[:-1] + edges[1:])
-	bin_peaks = np.full(n_bins, np.nan)
-	bin_errs  = np.full(n_bins, np.nan)
+	bin_peaks = np.full((3, n_bins), np.nan)
+	bin_errs  = np.full((3, n_bins), np.nan)
 
 	for ii in range(n_bins):
 		mask = (color_sel >= edges[ii]) & (color_sel < edges[ii + 1])
 		if mask.sum() < 10:
 			continue
 		md = m_dered[mask]
-		med = np.median(md)
-		mad = np.median(np.abs(md - med)) * 1.4826
-		bin_peaks[ii] = med
-		bin_errs[ii]  = mad / np.sqrt(mask.sum())
+		gmm_bin = _fit_constrained_bin_peaks(md, overall_peak=peak,
+		                                n_components=3,
+		                                mean_halfwidth=0.1,
+		                                sigma_min=0.05,
+		                                sigma_max=0.25)
+		if gmm_bin is None:
+			continue
+		means = gmm_bin['means']
+		sigmas = gmm_bin['sigmas']
+		order = np.argsort(means)
+		means = means[order]
+		sigmas = sigmas[order]
+		for kk in range(3):
+			bin_peaks[kk, ii] = means[kk]
+			bin_errs[kk, ii] = sigmas[kk] / np.sqrt(mask.sum())
 
-	finite = np.isfinite(bin_peaks)
 	fig, ax = pl.subplots(figsize=(8, 5))
-	ax.errorbar(centers[finite], bin_peaks[finite], yerr=bin_errs[finite],
-	            fmt='o', color='steelblue', capsize=4,
-	            label=rf'RC peak per bin  ($\alpha={best_alpha:.2f}\pm{alpha_err:.2f}$)')
+	for kk in range(3):
+		finite = np.isfinite(bin_peaks[kk])
+		if np.any(finite):
+			ax.errorbar(centers[finite], bin_peaks[kk, finite], yerr=bin_errs[kk, finite],
+			            fmt='o', color=comp_colors[kk], capsize=4,
+			            label=f'Bin-fit C{kk+1} (constrained)')
 	ax.axhline(peak, color='r', linestyle='--', linewidth=1.5,
 	           label=f'Global peak = {peak:.3f}')
 	ax.fill_between([color_sel.min(), color_sel.max()],
 	                peak - sigma, peak + sigma,
 	                color='r', alpha=0.15, label=f'$\\pm\\sigma={sigma:.4f}$')
-	ax.set_xlabel('F182M \u2212 F212N (observed colour, proxy for extinction)')
-	ax.set_ylabel(rf'$m_\mathrm{{dered}}$ = F182M $-$ {best_alpha:.2f}$\times$(colour)')
+	ax.set_xlabel('F182M \u2212 F212N (observed color, proxy for extinction)')
+	ax.set_ylabel(rf'$m_\mathrm{{dered}}$ = F182M $-$ {best_alpha:.2f}$\times$(color)')
 	ax.set_title(f'RC peak vs extinction — flatness test (rc_peak): {name}')
+
+	_m_to_d, _d_to_m = _make_m_dered_to_dist_funcs(best_alpha)
+	ax_dist = ax.secondary_yaxis('right', functions=(_m_to_d, _d_to_m))
+	ax_dist.set_ylabel('Distance (kpc; empirical RC track at fitted α)')
+
 	ax.legend(loc='best', fontsize=9)
 	ax.grid(alpha=0.3)
 	fig.tight_layout()
 	fig.savefig(outpath, dpi=200)
-	print(f"Wrote rc_peak vs-colour flatness plot to {outpath}")
+	print(f"Wrote rc_peak vs-color flatness plot to {outpath}")
+
+
+def _catalog_skycoord(catalog):
+	"""Return a SkyCoord column for region membership tests."""
+	for name in ('skycoord', 'skycoord_ref', 'skycoord_f410m', 'skycoord_f212n'):
+		if name in catalog.colnames:
+			return catalog[name]
+	ra_name = 'ra'
+	dec_name = 'dec'
+	if ra_name in catalog.colnames and dec_name in catalog.colnames:
+		return SkyCoord(catalog[ra_name], catalog[dec_name], frame='icrs')
+	ra_deg_name = 'ra_deg'
+	dec_deg_name = 'dec_deg'
+	if ra_deg_name in catalog.colnames and dec_deg_name in catalog.colnames:
+		return SkyCoord(catalog[ra_deg_name] * u.deg, catalog[dec_deg_name] * u.deg, frame='icrs')
+	raise ValueError("No usable sky coordinate columns found in catalog")
+
+
+def _skyoffset_xy_arcsec(coords, origin):
+	"""Project SkyCoord points into a local tangent plane around origin."""
+	frame = origin.skyoffset_frame()
+	off = coords.transform_to(frame)
+	x = off.lon.to_value(u.arcsec)
+	y = off.lat.to_value(u.arcsec)
+	return x, y
+
+
+def _region_contains_skycoord(region_obj, skycoord):
+	"""Return boolean mask of skycoord points inside a regions.SkyRegion.
+
+	Supports CircleSkyRegion, EllipseSkyRegion, RectangleSkyRegion, PolygonSkyRegion.
+	"""
+	if isinstance(region_obj, regions.CircleSkyRegion):
+		sep = skycoord.separation(region_obj.center)
+		return np.asarray(sep <= region_obj.radius, dtype=bool)
+
+	if isinstance(region_obj, (regions.EllipseSkyRegion, regions.RectangleSkyRegion)):
+		x, y = _skyoffset_xy_arcsec(skycoord, region_obj.center)
+		theta = region_obj.angle.to_value(u.rad)
+		xr = x * np.cos(theta) + y * np.sin(theta)
+		yr = -x * np.sin(theta) + y * np.cos(theta)
+		if isinstance(region_obj, regions.EllipseSkyRegion):
+			a = 0.5 * region_obj.width.to_value(u.arcsec)
+			b = 0.5 * region_obj.height.to_value(u.arcsec)
+			return (xr / a) ** 2 + (yr / b) ** 2 <= 1.0
+		else:
+			hw = 0.5 * region_obj.width.to_value(u.arcsec)
+			hh = 0.5 * region_obj.height.to_value(u.arcsec)
+			return (np.abs(xr) <= hw) & (np.abs(yr) <= hh)
+
+	if isinstance(region_obj, regions.PolygonSkyRegion):
+		vertices = region_obj.vertices
+		center = vertices[0]
+		xv, yv = _skyoffset_xy_arcsec(vertices, center)
+		x, y = _skyoffset_xy_arcsec(skycoord, center)
+		poly = Path(np.column_stack([xv, yv]))
+		return poly.contains_points(np.column_stack([x, y]))
+
+	raise NotImplementedError(f"Unsupported region type: {type(region_obj)}")
+
+
+def _plot_rc_peak_cmd_on_ax(ax, basetable, rc_peak_result, title,
+	                        axlims=(0, 2.5, 21, 14.5)):
+	mag182 = _filled_float(basetable['mag_ab_f182m'])
+	mag212 = _filled_float(basetable['mag_ab_f212n'])
+	valid = np.isfinite(mag182) & np.isfinite(mag212)
+	color = (mag182 - mag212)[valid]
+	mag = mag182[valid]
+	extent = (axlims[0], axlims[1], min(axlims[2], axlims[3]), max(axlims[2], axlims[3]))
+
+	r = rc_peak_result
+	ax.hexbin(color, mag, mincnt=1, gridsize=140, extent=extent, cmap='Greys', bins='log', rasterized=True)
+	sel = r['sel_mask_full']
+	ax.hexbin((mag182 - mag212)[sel], mag182[sel], mincnt=1, gridsize=90, extent=extent,
+	          cmap='Reds', alpha=0.75, rasterized=True)
+
+	color_line = np.array([axlims[0], axlims[1]])
+	peak = r['peak_m_dered']
+	best_alpha = r['best_alpha']
+	def _mag_line(alpha):
+		return peak + alpha * color_line
+	ax.plot(color_line, _mag_line(best_alpha), color='y', linewidth=1.8)
+	ax.set_xlim(axlims[0], axlims[1])
+	ax.set_ylim(axlims[2], axlims[3])
+	ax.set_title(title, fontsize=9)
+	ax.set_xlabel('F182M-F212N', fontsize=8)
+	ax.set_ylabel('F182M', fontsize=8)
+	ax.tick_params(labelsize=8)
+
+
+def _plot_rc_peak_hist_on_ax(ax, rc_peak_result, title):
+	r = rc_peak_result
+	m_d = r['m_dered_sel']
+	gmm3 = r['gmm3']
+	peak = r['peak_m_dered']
+	sigma = r['sigma_m_dered']
+	comp_colors = ['darkorange', 'purple', 'forestgreen']
+
+	mad = max(np.median(np.abs(m_d - np.median(m_d))) * 1.4826, 1e-4)
+	bins = np.linspace(peak - 6 * mad, peak + 6 * mad, 60)
+	bin_width = float(bins[1] - bins[0])
+	counts, _, _ = ax.hist(m_d, bins=bins, histtype='stepfilled', color='steelblue', alpha=0.5)
+	xf = np.linspace(bins[0], bins[-1], 400)
+	ax.plot(xf, counts.max() * np.exp(-0.5 * ((xf - peak) / sigma) ** 2), 'r-', linewidth=1.4)
+
+	weights = gmm3['weights']
+	means = gmm3['means']
+	sigmas = gmm3['sigmas']
+	total_model = np.zeros_like(xf)
+	for kk in range(3):
+		pdf_k = np.exp(-0.5 * ((xf - means[kk]) / sigmas[kk]) ** 2) / (sigmas[kk] * np.sqrt(2.0 * np.pi))
+		model_counts_k = len(m_d) * bin_width * weights[kk] * pdf_k
+		total_model += model_counts_k
+		ax.plot(xf, model_counts_k, '--', linewidth=1.0, color=comp_colors[kk])
+	ax.plot(xf, total_model, 'k-', linewidth=1.4)
+
+	ax.set_title(title, fontsize=9)
+	ax.set_xlabel('m_dered', fontsize=8)
+	ax.set_ylabel('N', fontsize=8)
+	ax.tick_params(labelsize=8)
+
+
+def _plot_rc_peak_vs_color_on_ax(ax, rc_peak_result, title):
+	r = rc_peak_result
+	color_sel = r['color_sel']
+	m_dered = r['m_dered_sel']
+	peak = r['peak_m_dered']
+	sigma = r['sigma_m_dered']
+	comp_colors = ['darkorange', 'purple', 'forestgreen']
+
+	c_min = float(np.min(color_sel))
+	c_max = float(np.max(color_sel))
+	edges = _adaptive_color_bin_edges(c_min, c_max, 0.1, 0.5, 1.0)
+	n_bins = len(edges) - 1
+	centers = 0.5 * (edges[:-1] + edges[1:])
+	bin_peaks = np.full((3, n_bins), np.nan)
+	bin_errs = np.full((3, n_bins), np.nan)
+
+	for ii in range(n_bins):
+		mask = (color_sel >= edges[ii]) & (color_sel < edges[ii + 1])
+		if mask.sum() < 10:
+			continue
+		md = m_dered[mask]
+		gmm_bin = _fit_constrained_bin_peaks(md, overall_peak=peak,
+		                                n_components=3,
+		                                mean_halfwidth=0.1,
+		                                sigma_min=0.05,
+		                                sigma_max=0.25)
+		if gmm_bin is None:
+			continue
+		means = gmm_bin['means']
+		sigmas = gmm_bin['sigmas']
+		order = np.argsort(means)
+		means = means[order]
+		sigmas = sigmas[order]
+		for kk in range(3):
+			bin_peaks[kk, ii] = means[kk]
+			bin_errs[kk, ii] = sigmas[kk] / np.sqrt(mask.sum())
+
+	for kk in range(3):
+		finite = np.isfinite(bin_peaks[kk])
+		if np.any(finite):
+			ax.errorbar(centers[finite], bin_peaks[kk, finite], yerr=bin_errs[kk, finite],
+			            fmt='o', color=comp_colors[kk], capsize=3)
+	ax.axhline(peak, color='r', linestyle='--', linewidth=1.2)
+	ax.fill_between([np.min(color_sel), np.max(color_sel)], peak - sigma, peak + sigma, color='r', alpha=0.15)
+	ax.set_title(title, fontsize=9)
+	ax.set_xlabel('F182M-F212N', fontsize=8)
+	ax.set_ylabel('m_dered', fontsize=8)
+	ax.tick_params(labelsize=8)
+
+
+def _plot_region_grid(results, outpath, panel_kind):
+	"""Plot one multipanel grid (cmd, hist, or peak_vs_color) for region results."""
+	n = len(results)
+	ncols = 4
+	nrows = int(np.ceil(n / ncols))
+	fig, axes = pl.subplots(nrows, ncols, figsize=(4.2 * ncols, 3.6 * nrows), squeeze=False)
+	flat = axes.ravel()
+
+	for ii, item in enumerate(results):
+		ax = flat[ii]
+		region_name = item['region_name']
+		r = item['rc_peak']
+		title = f"{region_name} (Nrc={r['n_selected']})"
+		if panel_kind == 'cmd':
+			_plot_rc_peak_cmd_on_ax(ax, item['table'], r, title)
+		elif panel_kind == 'hist':
+			_plot_rc_peak_hist_on_ax(ax, r, title)
+		elif panel_kind == 'peak_vs_color':
+			_plot_rc_peak_vs_color_on_ax(ax, r, title)
+		else:
+			raise ValueError(f"Unknown panel_kind={panel_kind}")
+
+	for jj in range(n, len(flat)):
+		flat[jj].axis('off')
+
+	fig.tight_layout()
+	fig.savefig(outpath, dpi=200)
+	print(f"Wrote region grid ({panel_kind}) to {outpath}")
+
+
+def main_rc_peak_regions(
+	region_glob='/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/regions_/brick*',
+	dataset='brick',
+	min_region_stars=300,
+	min_rc_stars=120,
+):
+	"""Run rc_peak analysis per region and make multipanel grid plots.
+
+	Skips regions with too few stars or too few RC-selected stars.
+	"""
+	os.makedirs(f'{basepath}/distance', exist_ok=True)
+	if dataset == 'brick':
+		input_table = make_downselected_table_20251211()
+	elif dataset == 'cloudc':
+		input_table = load_cloudc_catalog()
+	else:
+		raise ValueError(f"dataset must be 'brick' or 'cloudc', got {dataset}")
+
+	skycoord = _catalog_skycoord(input_table)
+
+	region_files = sorted(glob.glob(region_glob))
+	print(f"Found {len(region_files)} region files matching {region_glob} for dataset={dataset}")
+
+	results = []
+	for regfile in region_files:
+		region_name = os.path.splitext(os.path.basename(regfile))[0]
+		region_list = regions.Regions.read(regfile)
+		if len(region_list) == 0:
+			print(f"[regions] {region_name}: no regions in file, skipping")
+			continue
+		region_obj = region_list[0]
+		mask = _region_contains_skycoord(region_obj, skycoord)
+		n_in_region = int(mask.sum())
+		if n_in_region < min_region_stars:
+			print(f"[regions] {region_name}: N={n_in_region} < {min_region_stars}, skipping")
+			continue
+
+		reg_table = input_table[mask]
+		rc_table = rc_selection_and_distances(reg_table)
+		n_rc = int(np.sum(np.asarray(rc_table['rc_selected'], dtype=bool)))
+		if n_rc < min_rc_stars:
+			print(f"[regions] {region_name}: RC N={n_rc} < {min_rc_stars}, skipping")
+			continue
+
+		rc_peak = rc_peak_fit_slope(reg_table, f"{dataset.capitalize()} {region_name}")
+		results.append({
+			'region_name': region_name,
+			'table': reg_table,
+			'rc_peak': rc_peak,
+			'n_region': n_in_region,
+			'n_rc_initial': n_rc,
+		})
+
+	if len(results) == 0:
+		print("[regions] No regions passed the min-star thresholds. No grid plots created.")
+		return results
+
+	_plot_region_grid(results, f'{basepath}/distance/rc_peak_regions_{dataset}_cmd_grid.png', 'cmd')
+	_plot_region_grid(results, f'{basepath}/distance/rc_peak_regions_{dataset}_hist_grid.png', 'hist')
+	_plot_region_grid(results, f'{basepath}/distance/rc_peak_regions_{dataset}_peak_vs_color_grid.png', 'peak_vs_color')
+
+	return results
 def main():
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 
