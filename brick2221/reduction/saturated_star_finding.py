@@ -1,6 +1,6 @@
 # original file : https://github.com/keflavich/brick-jwst-2221/blob/main/brick2221/reduction/saturated_star_finding.py
 import os
-if not os.get('STPSF_PATH'):
+if not os.getenv('STPSF_PATH'):
     raise ValueError("STPSF_PATH must be specified")
 
 import glob
