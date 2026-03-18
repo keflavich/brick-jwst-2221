@@ -428,17 +428,21 @@ def main():
     parser.add_option("-f", "--filter", dest="filter",
                       default='F140M',
                       help="filter list", metavar="filter")
+    parser.add_option("--target", dest="target",
+                      default='w51',
+                      help="target name", metavar="target")
     (options, args) = parser.parse_args()
     filt = options.filter
-    if filt in ['F140M', 'F162M', 'F182M', 'F187N', 'F210M', 'F335M', 'F360M', 'F405N', 'F410M', 'F480M']:
+    if filt in ['F140M', 'F162M', 'F182M', 'F187N', 'F210M', 'F335M', 'F360M', 'F405N', 'F410M', 'F480M', 'F115W', 'F200W', 'F356W', 'F444W']:
         modules = ('nrca', 'nrcb')
     else:
         modules = ('mirim',)
+
     for module in modules:
-        if filt in ['F140M', 'F162M', 'F182M', 'F187N', 'F210M', 'F335M', 'F360M', 'F405N', 'F410M', 'F480M']:
-            globlist = glob.glob(f"/orange/adamginsburg/jwst/w51/{filt}/pipeline/*{module}*align*crf.fits")
+        if int(filt[1:4]) < 500:
+            globlist = glob.glob(f"/orange/adamginsburg/jwst/{options.target}/{filt}/pipeline/*{module}*align*crf.fits")
         else:
-            globlist = glob.glob(f"/orange/adamginsburg/jwst/w51/{filt}/pipeline/*mirimage_cal.fits")
+            globlist = glob.glob(f"/orange/adamginsburg/jwst/{options.target}/{filt}/pipeline/*mirimage_cal.fits")
         for i, fn in enumerate(globlist):
             print()
             print(fn)
