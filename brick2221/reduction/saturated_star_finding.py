@@ -433,7 +433,7 @@ def main():
                       help="target name", metavar="target")
     (options, args) = parser.parse_args()
     filt = options.filter
-    if filt in ['F140M', 'F162M', 'F182M', 'F187N', 'F210M', 'F335M', 'F360M', 'F405N', 'F410M', 'F480M', 'F115W', 'F200W', 'F356W', 'F444W']:
+    if int(filt[1:4]) < 500:
         modules = ('nrca', 'nrcb')
     else:
         modules = ('mirim',)
