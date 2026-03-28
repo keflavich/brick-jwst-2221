@@ -392,7 +392,7 @@ def get_saturated_stars(fitsdata,path_prefix='/orange/adamginsburg/jwst/w51/psfs
     else:
         return base_tab
 
-def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
+def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True, **kwargs):
     print(f"Removing saturated stars from {filename}", flush=True)
     fh = fits.open(filename)
     data = fh['SCI'].data
@@ -411,8 +411,8 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
         satstar_table.meta.update(header)
         print("Finished get_saturated_stars", flush=True)
 
-        satstar_table.write(filename.replace(".fits", '_satstar_catalog_newnewnewnew.fits'), overwrite=True)
-        print(f"Saved saturated star catalog to {filename.replace('.fits', '_satstar_catalog_newnewnewnew.fits')}", flush=True)
+        satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=overwrite)
+        print(f"Saved saturated star catalog to {filename.replace('.fits', '_satstar_catalog.fits')}", flush=True)
     else:
         print("No saturated stars found", flush=True)
         return
