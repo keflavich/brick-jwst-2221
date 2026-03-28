@@ -7,6 +7,8 @@ This is the documentation for brick2221.
    :maxdepth: 2
    :caption: Contents:
 
+   catalog_pipeline_products
+
 Indices and tables
 ==================
 
