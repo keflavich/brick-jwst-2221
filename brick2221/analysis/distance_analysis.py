@@ -145,23 +145,6 @@ def _filled_float(column):
 	return np.array(column, dtype=float)
 
 
-def _apply_primary_filter_alias(table):
-	"""Use F187N as the primary short-wavelength RC band everywhere.
-
-	Many plotting/analysis helpers still reference historical F182M column names.
-	To keep them consistent while switching to F187N, copy F187N values into
-	the legacy F182M-named columns.
-	"""
-	if PRIMARY_MAG_COL not in table.colnames:
-		raise ValueError(f"Missing required column '{PRIMARY_MAG_COL}'")
-	table['mag_ab_f182m'] = table[PRIMARY_MAG_COL]
-	if PRIMARY_EMAG_COL in table.colnames:
-		table['emag_ab_f182m'] = table[PRIMARY_EMAG_COL]
-	elif 'emag_ab_f182m' not in table.colnames:
-		table['emag_ab_f182m'] = np.zeros(len(table), dtype=float)
-	return table
-
-
 def _distance_modulus(distance_kpc):
 	return 5 * np.log10(distance_kpc * 1000.0) - 5
 
@@ -331,7 +314,7 @@ def load_cloudc_catalog():
 		import jwst_plots
 
 	cat = jwst_plots.make_cat_use().catalog
-	return _apply_primary_filter_alias(cat)
+	return (cat)
 
 
 def selected_distances(rc_table):
@@ -1872,9 +1855,9 @@ def main_rc_peak_regions(
 	"""
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 	if dataset == 'brick':
-		input_table = _apply_primary_filter_alias(make_downselected_table_20251211())
+		input_table = (make_downselected_table_20251211())
 	elif dataset == 'cloudc':
-		input_table = _apply_primary_filter_alias(load_cloudc_catalog())
+		input_table = (load_cloudc_catalog())
 	else:
 		raise ValueError(f"dataset must be 'brick' or 'cloudc', got {dataset}")
 
@@ -1996,7 +1979,7 @@ def make_cloudc_filament_differential_extinction_maps(
 	"""
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 
-	cloudc_table = _apply_primary_filter_alias(load_cloudc_catalog())
+	cloudc_table = (load_cloudc_catalog())
 	skycoord_all = _catalog_skycoord(cloudc_table)
 
 	region_files = sorted(glob.glob(region_glob))
@@ -2153,9 +2136,9 @@ def make_rcslice_knn_density_maps(
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 
 	if dataset == 'brick':
-		table = _apply_primary_filter_alias(make_downselected_table_20251211())
+		table = (make_downselected_table_20251211())
 	elif dataset == 'cloudc':
-		table = _apply_primary_filter_alias(load_cloudc_catalog())
+		table = (load_cloudc_catalog())
 	else:
 		raise ValueError(f"dataset must be 'brick' or 'cloudc', got {dataset}")
 
@@ -2320,11 +2303,11 @@ def main_rcslice_knn_density_maps_all(
 def main():
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 
-	brick_table = _apply_primary_filter_alias(make_downselected_table_20251211())
+	brick_table = (make_downselected_table_20251211())
 	brick_rc_table = rc_selection_and_distances(brick_table)
 	brick_distances, brick_selected = selected_distances(brick_rc_table)
 
-	cloudc_table = _apply_primary_filter_alias(load_cloudc_catalog())
+	cloudc_table = (load_cloudc_catalog())
 	cloudc_rc_table = rc_selection_and_distances(cloudc_table)
 	cloudc_distances, cloudc_selected = selected_distances(cloudc_rc_table)
 
@@ -2431,8 +2414,8 @@ def main_rc_peak():
 	"""Run rc_peak analysis for Brick and Cloud C."""
 	os.makedirs(f'{basepath}/distance', exist_ok=True)
 
-	brick_table  = _apply_primary_filter_alias(make_downselected_table_20251211())
-	cloudc_table = _apply_primary_filter_alias(load_cloudc_catalog())
+	brick_table  = (make_downselected_table_20251211())
+	cloudc_table = (load_cloudc_catalog())
 
 	brick_rc_peak  = rc_peak_fit_slope(brick_table,  'Brick')
 	cloudc_rc_peak = rc_peak_fit_slope(cloudc_table, 'Cloud C')
