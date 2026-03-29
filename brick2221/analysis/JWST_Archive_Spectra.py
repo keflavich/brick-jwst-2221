@@ -119,13 +119,8 @@ def make_nirspec_spectra_as_fluxes_table():
 
             # Remove only positive outliers using sigma clipping
             from astropy.stats import sigma_clip
-<<<<<<< HEAD
-            mean_flux = np.nanmean(np.asarray(spectable['FLUX']))
-            std_flux = np.nanstd(np.asarray(spectable['FLUX']))
-=======
             mean_flux = np.nanmean(np.array(spectable['FLUX']))
             std_flux = np.nanstd(np.array(spectable['FLUX']))
->>>>>>> refs/remotes/origin/main
             bad_flux = spectable['FLUX'] > mean_flux + 10*std_flux
             print(f"Removing {bad_flux.sum()} pixels with flux > {mean_flux + 10*std_flux}.  These will be infilled by interpolation.")
             spectable['FLUX'][bad_flux] = np.nan
