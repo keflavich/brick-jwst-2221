@@ -142,4 +142,28 @@ for ii, (color1, color2) in enumerate(combos):
     except Exception as ex:
         print(ex, flush=True)
 
+    try:
+        fig.clf()
+        axlims = (-2,5,26,15) if 'f115w' in color1 else (-2,5,22,12)
+        if color1 in axlim_dict:
+            axlims = axlim_dict[color1] + axlims[2:]
+        cmds_withiso(basetable, colors=[color1],
+             sel=sel,
+             alpha_k=0.02,
+             #alpha_sel=0.02,
+             fig=fig,
+             exclude=exclude,
+             #max_uncertainty=0.05,
+             axlims=axlims,
+             #xlim_percentiles=(0.1, 99.),
+             rasterized=rasterized,
+             extinction_scaling_av=ext,
+              # extvec_scale=extvec_scale,
+             )
+        fig.savefig(f'{basepath}/ccds_cmds/cmd_iso_{color1[0]}-{color1[1]}_{color1[0]}{suffix}.png')
+        fig.savefig(f'{basepath}/ccds_cmds/cmd_iso_{color1[0]}-{color1[1]}_{color1[0]}{suffix}.pdf')
+    except Exception as ex:
+        print(ex, flush=True)
+
+
     pl.close('all')

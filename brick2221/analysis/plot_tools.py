@@ -464,6 +464,12 @@ def cmds_withiso(basetable, sel=True,
                     color='c', linestyle='--', linewidth=0.5,
                     label='10$^9$ yr'
                     )
+            agesel = mist['log10_isochrone_age_yr'] == 10
+            ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
+                    mist[yval_.upper()][agesel] + distance_modulus,
+                    color='c', linestyle='--', linewidth=0.5,
+                    label='10$^{10}$ yr'
+                    )
 
         if ext is not None:
             #print(w1,w2)

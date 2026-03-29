@@ -50,12 +50,11 @@ co2_gerakines = read_ocdb_file(f'{optical_constants_cache_dir}/55_CO2_(1)_8K_Ger
 #methanol = read_lida_file(f'{optical_constants_cache_dir}/58_CH3OH_1_25.0K.txt')
 ethanol = load_molecule_univap('ethanol')
 methanol = load_molecule_univap('methanol')
-
 ocn = read_lida_file(f'{optical_constants_cache_dir}/158_OCN-_1_12.0K.txt')
 co_gerakines = gerakines = retrieve_gerakines_co()
 nh3 = read_ocdb_file(f'{optical_constants_cache_dir}/273_NH3_(1)_40K_Roser.txt')
 #nh3 = read_lida_file(f'{optical_constants_cache_dir}/116_NH3_1_27.0K.txt')
-#nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
+nh4p = read_lida_file(f'{optical_constants_cache_dir}/157_NH4+_1_12.0K.txt')
 water_ammonia = read_ocdb_file(f'{optical_constants_cache_dir}/265_H2O:NH3_(4:1)_24K_Mukai.txt')
 co_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/85_CO_(1)_10K_Hudgins.txt')
 strong_icemix_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/119_H2O:CH3OH:CO:NH3_(100:50:1:1)_10K_Hudgins.txt')
@@ -64,16 +63,26 @@ strong_icemix_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/119_H2O:C
 
 def _format_author_label(author):
     author = str(author).strip()
+    if '+' in author:
+        return author
     match = re.fullmatch(r'([A-Za-z]+)(\d{4})([A-Za-z]?)', author)
     if match:
         surname, year, suffix = match.groups()
         return f'{surname}+ {year}{suffix}'
+    parts = [part.strip() for part in author.split(',') if part.strip()]
+    if len(parts) > 1:
+        return ', '.join(_format_author_label(part) for part in parts)
+    if re.fullmatch(r'[A-Za-z]+', author):
+        return f'{author}+'
     return author
 
 
 def _format_species_label(species):
     species = str(species).strip()
-    return species.replace('CO2', 'CO$_2$')
+    species = re.sub(r'\s*\(1\)\s*', ' ', species)
+    species = re.sub(r'([A-Za-z])([0-9]+)', r'\1$_\2$', species)
+    species = re.sub(r'\s+', ' ', species).strip()
+    return species
 
 
 def _format_temperature_label(temperature):
@@ -95,6 +104,18 @@ def _opacity_label(tb):
     molecule = _format_species_label(tb.meta['molecule'])
     temperature = _format_temperature_label(tb.meta['temperature'])
     return f'{tb.meta["index"]} {molecule} {tb.meta["ratio"]} {temperature}'
+
+
+def _opacity_label_from_meta(meta):
+    if 'author' in meta:
+        author = _format_author_label(meta['author'])
+        composition = _format_species_label(meta['composition'])
+        temperature = _format_temperature_label(meta['temperature'])
+        return f'{author} {composition} {temperature}'
+
+    molecule = _format_species_label(meta['molecule'])
+    temperature = _format_temperature_label(meta['temperature'])
+    return f'{meta["index"]} {molecule} {meta["ratio"]} {temperature}'
 
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
@@ -174,11 +195,9 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
 
     pl.plot(tb['Wavelength'],
             opacity,
-            label=f'{tb.meta["author"]} {tb.meta["composition"]} {tb.meta["temperature"]}'
-                    if 'author' in tb.meta else
-                f'{tb.meta["index"]} {tb.meta["molecule"]} {tb.meta["ratio"]} {tb.meta["temperature"]}',
+            label=_opacity_label_from_meta(tb.meta),
             linestyle='-',
-            color=colors[ii] if colors is not None else None,
+            color=colors[0] if colors is not None else None,
             **kwargs,
             )
 
