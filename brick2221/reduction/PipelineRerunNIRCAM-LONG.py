@@ -27,7 +27,7 @@ import matplotlib as mpl
 import datetime
 
 # do this before importing webb
-os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/brick/crds/"
+os.environ["CRDS_PATH"] = "/orange/adamginsburg/jwst/crds/"
 os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
 
 from jwst.pipeline import calwebb_image3
@@ -77,6 +77,7 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
 
 fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
+               
                }
 
 refnames = {'2221': 'F405ref',
@@ -120,6 +121,12 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     # sanity check
     if regionname == 'brick':
         if proposal_id == '2221':
+            assert field == '001'
+    if regionname == 'sgrb2':
+        if proposal_id == '5365':
+            assert field == '001'
+    if regionname == 'w51':
+        if proposal_id == '6151':
             assert field == '001'
         elif proposal_id == '1182':
             assert field == '004'
@@ -261,8 +268,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                                                  "_uncal.fits"),
                                        save_results=True, output_dir=output_dir,
                                        save_calibrated_ramp=True,
-                                       steps={'ramp_fit': {'suppress_one_group':False},
-                                              "refpix": {"use_side_ref_pixels": True}})
+                                       steps={'ramp_fit': {'suppress_one_group':False, 'save_results':True},
+                                              "refpix": {"use_side_ref_pixels": True},
+                                              "jump":{"save_results":True}})
 
                 # apparently "rate" files have no WCS, but this is where it's needed...
                 # print("Aligning RATE images before doing IMAGE2 pipeline")
@@ -311,11 +319,10 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                     use_background_map=True,
                                     median_filter_size=2048)  # median_filter_size=medfilt_size[filtername])
                     member['expname'] = outname
-
                     fix_alignment(outname, proposal_id=proposal_id,
-                                  module=module, field=field,
-                                  basepath=basepath, filtername=filtername,
-                                  use_average=use_average)
+                                module=module, field=field,
+                                basepath=basepath, filtername=filtername,
+                                use_average=use_average)
             else: # make align files
                 fname = member['expname']
                 assert fname.endswith('_cal.fits')
@@ -362,6 +369,36 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
         tweakreg_parameters.update({'abs_refcat': abs_refcat})
         tweakreg_parameters.update({'skip': True})
+
+        if target in ('brick', 'cloudc'):
+            # for the VVV cat, use the merged version: no need for independent versions
+            abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
+            print(f"Loaded VVV catalog {vvvdr2fn}")
+            retrieve_vvv(basepath=basepath, filtername=filtername, fov_regname=fov_regname[regionname], module='merged', fieldnumber=field)
+            tweakreg_parameters['abs_refcat'] = vvvdr2fn
+            tweakreg_parameters['abs_searchrad'] = 1
+            reftbl = Table.read(abs_refcat)
+            reftbl.meta['name'] = f'VVV Reference Catalog {filtername}'
+            assert 'skycoord' in reftbl.colnames
+            abs_refcat = f'{basepath}/NB/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            reftbl = Table.read(abs_refcat)
+            # For non-F410M, try aligning to F410M instead of VVV?
+            reftblversion = reftbl.meta['VERSION']
+            reftbl.meta['name'] = 'F405N Reference Astrometric Catalog'
+
+            # truncate to top 10,000 sources
+            # more recent versions are already truncated to only very high quality matches
+            # reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
+            # abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv'
+
+            tweakreg_parameters['abs_searchrad'] = 0.4
+            # try forcing searchrad to be tighter to avoid bad crossmatches
+            # (the raw data are very well-aligned to begin with, though CARTA
+            # can't display them b/c they are using SIP)
+            tweakreg_parameters['searchrad'] = 0.05
+            print(f"Reference catalog is {abs_refcat} with version {reftblversion}")
+            tweakreg_parameters.update({'abs_refcat': abs_refcat})
+            tweakreg_parameters.update({'skip': True})
 
         print(f"Running tweakreg ({module})")
         calwebb_image3.Image3Pipeline.call(

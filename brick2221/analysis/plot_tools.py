@@ -1,4 +1,5 @@
 import numpy as np
+import traceback
 import regions
 import warnings
 import glob
@@ -129,6 +130,9 @@ def ccd(basetable,
         head_width=0.1,
         extvec_start=(0, 0),
         allow_missing=False,
+        hexbin=False,
+        hexbin_cmap='gray',
+        n_hexbin_bins=100,
         **kwargs
        ):
     keys1 = [f'mag_ab_{col}' for col in color1]
@@ -152,7 +156,12 @@ def ccd(basetable,
             include = ~exclude
             sel = sel & include
 
-        ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
+        if hexbin:
+            ax.hexbin(colorp1[include], colorp2[include], mincnt=1, gridsize=n_hexbin_bins, extent=axlims, cmap=hexbin_cmap)
+        else:
+            ax.scatter(colorp1[include], colorp2[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, **kwargs)
+
+        # scatter the selection
         if selcolor is not None:
             ax.scatter(colorp1[sel], colorp2[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, **kwargs)
     except Exception as ex:
@@ -231,32 +240,60 @@ def cmds(basetable, sel=True,
             sel = default_sel
 
         ax = fig.add_subplot(gridspec[ii])
-        colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
-        magp = basetable[f'mag_ab_{f1}']
-        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c='k', rasterized=rasterized)
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c='r', rasterized=rasterized)
-        ax.set_xlabel(f"{f1} - {f2}")
-        ax.set_ylabel(f"{f1}")
-        ax.axis(axlims)
-        if xlim_percentiles:
-            try:
-                xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
-                xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
-                if np.isfinite(xlow) and np.isfinite(xhigh):
-                    ax.set_xlim(xlow, xhigh)
-                else:
-                    print(f"xlow={xlow} xhigh={xhigh}")
-            except Exception as ex:
-                print(ex)
-
-        if ext is not None:
-            w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
-            w2 = 4.10*u.um if f2 == '410m405' else 4.05*u.um if f2 == '405m410' else int(f2[1:-1])/100*u.um
-            e_1 = ext(w1) * extvec_scale
-            e_2 = ext(w2) * extvec_scale
-
-            ax.arrow(0, 18, e_1-e_2, e_2, color='y', head_width=head_width)
+        cmd(ax=ax, basetable=basetable, f1=f1, f2=f2, include=include, sel=sel, axlims=axlims, xlim_percentiles=xlim_percentiles, ext=ext, extvec_scale=extvec_scale, head_width=head_width, markersize=markersize, alpha=alpha, alpha_sel=alpha_sel, rasterized=rasterized)
     return fig
+
+def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
+        sel=None, axlims=None, xlim_percentiles=None, ext=None, extvec_scale=None,
+        head_width=None, markersize=None, alpha=None, alpha_sel=None,
+        rasterized=None, color='k', selcolor='r', hexbin=False,
+        n_hexbin_bins=100, hexbin_cmap='gray', sel_hexbin_cmap='Reds',
+        zorder=None,
+        sel_zorder=None,
+        extvec_start=None,
+        ):
+    if ax is None:
+        ax = pl.gca()
+
+    colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
+    magp = basetable[f'mag_ab_{f1}']
+    if axlims is not None and axlims[2] > axlims[3]:
+        # hexbin extent requires ymin < ymax; axis inversion is applied via ax.axis()
+        extent = axlims[0], axlims[1], axlims[3], axlims[2]
+    else:
+        extent = axlims
+    if hexbin:
+        ax.hexbin(colorp[include], magp[include], mincnt=1, gridsize=n_hexbin_bins, extent=extent, cmap=hexbin_cmap, zorder=zorder)
+    else:
+        ax.scatter(colorp[include], magp[include], s=markersize, alpha=alpha, c=color, rasterized=rasterized, zorder=zorder)
+    if sel is not None and any(sel):
+        if hexbin:
+            ax.hexbin(colorp[sel], magp[sel], mincnt=1, gridsize=n_hexbin_bins, extent=extent,
+                      cmap=sel_hexbin_cmap, alpha=0.75, zorder=sel_zorder)
+        else:
+            ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=alpha_sel, c=selcolor, rasterized=rasterized, zorder=sel_zorder)
+    ax.set_xlabel(f"{f1} - {f2}")
+    ax.set_ylabel(f"{f1}")
+    ax.axis(axlims)
+    if xlim_percentiles:
+        try:
+            xlow = np.nanpercentile(colorp[include], xlim_percentiles[0])
+            xhigh = np.nanpercentile(colorp[include], xlim_percentiles[1])
+            if np.isfinite(xlow) and np.isfinite(xhigh):
+                ax.set_xlim(xlow, xhigh)
+            else:
+                print(f"xlow={xlow} xhigh={xhigh}")
+        except Exception as ex:
+            print(ex)
+
+    if ext is not None:
+        w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
+        w2 = 4.10*u.um if f2 == '410m405' else 4.05*u.um if f2 == '405m410' else int(f2[1:-1])/100*u.um
+        e_1 = ext(w1) * extvec_scale
+        e_2 = ext(w2) * extvec_scale
+
+        x0, y0 = extvec_start if extvec_start is not None else (0, 18)
+        ax.arrow(x0, y0, e_1-e_2, e_2, color='y', head_width=head_width)
 
 
 def color_plot(basetable,
@@ -817,6 +854,7 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
             spitzermatch = spitzer[spitzindex]
     except Exception as ex:
         spitzer = []
+        spitzermatch = []
         log.debug(f"No matches for spitzer: {ex}")
 
 
@@ -865,21 +903,22 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
                 * u.Jy)
 
 
-    if len(spitzer) > 0:
+    if len(spitzermatch) > 0:
         for filtername,colname in [('I1', '_3.6mag'),
                                 ('I2', '_4.5mag'),
                                 ('I3', '_5.8mag'),
                                 ('I4', '_8.0mag')]:
-            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
-            wavelengths.append(eff_wavelength)
-            if spitzermatch[colname].mask:
-                fluxes.append(np.nan * u.Jy)
-                lims.append(mag2flux(lim_dict[filtername], filtername))
-            else:
-                fluxes.append(mag2flux(spitzermatch[colname], filtername))
-                lims.append(np.nan*u.Jy)
-            eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
-            widths.append(eff_width)
+            if colname in spitzermatch.colnames:
+                eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+                wavelengths.append(eff_wavelength)
+                if spitzermatch[colname].mask:
+                    fluxes.append(np.nan * u.Jy)
+                    lims.append(mag2flux(lim_dict[filtername], filtername))
+                else:
+                    fluxes.append(mag2flux(spitzermatch[colname], filtername))
+                    lims.append(np.nan*u.Jy)
+                eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+                widths.append(eff_width)
 
 
    # VVV
@@ -893,6 +932,7 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
             #print(len(vvvindex))
             vvvmatch = vvvdr4_[vvvindex]
     else:
+        vvvmatch = []
         log.debug("No VVV match")
 
 
@@ -905,23 +945,24 @@ def make_sed(coord, basetable, idx=None, radius=0.5*u.arcsec):
                 filter_table.loc[f'{telescope}/{instrument}.{filtername}']['ZeroPoint']
                 * u.Jy)
 
-    if len(vvvdr4) > 0:
+    if len(vvvmatch) > 0:
         for filtername,colname in [('Z', 'Zmag3'),
                                 ('Y', 'Ymag3'),
                                 ('J', 'Jmag3'),
                                 ('H', 'Hmag3'),
                                 ('Ks', 'Ksmag3'),
                                 ]:
-            eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
-            wavelengths.append(eff_wavelength)
-            if len(vvvdr4_) == 0 or vvvmatch[colname].mask:
-                fluxes.append(np.nan * u.Jy)
-                lims.append(mag2flux(lim_dict[filtername], filtername))
-            else:
-                fluxes.append(mag2flux(vvvmatch[colname], filtername))
-                lims.append(np.nan*u.Jy)
-            eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
-            widths.append(eff_width)
+            if colname in vvvmatch.colnames:
+                eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WavelengthEff'] * u.AA
+                wavelengths.append(eff_wavelength)
+                if len(vvvdr4_) == 0 or vvvmatch[colname].mask:
+                    fluxes.append(np.nan * u.Jy)
+                    lims.append(mag2flux(lim_dict[filtername], filtername))
+                else:
+                    fluxes.append(mag2flux(vvvmatch[colname], filtername))
+                    lims.append(np.nan*u.Jy)
+                eff_width = filter_table.loc[f'{telescope}/{instrument}.{filtername}']['WidthEff'] * u.AA
+                widths.append(eff_width)
 
     return wavelengths, widths, fluxes, lims
 
@@ -954,6 +995,7 @@ def sed_and_starzoom_plot(coord, basetable, idx=None, fignum=1, title=None, modu
             starzoom_spitzer(coord, fig=fig, axes=axes)
     except Exception as ex:
         print(ex)
+        traceback.print_exc()
 
     return fig, (wavelengths, widths, fluxes, lims)
 
@@ -1186,3 +1228,213 @@ def star_density_color(crd, ww, dx=1*u.arcsec, blur=False, fig=None):
     im = ax.imshow(hh.swapaxes(0,1))
     pl.colorbar(im)
     return hh
+
+
+def plot_SED_from_Taehwa(image_filenames, row_jwst, row_alma, label, cutout_size=2*u.arcsec, alma_region='w51e'):
+    from astropy import units as u
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
+    from astropy.table import Table
+    from astropy.io import fits
+    from astropy.visualization import simple_norm
+    from astropy.nddata import Cutout2D
+    from astropy.wcs import WCS
+    import re
+    from astropy.coordinates import SkyCoord
+    import sys
+    #sys.path.append('/home/t.yoo/Paths')
+    import Paths.Paths as paths
+    import matplotlib as mpl
+    import matplotlib.patches as patches
+
+    Path = paths.filepaths()
+    plt.rcParams['axes.labelsize']=20
+    plt.rcParams['xtick.labelsize']=15
+    plt.rcParams['ytick.labelsize']=15
+    image_filenames ={
+        "f140m": "/orange/adamginsburg/jwst/w51/F140M/pipeline/jw06151-o001_t001_nircam_clear-f140m-merged_i2d.fits",
+        "f162m": "/orange/adamginsburg/jwst/w51/F162M/pipeline/jw06151-o001_t001_nircam_clear-f162m-merged_i2d.fits",
+        "f182m": "/orange/adamginsburg/jwst/w51/F182M/pipeline/jw06151-o001_t001_nircam_clear-f182m-merged_i2d.fits",
+        "f187n": "/orange/adamginsburg/jwst/w51/F187N/pipeline/jw06151-o001_t001_nircam_clear-f187n-merged_i2d.fits",
+        "f210m": "/orange/adamginsburg/jwst/w51/F210M/pipeline/jw06151-o001_t001_nircam_clear-f210m-merged_i2d.fits",
+        "f335m": "/orange/adamginsburg/jwst/w51/F335M/pipeline/jw06151-o001_t001_nircam_clear-f335m-merged_i2d.fits",
+        "f360m": "/orange/adamginsburg/jwst/w51/F360M/pipeline/jw06151-o001_t001_nircam_clear-f360m-merged_i2d.fits",
+        "f405n": "/orange/adamginsburg/jwst/w51/F405N/pipeline/jw06151-o001_t001_nircam_clear-f405n-merged_i2d.fits",
+        "f410m": "/orange/adamginsburg/jwst/w51/F410M/pipeline/jw06151-o001_t001_nircam_clear-f410m-merged_i2d.fits", # weird, the filename is different from what is downloaded with the STScI pipeline...
+        "f480m": "/orange/adamginsburg/jwst/w51/F480M/pipeline/jw06151-o001_t001_nircam_clear-f480m-merged_i2d.fits",
+        "f560w": "/orange/adamginsburg/jwst/w51/F560W/pipeline/jw06151-o002_t001_miri_f560w_i2d.fits",
+        "f770w": "/orange/adamginsburg/jwst/w51/F770W/pipeline/jw06151-o002_t001_miri_f770w_i2d.fits",
+        "f1000w": "/orange/adamginsburg/jwst/w51/F1000W/pipeline/jw06151-o002_t001_miri_f1000w_i2d.fits",
+        "f1280w": "/orange/adamginsburg/jwst/w51/F1280W/pipeline/jw06151-o002_t001_miri_f1280w_i2d.fits",
+        "f1500w": "/orange/adamginsburg/jwst/w51/F1500W/pipeline/jw06151-o002_t001_miri_f1500w_i2d.fits",
+        "f2100w": "/orange/adamginsburg/jwst/w51/F2100W/pipeline/jw06151-o002_t001_miri_f2100w_i2d.fits",
+        "w51e_1.3mm": Path.w51e_b6_tt0,
+        "w51e_3mm": Path.w51e_b3_tt0,
+        "w51n_1.3mm": Path.w51n_b6_tt0,
+        "w51n_3mm": Path.w51n_b3_tt0,
+    
+    
+        
+    }
+    catalogs_filters = {"f140m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f140m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f162m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f162m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f182m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f182m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f187n_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f187n_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f210m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f210m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f335m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f335m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f360m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f360m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f405n_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f405n_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f410m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f410m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f480m_nrca": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f480m_nrca_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f140m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f140m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f162m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f162m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                      "f182m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f182m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f187n_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f187n_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f210m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f210m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f335m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f335m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f360m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f360m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f405n_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f405n_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f410m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f410m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f480m_nrcb": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f480m_nrcb_indivexp_merged_dao_after_merger_combined_with_satstars.fits',
+                       "f560w": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f560w_mirimage_indivexp_merged_dao_after_merger_combined_with_satstars_fixed.fits',
+                       "f770w": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f770w_mirimage_indivexp_merged_dao_after_merger_combined_with_satstars_fixed.fits',
+                       "f1000w": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f1000w_mirimage_indivexp_merged_dao_after_merger_combined_with_satstars_fixed.fits',
+                       "f1280w": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f1280w_mirimage_indivexp_merged_dao_after_merger_combined_with_satstars_fixed.fits',
+                       "f2100w": '/orange/adamginsburg/w51/TaehwaYoo/jwst_w51/catalogs/f2100w_mirimage_indivexp_merged_dao_after_merger_combined_with_satstars_fixed.fits',
+                      }
+    reprojected_dir = '/orange/adamginsburg/jwst/w51/reproject_to_alma/'
+    catalog = Table.read('/orange/adamginsburg/jwst/w51/catalogs/final_nircam_miri_indivexp_merged_dao_refined_after_sat.fits')
+
+
+    fig = plt.figure(figsize=(20, 20))
+    gs = GridSpec(9,9, figure=fig, wspace=0, hspace=0)
+    ax_f140m = fig.add_subplot(gs[0,0])
+    ax_f162m = fig.add_subplot(gs[0,1])
+    ax_f182m = fig.add_subplot(gs[0,2])
+    ax_f187n = fig.add_subplot(gs[0,3])
+    ax_f210m = fig.add_subplot(gs[0,4])
+    ax_f335m = fig.add_subplot(gs[0,5])
+    ax_f360m = fig.add_subplot(gs[0,6])
+    ax_f405n = fig.add_subplot(gs[0,7])
+    ax_f410m = fig.add_subplot(gs[0,8])
+    ax_f480m = fig.add_subplot(gs[1,8])
+    ax_f560w = fig.add_subplot(gs[2,8])
+    ax_f770w = fig.add_subplot(gs[3,8])
+    ax_f1000w = fig.add_subplot(gs[4,8])
+    ax_f1280w = fig.add_subplot(gs[5,8])
+    ax_f2100w = fig.add_subplot(gs[6,8])
+    ax_b6 = fig.add_subplot(gs[7,8])
+    ax_b3 = fig.add_subplot(gs[8,8])
+    ax_images = [ax_f140m, ax_f162m, ax_f182m, ax_f187n, ax_f210m, ax_f335m, ax_f360m, ax_f405n,
+                 ax_f410m, ax_f480m, ax_f560w, ax_f770w, ax_f1000w, ax_f1280w, ax_f2100w, ax_b6, ax_b3]
+    ax_main = fig.add_subplot(gs[1:8,1:8])
+    filter_names = ["f140m", "f162m", "f182m", "f187n", "f210m", "f335m", "f360m", "f405n",
+                    "f410m", "f480m", "f560w", "f770w", "f1000w", "f1280w", "f2100w", "1.3mm", "3mm"]
+    skycoords = SkyCoord(ra=row_jwst['skycoord_ra']*u.deg, dec=row_jwst['skycoord_dec']*u.deg)
+    print(len(filter_names), len(ax_images))
+    for i, ax in enumerate(ax_images):  
+        img_b3 = image_filenames[f'{alma_region}_3mm']
+        header_b3 = fits.open(img_b3)[0].header
+        pixel_scale_b3 = WCS(header_b3, naxis=2).proj_plane_pixel_scales()[0]
+        img_b6 = image_filenames[f'{alma_region}_1.3mm']
+        header_b6 = fits.open(img_b6)[0].header
+        pixel_scale_b6 = WCS(header_b6, naxis=2).proj_plane_pixel_scales()[0]
+        if filter_names[i] in ["1.3mm", "3mm"]: 
+            if filter_names[i] == "1.3mm":
+                band = 'b6'
+            elif filter_names[i] == "3mm":
+                band = 'b3'
+            img_filename = image_filenames[f"{alma_region}_{filter_names[i]}"]
+            img = fits.open(img_filename)[0].data[0][0]
+            header = fits.open(img_filename)[0].header
+            wcs = WCS(header, naxis=2)
+        else:
+            #filt}_reprojected_to_alma_w51n_b6.fits
+            img_filename = reprojected_dir + f"{filter_names[i].lower()}_reprojected_to_alma_{alma_region}_b3.fits"
+            img = fits.open(img_filename)[0].data
+            header = fits.open(img_filename)[0].header
+            wcs = WCS(header, naxis=2)
+
+        try:
+            cutout = Cutout2D(img, skycoords, (cutout_size, cutout_size), wcs=wcs)
+            norm = simple_norm(cutout.data, 'sqrt', percent=99.5)
+            ax.imshow(cutout.data, norm=norm, origin='lower', cmap='inferno')
+            if filter_names[i] == "1.3mm":
+                pixel_scale = pixel_scale_b6
+            else:
+                pixel_scale = pixel_scale_b3
+            print('pixel_scale:', pixel_scale)
+                  
+            circle = patches.Circle((cutout.data.shape[1]/2, cutout.data.shape[0]/2), radius=(0.1*u.arcsec/pixel_scale).to(u.deg/u.deg).value, edgecolor='cyan', facecolor='none', lw=2)
+            ax.add_patch(circle)
+            ax.text(0.1, 0.9, filter_names[i].upper(), transform=ax.transAxes, fontsize=12, bbox=dict(facecolor='white', alpha=0.7))
+            ax.axis('off')
+        except Exception as e:
+            print(img.shape)
+            pixcoord = skycoords.to_pixel(wcs)
+            print('pixcoord:', pixcoord)
+            print(f"Could not create cutout for filter {filter_names[i]}: {e}")
+            continue            
+        if not filter_names[i] in ['1.3mm', '3mm']:
+            if filter_names[i] in ['f140m', 'f162m', 'f182m', 'f187n', 'f210m', 'f335m', 'f360m', 'f405n', 'f410m', 'f480m']:
+                cat_nrca = catalogs_filters[f'{filter_names[i]}_nrca']
+                skycoord_nrca = Table.read(cat_nrca)['skycoord']
+                pixcoord_nrca = skycoord_nrca.to_pixel(cutout.wcs)
+                cat_nrcb = catalogs_filters[f'{filter_names[i]}_nrcb']
+                skycoord_nrcb = Table.read(cat_nrcb)['skycoord']
+                pixcoord_nrcb = skycoord_nrcb.to_pixel(cutout.wcs)
+                ax.scatter(pixcoord_nrca[0], pixcoord_nrca[1], facecolor='none', color='blue', s=10)
+                ax.scatter(pixcoord_nrcb[0], pixcoord_nrcb[1], facecolor='none', color='red', s=10)
+                
+            
+            else:
+                cat_miri = catalogs_filters[f'{filter_names[i]}']
+                skycoord_miri = Table.read(cat_miri)['skycoord']
+                pixcoord_miri = skycoord_miri.to_pixel(cutout.wcs)
+                ax.scatter(pixcoord_miri[0], pixcoord_miri[1], facecolor='none', color='green', s=10)
+        # limit xlim ylim as same as cutout size
+        ax.set_xlim(0, cutout.data.shape[1])
+        ax.set_ylim(0, cutout.data.shape[0])
+    # plot SED
+    colors = mpl.cm.viridis(np.linspace(0, 1, len(filter_names)))
+    fluxarr = []
+    for i, filter_name in enumerate(filter_names):
+        # Get the effective wavelength for each filter
+      
+
+        if filter_name == 's':
+            wav = 300000
+            flux = row_alma['flux_b3']
+        elif filter_name == '1.3mm':
+            wav = 130000
+            flux = row_alma['flux_b6']
+        elif filter_name == '3mm':
+            wav = 300000
+            flux = row_alma['flux_b3']
+        else:
+            print(filter_name)
+            
+            wav = int(filter_name[1:-1])
+            flux = row_jwst['flux_fit_' + filter_name]
+
+        ax_main.plot(wav / 100.0, flux, color = colors[i], marker='o', markersize=20, label=filter_name.upper())
+        ax_main.vlines(wav / 100.0, ymin=1e-10, ymax=1e10, colors=colors[i], linestyles='dashed', alpha=0.5)
+        fluxarr.append(flux)
+    fluxarr = np.array(fluxarr)
+    ax_main.set_xscale('log')
+    ax_main.set_yscale('log')
+    ax_main.set_xlabel('Wavelength (micron)')
+    ax_main.set_ylabel('Flux (Jy)')
+    ax_main.text(0.7, 0.9, f'SED for Source {label}', transform=ax_main.transAxes, fontsize=26)
+    ax_main.legend(fontsize=12)
+    ax_main.set_ylim(np.nanmin(fluxarr)*0.5, np.nanmax(fluxarr)*2)
+    plt.tight_layout()
+    plt.show()
+    plt.close()
+    
+    
+    
+
+
+

@@ -63,6 +63,12 @@ filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m',
 reg = regions.Regions.read(f'{basepath}/regions_/leftside_brick_zoom.reg')[0]
 regzoom = regions.Regions.read(f'{basepath}/regions_/leftside_brick_rezoom.reg')[0]
 
+field_edge_regions = regions.Regions.read(f'{basepath}/regions_/field_edges.reg')
+field_edge_regions_ = field_edge_regions[0]
+for reg in field_edge_regions[1:]:
+    field_edge_regions_ |= reg
+field_edge_regions = field_edge_regions_
+
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -121,28 +127,4 @@ def getmtime(x):
 #     fn = f'{basepath}/catalogs/crowdsource_nsky0_{module}_photometry_tables_merged.fits'
 #     print(f"For module {module} catalog {os.path.basename(fn)}, mod date is {getmtime(fn)}")
 
-
-def compute_molecular_column(unextincted_1m2, dmag_tbl, icemol='CO', filter1='F410M', filter2='F466N',
-                             maxcol=1e21, verbose=True):
-    dmags1 = dmag_tbl[filter1]
-    dmags2 = dmag_tbl[filter2]
-
-    comp = np.unique(dmag_tbl['composition'])[0]
-    # molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-    mols, comps = molscomps(comp)
-    mol_frac = comps[mols.index(icemol)] / sum(comps)
-
-    cols = dmag_tbl['column'] * mol_frac #molwt * mol_massfrac / (mol_wt_tgtmol)
-
-    dmag_1m2 = np.array(dmags1) - np.array(dmags2)
-
-    if verbose:
-        print(f"min(dmag1) = {np.nanmin(dmags1)}, max(dmag1) = {np.nanmax(dmags1)}")
-        print(f"min(unextincted_1m2) = {np.nanmin(unextincted_1m2)}, max(unextincted_1m2) = {np.nanmax(unextincted_1m2)}")
-
-    sortorder = np.argsort(dmag_1m2)
-    inferred_molecular_column = np.interp(unextincted_1m2,
-                                          xp=dmag_1m2[sortorder][cols<maxcol],
-                                          fp=cols[sortorder][cols<maxcol])
-
-    return inferred_molecular_column
+from icemodels.colorcolordiagrams import compute_molecular_column, compute_dmag_from_column

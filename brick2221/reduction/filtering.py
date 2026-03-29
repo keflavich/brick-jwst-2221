@@ -39,9 +39,14 @@ import pylab as pl
 from astropy.visualization import simple_norm
 
 import os
-os.environ['WEBBPSF_PATH'] = '/orange/adamginsburg/jwst/webbpsf-data/'
-import webbpsf
-from webbpsf.utils import to_griddedpsfmodel
+try:
+    import webbpsf
+    from webbpsf.utils import to_griddedpsfmodel
+    os.environ['WEBBPSF_PATH'] = '/orange/adamginsburg/jwst/webbpsf-data/'
+except ImportError:
+    import stpsf
+    from stpsf.utils import to_griddedpsfmodel
+    os.environ['STPSF_PATH'] = '/orange/adamginsburg/jwst/stpsf-data/'
 
 try:
     from paths import basepath

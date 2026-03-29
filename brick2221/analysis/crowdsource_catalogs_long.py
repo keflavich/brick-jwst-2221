@@ -1,12 +1,12 @@
 print("Starting crowdsource_catalogs_long", flush=True)
+import sys
 import glob
 import time
 import numpy
-import crowdsource
 import regions
 import numpy as np
 from functools import cache
-from astropy.convolution import convolve, Gaussian2DKernel
+from astropy.convolution import convolve, convolve_fft, Gaussian2DKernel, interpolate_replace_nans
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 from astropy.visualization import simple_norm
@@ -22,28 +22,30 @@ import requests
 import requests.exceptions
 import urllib3
 import urllib3.exceptions
+from jwst.datamodels import dqflags
 from photutils.detection import DAOStarFinder, IRAFStarFinder
-from photutils.psf import IntegratedGaussianPRF, extract_stars, EPSFStars, EPSFModel
+from photutils.psf import extract_stars, EPSFStars, EPSFBuilder
+# IntegratedGaussianPRF was renamed to CircularGaussianPRF in photutils 2.0
 try:
-    # version >=1.7.0, doesn't work: the PSF is broken (https://github.com/astropy/photutils/issues/1580?)
-    from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
-except:
-    # version 1.6.0, which works
-    from photutils.psf import BasicPSFPhotometry as PSFPhotometry, IterativelySubtractedPSFPhotometry as IterativePSFPhotometry, DAOGroup as SourceGrouper
+    from photutils.psf import CircularGaussianPRF as IntegratedGaussianPRF
+except ImportError:
+    from photutils.psf import IntegratedGaussianPRF
+# EPSFModel was deprecated in photutils 2.0 in favour of ImagePSF
 try:
-    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
-except:
-    from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D
-    from photutils.background import MMMBackground as LocalBackground
-
-from photutils.psf import EPSFBuilder
-from photutils.psf import extract_stars
+    from photutils.psf import ImagePSF as EPSFModel
+except ImportError:
+    from photutils.psf import EPSFModel
+# PSFPhotometry, IterativePSFPhotometry, SourceGrouper present since photutils 1.9
+from photutils.psf import PSFPhotometry, IterativePSFPhotometry, SourceGrouper
+# LocalBackground present since photutils 1.9
+from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackground, Background2D, LocalBackground
 
 import warnings
 from astropy.utils.exceptions import AstropyWarning, AstropyDeprecationWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 
+import crowdsource
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
 
@@ -55,9 +57,10 @@ pl.rcParams['image.origin'] = 'lower'
 
 import os
 print("Importing webbpsf", flush=True)
-import webbpsf
+import stpsf as webbpsf
+import stpsf
 print(f"Webbpsf version: {webbpsf.__version__}")
-from webbpsf.utils import to_griddedpsfmodel
+from stpsf.utils import to_griddedpsfmodel
 import datetime
 print("Done with imports", flush=True)
 
@@ -167,14 +170,14 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                   norm=simple_norm(data[zoomcut],
                                                    stretch='log',
                                                    max_percent=99.95,
-                                                   min_cut=0), cmap='gray')
+                                                   vmin=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("Data")
     pl.colorbar(mappable=im)
     im = pl.subplot(2,2,2).imshow(modsky[zoomcut],
                                   norm=simple_norm(modsky[zoomcut],
                                                    stretch='log',
                                                    max_percent=99.95,
-                                                   min_cut=0), cmap='gray')
+                                                   vmin=0), cmap='gray')
     pl.xticks([]); pl.yticks([]); pl.title("fit_im model+sky")
     pl.colorbar(mappable=im)
 
@@ -185,7 +188,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
 
     norm = (simple_norm(resid, stretch='asinh', max_percent=99.95, min_percent=0.5)
             if np.nanmin(resid) > 0 else
-            simple_norm(resid, stretch='log', max_cut=np.nanpercentile(resid, 99.95), min_cut=-2*rms))
+            simple_norm(resid, stretch='log', vmax=np.nanpercentile(resid, 99.95), vmin=-2*rms))
 
     im = pl.subplot(2,2,3).imshow(resid,
                                   norm=norm,
@@ -196,7 +199,7 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
                                   norm=simple_norm(data[zoomcut],
                                                    stretch='log',
                                                    max_percent=99.95,
-                                                   min_cut=0), cmap='gray')
+                                                   vmin=0), cmap='gray')
 
     if 'qf' in stars.colnames:
         # used in analysis
@@ -259,6 +262,12 @@ def save_photutils_results(result, ww, filename,
 
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
     if 'x_fit' in result.colnames:
+        if hasattr(result['x_fit'], 'mask'):
+            bad = result['x_fit'].mask
+        else:
+            bad = ~np.isfinite(result['x_fit'])
+        print(f'Found and removed {np.sum(bad)} bad fits out of {len(result)} total [fit resulted in masked x_fit, y_fit]', flush=True)
+        result = result[~bad]
         coords = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         result['skycoord_centroid'] = coords
     elif 'xcentroid' in result.colnames:
@@ -274,9 +283,10 @@ def save_photutils_results(result, ww, filename,
     if options.each_exposure:
         result.meta['exposure'] = exposure_
     if visitid_ is not None:
-        result.meta['visit'] = int(visitid_[-3:])
+        result.meta['visit'] = int(visitid_[-3:]) if visitid_ != '' else None
     if vgroupid_ is not None:
-        result.meta['vgroup'] = int(vgroupid_[-4:])
+        result.meta['vgroup'] = int(vgroupid_[-4:]) if vgroupid_ != '' else None
+        
     result.meta['filename'] = filename
     result.meta['filter'] = filtername
     result.meta['module'] = module
@@ -298,9 +308,15 @@ def save_photutils_results(result, ww, filename,
 
     tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_{basic_or_iterative}.fits"
 
-    result.write(tblfilename, overwrite=True)
+    # FITS header keywords are limited to 8 characters. photutils 2.x stores
+    # configuration objects (localbkg_estimator, psf_model, fitter, etc.) in
+    # result.meta with long key names that cause a ValueError on write.
+    long_keys = [k for k in result.meta if len(k) > 8]
+    for k in long_keys:
+        result.meta[k[:8]] = result.meta[k]
+        del result.meta[k]
 
-    print("tblfilename={tblfilename}, filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
+    print(f"tblfilename={tblfilename}, filename={filename}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
 
     result.write(tblfilename, overwrite=True)
     print(f"Completed {basic_or_iterative} photometry, and wrote out file {tblfilename}")
@@ -385,7 +401,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
 def load_data(filename):
     fh = fits.open(filename)
     im1 = fh
-    data = im1[1].data
+    data = im1['SCI'].data
     try:
         wht = im1['WHT'].data
     except KeyError:
@@ -424,6 +440,7 @@ def get_psf_model(filtername, proposal_id, field,
     #         print(f"PSF IS A LIST OF GRIDS!!! this is incompatible with the return from nrc.psf_grid")
     #         grid = grid[0]
 
+    # TODO: factor this out into its own downloading function and make it work with NIRCAM and MIRI both
     if use_webbpsf:
         with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
             api_token = fh.read().strip()
@@ -556,7 +573,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     default='F466N,F405N,F410M',
                     help="filter name list", metavar="filternames")
     parser.add_option("-m", "--modules", dest="modules",
-                    default='nrca,nrcb,merged,merged-reproject',
+                    default='nrca,nrcb,merged',
                     help="module list", metavar="modules")
     parser.add_option("-d", "--desaturated", dest="desaturated",
                     default=False,
@@ -710,7 +727,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        visit_id=None, vgroup_id=None,
                        bg_boxsizes=None,
                        use_webbpsf=False,
+                       nsigma=5,
                        pupil='clear'):
+    """
+    nsigma is the threshold to multiply the error estimate by to get the detection threshold
+    """
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
@@ -788,11 +809,29 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     filtered_errest = np.nanmedian(err)
     print(f'Error estimate for DAO from median(err): {filtered_errest}', flush=True)
 
-    daofind_tuned = DAOStarFinder(threshold=5 * filtered_errest,
+    daofind_tuned = DAOStarFinder(threshold=nsigma * filtered_errest,
                                   fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
                                   sharplo=0.30, sharphi=1.40)
     print("Finding stars with daofind_tuned", flush=True)
-    finstars = daofind_tuned(np.nan_to_num(data))
+
+    # empirically determined in debugging session with Taehwa on 2025-12-09:
+    # with just nan_to_num, setting pixels to zero, some stars got "erased"
+    kernel = Gaussian2DKernel(x_stddev=fwhm_pix/2.355)
+    mask = np.isnan(data)
+    if 'DQ' in im1:
+        dqarr = im1['DQ'].data
+        is_saturated = (dqarr & dqflags.pixel['SATURATED']) != 0
+        # we want original data_ to be untouched for imshowing diagnostics etc.
+        data_ = data.copy()
+        data_[is_saturated] = np.nan
+        mask |= is_saturated
+    else:
+        data_ = data
+
+    nan_replaced_data = interpolate_replace_nans(data_, kernel, convolve=convolve_fft)
+
+    finstars = daofind_tuned(nan_replaced_data,
+                             mask=mask)
 
     print(f"Found {len(finstars)} with daofind_tuned", flush=True)
     # for diagnostic plotting convenience
@@ -862,7 +901,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         if False: # why do the unweighted version?
             print()
             print("starting crowdsource unweighted", flush=True)
-            results_unweighted = fit_im(np.nan_to_num(data), psf_model, weight=np.ones_like(data)*np.nanmedian(weight),
+            results_unweighted = fit_im(nan_replaced_data, psf_model,
+                                        weight=np.ones_like(data)*np.nanmedian(weight)*(~mask),
                                         # psfderiv=np.gradient(-psf_initial[0].data),
                                         dq=dq,
                                         nskyx=0, nskyy=0, refit_psf=False, verbose=True,
@@ -920,11 +960,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 print()
                 print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky} & fpsf={fpsf} & blur={blur_}")
                 print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
-                results = fit_im(np.nan_to_num(data), psf_model, weight=weight,
-                                    nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
-                                    dq=dq,
-                                    **crowdsource_default_kwargs
-                                    )
+                results = fit_im(nan_replaced_data, psf_model, weight=weight * (~mask),
+                                 nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
+                                 dq=dq,
+                                 **crowdsource_default_kwargs
+                                 )
                 print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results
                 stars = save_crowdsource_results(results, ww, filename,
@@ -984,7 +1024,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        (finstars['sharpness'] < 0.8))
 
             print(f"Extracting {epsfsel.sum()} stars")
-            stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars[epsfsel], size=25)
+            # TODO: we might need to figure out how to tell extract_stars what's masked
+            stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=25)
 
             # reject stars with negative pixels
             #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
@@ -1024,7 +1065,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                             )
 
         print("About to do BASIC photometry....")
-        result = phot_basic(np.nan_to_num(data))
+        result = phot_basic(nan_replaced_data, mask=mask)
+        # I want to use daofind params in the future
+        result['roundness1'] = finstars['roundness1']
+        result['roundness2'] = finstars['roundness2']
+        result['sharpness'] = finstars['sharpness']
         print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
 
         # remove negative-peak and zero-peak sources (they affect the residuals badly)
@@ -1051,7 +1096,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
-        modsky = phot_basic.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        modsky = phot_basic.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
         residual = data - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
@@ -1105,7 +1150,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        (finstars['sharpness'] < 0.8))
 
             print(f"Extracting {epsfsel.sum()} stars")
-            stars = extract_stars(NDData(data=np.nan_to_num(data)), finstars[epsfsel], size=35)
+            stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=35)
 
             # reject stars with negative pixels
             #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
@@ -1143,7 +1188,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                           )
 
         print("About to do ITERATIVE photometry....")
-        result2 = phot_iter(data)
+        result2 = phot_iter(nan_replaced_data, mask=mask)
         print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
         # need to flag stars near negative stars, so we don't want to exclude them _yet_
@@ -1170,7 +1215,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['y'] = stars['y_fit']
 
         print("Creating iterative residual")
-        modsky = phot_iter.make_model_image(data.shape, (21, 21), include_localbkg=False)
+        modsky = phot_iter.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
         residual = data - modsky
         print("finished iterative residual")
         fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(

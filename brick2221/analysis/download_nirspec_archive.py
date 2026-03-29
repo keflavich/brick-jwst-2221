@@ -19,7 +19,7 @@ Observations.download_products(products)
 # 1939: galcen
 # 3222: IRAS16293 "Cask-strength clouds: high percentage of methanol and HDO ices"
 # 2151: only MIRI MRS
-for proposal_id in [1959, 2640, 1960, 1854, 3222, 3702, 4358, 5437, 5804, 5064, 6095, 6161, 1309, 1611, 3222, 5552, 1939, 1236, 1257, 1186, 1960, 1290, 5791, 5437]:
+for proposal_id in [1959, 2640, 1960, 1854, 2770, 3222, 3702, 4358, 5437, 5804, 5064, 6095, 6161, 1309, 1611, 3222, 5552, 1939, 1236, 1257, 1186, 1960, 1290, 5791, 5437]:
     obstable = Observations.query_criteria(project='JWST', instrument_name='NIRSpec*', proposal_id=proposal_id)
     if len(obstable) > 0:
         for ii in range(len(obstable)):

@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import sys
 import importlib as imp
 import regions
@@ -429,6 +430,8 @@ def load_table(basetable, ww, verbose=False):
     sel = reg.contains(basetable['skycoord_f410m'], ww)
     sel &= basetable['sep_f466n'].quantity < 0.1*u.arcsec
     sel &= basetable['sep_f405n'].quantity < 0.1*u.arcsec
+    # should work but doesn't.
+    # sel &= ~field_edge_regions.contains(basetable['skycoord_f410m'], ww)
 
     def ccds_withiso(basetable=basetable, sel=sel, exclude=exclude, **kwargs):
         return plot_tools.ccds_withiso(basetable=basetable, sel=sel, exclude=exclude, **kwargs)
@@ -538,6 +541,18 @@ def load_table(basetable, ww, verbose=False):
 
         if verbose:
             print(f"Found {two_stars_in_same_pixel.sum()} stars that were doubled up.", {key: len(val) for key, val in doubled.items()})
+
+    # exclude all field-edge sources
+    # should work but doesn't.
+    # for filt in filternames:
+    #     ok2221 &= ~field_edge_regions.contains(basetable[f'skycoord_{filt}'], ww)
+
+    # There are some clearly saturated sources that aren't getting flagged appropriately
+    # this cut is similar to but less aggressive than the badblue note above
+    bad_to_exclude = (basetable['mag_ab_f410m'] < 13.7) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -0.2) )
+    bad_to_exclude |= (basetable['mag_ab_f410m'] > 17) & ( (basetable['mag_ab_f405n'] - basetable['mag_ab_f410m'] < -1) )
+    bad_to_exclude |= (basetable['mag_ab_f182m'] < 15.5)
+    ok2221 &= ~bad_to_exclude
 
     assert 'ok2221' in locals()
     return locals()
@@ -699,7 +714,8 @@ def main():
         from brick2221.analysis.analysis_setup import (fh_merged_reproject as fh,
                                     ww410_merged_reproject as ww410,
                                     ww410_merged_reproject as ww)
-        result = load_table_dao(basetable_merged_reproject_dao_iter_bg_epsf, ww=ww)
+        # 2025-07-27: changed from load_table_dao to load_table but not sure if callspec has changed
+        result = load_table(basetable_merged_reproject_dao_iter_bg_epsf, ww=ww)
         globals().update(result)
         basetable = basetable_merged_reproject_dao_iter_bg_epsf
         print("Loaded merged-reproject-iterative-bg-epsf")
@@ -710,6 +726,58 @@ def main():
 
     assert 'blue_410m405_466' in globals()
     return globals()
+
+
+def make_downselected_table_20250721():
+    if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits'):
+        basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits')
+        print("Loaded merged1182_daophot_basic_indivexp (2025-07-21 version)", flush=True)
+    else:
+        from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from brick2221.analysis.selections import load_table as load_table_
+        basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+        result = load_table_(basetable_merged1182_daophot, ww=ww)
+        ok2221 = result['ok2221']
+        ok1182 = result['ok1182']
+        #globals().update(result)
+        basetable = basetable_merged1182_daophot[ok2221 | ok1182]
+        del result
+        print("Loaded merged1182_daophot_basic_indivexp")
+
+        try:
+            basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20250721.fits', overwrite=False)
+        except:
+            pass
+
+    return basetable
+
+
+def make_downselected_table_20251211():
+    """
+    Rerun of full each-field cataloging after correcting the nan-pixels-hide-stars issue Taehwa and I identified.
+
+    The new cataloging approach infills the nans with interpolation (instead of zeros) before running starfinder.
+    """
+    if os.path.exists(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits'):
+        basetable = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits')
+        print("Loaded merged1182_daophot_basic_indivexp (2025-12-11 version)", flush=True)
+    else:
+        from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        from brick2221.analysis.selections import load_table as load_table_
+        basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged.fits')
+        result = load_table_(basetable_merged1182_daophot, ww=ww)
+        ok2221 = result['ok2221']
+        ok1182 = result['ok1182']
+        basetable = basetable_merged1182_daophot[ok2221 | ok1182]
+        del result
+        print("Loaded merged1182_daophot_basic_indivexp")
+
+        try:
+            basetable.write(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits', overwrite=False)
+        except:
+            pass
+
+    return basetable
 
 
 if __name__ == "__main__":

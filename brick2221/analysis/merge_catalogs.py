@@ -24,6 +24,8 @@ from astroquery.svo_fps import SvoFps
 from astropy.stats import sigma_clip, mad_std
 import dask
 import dask.array
+import yaml # DEBUG 2025-12-11
+import yaml.representer # DEBUG 2025-12-11
 
 from tqdm.auto import tqdm
 
@@ -32,6 +34,9 @@ pl.rcParams['figure.facecolor'] = 'w'
 pl.rcParams['image.origin'] = 'lower'
 pl.rcParams['figure.figsize'] = (10, 8)
 pl.rcParams['figure.dpi'] = 100
+
+# https://en.wikipedia.org/wiki/AB_magnitude
+ABMAG_OFFSET = 8.90
 
 filternames = filternames_narrow = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m']
 all_filternames = ['f410m', 'f212n', 'f466n', 'f405n', 'f187n', 'f182m', 'f444w', 'f356w', 'f200w', 'f115w']
@@ -61,6 +66,13 @@ def getmtime(x):
     return datetime.datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M:%S')
 
 
+def tryint(x):
+    try:
+        return int(x)
+    except:
+        return -1
+
+
 def sanity_check_individual_table(tbl):
     wl = filtername = tbl.meta['filter']
     print(f"SANITY CHECK {wl}")
@@ -76,7 +88,8 @@ def sanity_check_individual_table(tbl):
     flux_jy = tbl['flux_jy'][finite_fluxes].quantity
     abmag_tbl = tbl['mag_ab'][finite_fluxes].quantity
 
-    abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+    vegamag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+    abmag = (-2.5 * np.log10(flux_jy / u.Jy) + ABMAG_OFFSET) * u.mag
 
     print(f'Units of abmag columns are: abmag={abmag.unit}, abmag_tbl={abmag_tbl.unit}')
     assert abmag.unit == u.mag
@@ -154,8 +167,13 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
     assert match.sum() == 1
     row = offsets_table[match]
 
-    raoffset = tbl.meta['RAOFFSET'] * u.arcsec
-    decoffset = tbl.meta['DEOFFSET'] * u.arcsec
+    if 'RAOFFSET' in tbl.meta:
+        raoffset = tbl.meta['RAOFFSET'] * u.arcsec
+        decoffset = tbl.meta['DEOFFSET'] * u.arcsec
+    else:
+        # not measured, so we have to assume zero
+        raoffset = 0 * u.arcsec
+        decoffset = 0 * u.arcsec
 
     dra = row['dra'][0]*u.arcsec
     ddec = row['ddec'][0]*u.arcsec
@@ -172,7 +190,7 @@ def shift_individual_catalog(tbl, offsets_table, verbose=True):
 
 
 def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaverage=nanaverage_dask,
-                        min_offset=0.01*u.arcsec,
+                        min_offset=0.10*u.arcsec,
                         offsets_table=None,
                         verbose=True
                         ):
@@ -211,19 +229,25 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         skycoord_colname = 'skycoord_centroid'
         column_names = (flux_colname, flux_error_colname, 'qfit', 'cfit', 'flux_init', 'flags', 'local_bkg', 'iter_detected', 'group_id', 'group_size', 'ra', 'dec', 'dra', 'ddec', )
 
+    # Loop 1: Add new sources, which are any that don't have a match in the existing catalog closer than min_offset
+    # this loop _only_ adds new sources
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
+        # corner case: some fits resulted in flagged x, y that propagate through.  A parallel edit to crowdsource_catalogs_long.py removes these at the source, but I'm adding a catch here too
+        bad = np.isnan(crds.ra) | np.isnan(crds.dec)
+        if np.any(bad):
+            tbl = tbl[~bad]
+            crds = crds[~bad]
+            tbls[ii] = tbl
+
         if ii == 0:
             basecrds = crds
         else:
             matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
             reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
 
-            # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-            # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-            # even if the match is not mutual, consider it the same star as an existing one because it's too close.
-            # keep = (sep > max_offset) | ((~mutual_matches) & (sep  > min_offset))
-            keep = sep > max_offset
+            # add new sources to the cat iff their separation from an existing source in the catalog is >min
+            keep = sep > min_offset
 
             newcrds = crds[keep]
             basecrds = SkyCoord([basecrds, newcrds])
@@ -231,21 +255,8 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
         print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
 
-        # correct for missing data [should only be needed for a brief period in July 2024]
-        # if 'dra' not in tbl.colnames:
-        #     with warnings.catch_warnings():
-        #         warnings.simplefilter('ignore')
-        #         ww = wcs.WCS(fits.getheader(tbl.meta['FILENAME'], ext=('SCI', 1)))
-        #     pixscale = ww.proj_plane_pixel_area().to(u.arcsec**2)**0.5
-        #     if dao:
-        #         tbl['dra'] = tbl['x_err'] * pixscale.value
-        #         tbl['ddec'] = tbl['y_err'] * pixscale.value
-        #     else:
-        #         # in crowdsource, dy, dx are swapped if we haven't done this fix
-        #         tbl['dra'] = tbl['dy'] * pixscale.value
-        #         tbl['ddec'] = tbl['dx'] * pixscale.value
-
     # do one loop of re-matching
+    # We use only mutual best-matches for the realignment measurement to avoid spurious matches, e.g., if there are three stars in a line, we only want to match two if they are each other's best match
     print("Starting re-matching", flush=True)
     for ii, tbl in enumerate(tbls):
         crds = tbl[skycoord_colname]
@@ -260,7 +271,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         decdiff = (crds.dec[reverse_match_inds[mutual_reverse_matches]] - basecrds[mutual_reverse_matches].dec).to(u.arcsec)
 
         # don't allow sep=0, since that's self-reference.  Use stringent qf, fracflux
-        # print(f"len(crds) = {len(crds)} len(basecrds) = {len(basecrds)} len(match_inds)={len(match_inds)} match_inds.max={match_inds.max()} len(reverse_match_inds)={len(reverse_match_inds)} reverse_match_inds.max={reverse_match_inds.max()} len(mutual_matches)={len(mutual_matches)}")
+        # DEBUG print(f"len(crds) = {len(crds)} len(basecrds) = {len(basecrds)} len(match_inds)={len(match_inds)} match_inds.max={match_inds.max()} len(reverse_match_inds)={len(reverse_match_inds)} reverse_match_inds.max={reverse_match_inds.max()} len(mutual_matches)={len(mutual_matches)}")
         if dao:
             oksep = (reverse_sep[mutual_reverse_matches] < max_offset) & (reverse_sep[mutual_reverse_matches] != 0) & (tbl[reverse_match_inds[mutual_reverse_matches]][qfcn] < 0.40) & (tbl[reverse_match_inds[mutual_reverse_matches]][ffcn] < 0.40)
         else:
@@ -273,8 +284,13 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         tbl.meta['ddec_offset'] = dmedsep_dec
 
         with fits.open(tbl.meta['FILENAME']) as fh:
-            dra_header = fh['SCI'].header['RAOFFSET']
-            ddec_header = fh['SCI'].header['DEOFFSET']
+            if 'RAOFFSET' in fh['SCI'].header:
+                dra_header = fh['SCI'].header['RAOFFSET']
+                ddec_header = fh['SCI'].header['DEOFFSET']
+            else:
+                # assume zero
+                dra_header = 0.0
+                ddec_header = 0.0
 
         print(f"Exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']} was offset by {medsep_ra.to(u.marcsec):10.3f}+/-{dmedsep_ra.to(u.marcsec):7.3f},"
               f" {medsep_dec.to(u.marcsec):10.3f}+/-{dmedsep_dec.to(u.marcsec):7.3f} based on {oksep.sum()} matches.  dra={dra_header:7.5g} ddec={ddec_header:7.5g}")
@@ -293,17 +309,13 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
                 basecrds = crds
             else:
                 matches, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-                # reverse_matches, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
-
-                # mutual_reverse_matches = (matches[reverse_matches] == np.arange(len(reverse_matches)))
-                # mutual_matches = (reverse_matches[matches] == np.arange(len(matches)))
-                # keep = (sep > max_offset) | (~mutual_matches)
-                keep = (sep > max_offset)
+                
+                # add new sources to the cat iff their separation from an existing source in the catalog is >min
+                keep = (sep > min_offset)
 
                 newcrds = crds[keep]
                 basecrds = SkyCoord([basecrds, newcrds])
                 print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE' if 'MODULE' in tbl.meta else '']}")
-                # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
 
     print(f"There are a total of {len(basecrds)} sources in the base coordinate list after rematching")
 
@@ -313,7 +325,11 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     # this segment, from arrays = down to the end, uses a lot of memory
 
     arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in column_names if key in tbls[0].colnames or key in ('skycoord', 'ra', 'dec')}
+              for key in column_names if key in tbls[0].colnames 
+              or key in ('skycoord', 'ra', 'dec')}
+    arrays['detector'] = np.empty([len(basecrds), len(tbls)], dtype='U6')
+    arrays['visit'] = np.empty([len(basecrds), len(tbls)], dtype=int)
+    arrays['exposure'] = np.empty([len(basecrds), len(tbls)], dtype=int)
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
         crds = tbl[skycoord_colname]
@@ -327,14 +343,19 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         keep = (sep < max_offset) & (mutual_matches)
 
         for key in arrays:
-            if key not in ('skycoord', skycoord_colname, 'ra', 'dec'):
-                arrays[key][match_inds[keep], ii] = tbl[key][keep]
+            if key not in ('skycoord', skycoord_colname, 'ra', 'dec', 'detector', 'visit', 'exposure'):
+                if key in tbl.colnames:
+                    arrays[key][match_inds[keep], ii] = tbl[key][keep]
         arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
         arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
+        arrays['detector'][match_inds[keep], ii] = tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''
+        arrays['visit'][match_inds[keep], ii] = tbl.meta['VISIT'] if 'VISIT' in tbl.meta else -1
+        arrays['exposure'][match_inds[keep], ii] = tryint(tbl.meta['EXPOSURE'][-5:]) if 'EXPOSURE' in tbl.meta else ''
         print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]", flush=True)
 
     print("Compiling arrays into table", flush=True)
-    print(f"Column names are {arrays.keys()} and should be {column_names}", flush=True)
+    print(f"Table lengths are {len(tbl) for tbl in tbls}", flush=True)
+    print(f"Column names are {arrays.keys()} and should be {column_names} (plus detector, visit, exposure)", flush=True)
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
     del arrays['dec']
@@ -495,7 +516,11 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             meta[f'{wl[1:-1]}pxdg'.upper()] = tbl.meta['pixelscale_deg2']
             meta[f'{wl[1:-1]}pxas'.upper()] = tbl.meta['pixelscale_arcsec']
             for key in tbl.meta:
-                meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
+                if isinstance(tbl.meta[key], (str, int, float)):
+                    meta[f'{wl[1:-1]}{key[:4]}'.upper()] = tbl.meta[key]
+                else:
+                    # specifically to handle the case of astropy.io.fits.card objects that are unserializable
+                    meta[f'{wl[1:-1]}{key[:4]}'.upper()] = str(tbl.meta[key])
 
             print(f"Basetable has length {len(basetable)} and ncols={len(basetable.colnames)} after stack")
             print(f"merging tables step: max flux for {wl} in merged table is {basetable['flux_'+wl].max()}"
@@ -533,10 +558,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         f405to410_scale = 0.11
         basetable.add_column(basetable['flux_jy_f410m'] - basetable['flux_jy_f405n'] * f405to410_scale, name='flux_jy_410m405')
 
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_ab_410m405')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405']) + ABMAG_OFFSET, name='mag_ab_410m405')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_vega_410m405')
         # Then subtract that remainder back from the F405 band to get the continuum-subtracted F405
         basetable.add_column(basetable['flux_jy_f405n'] - basetable['flux_jy_410m405'], name='flux_jy_405m410')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_ab_405m410')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410']) + ABMAG_OFFSET, name='mag_ab_405m410')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_vega_405m410')
 
         # Line-subtract the F182 continuum band
         # 0.11 is the theoretical bandwidth fraction
@@ -544,11 +571,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # 0.18 is closer to the histogram mode
         f187to182_scale = 0.11
         basetable.add_column(basetable['flux_jy_f182m'] - basetable['flux_jy_f187n'] * f187to182_scale, name='flux_jy_182m187')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_ab_182m187')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187']) + ABMAG_OFFSET, name='mag_ab_182m187')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_vega_182m187')
         # Then subtract that remainder back from the F187 band to get the continuum-subtracted F187
         basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_ab_187m182')
-
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182']) + ABMAG_OFFSET, name='mag_ab_187m182')
+        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_vega_187m182')
         """ # this adds to the file size too much
         # Add some important colors
 
@@ -601,9 +629,35 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         basetable.write(f"{tablename}.fits", overwrite=True)
         print(f"Done writing table {tablename}.fits in {time.time()-t0:0.1f} seconds", flush=True)
 
+        # strip out bad metadata that the yaml serializer can't handle
+        for k, v in basetable.meta.items():
+            # Check for astropy.io.fits.card.Undefined objects explicitly
+            try:
+                yaml.dump({k: v}, )
+            except Exception as ex:
+                if isinstance(v, fits.card.Undefined):
+                    basetable.meta[k] = str(v)
+                    print("BAD META (Undefined):", k, type(v), v)
+                    continue
+                else:
+                    basetable.meta[k] = str(v)
+                    print("BAD META:", k, type(v), v, ex)
+
         t0 = time.time()
         # takes FOR-EV-ER
-        basetable.write(f"{tablename}.ecsv", overwrite=True)
+        try:
+            basetable.write(f"{tablename}.ecsv", overwrite=True)
+        except yaml.representer.RepresenterError:
+            import astropy
+            print("astropy version: ", astropy.__version__)
+            # https://github.com/astropy/astropy/pull/18677 ?
+            # DEBUG
+            print("YAML RepresenterError: trying again after removing masks")
+            # for colname in basetable.colnames:
+            #     print("DEBUG Column: ", colname, type(basetable[colname]), hasattr(basetable[colname], 'mask'))
+            # for key in basetable.meta:
+            #     print("DEBUG Meta: ", key, type(basetable.meta[key]), basetable.meta[key])
+            raise
         print(f"Done writing table {tablename}.ecsv in {time.time()-t0:0.1f} seconds", flush=True)
 
         # keep any rows with at least two qf cut pass
@@ -669,7 +723,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
               for visitid in range(1, max_visitid+1)
               for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
+                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_vgroup*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
                                  f"_{method_suffix}{suffix}.fits")
               ]
     tblfns = sorted(set(tblfns))
@@ -925,7 +979,8 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
         with np.errstate(all='ignore'):
             flux_jy = (flux * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
-            abmag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+            vegamag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
+            abmag = (-2.5 * np.log10(flux_jy) + ABMAG_OFFSET) * u.mag
             try:
                 eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             except KeyError:
@@ -933,6 +988,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
             abmag_err = 2.5 / np.log(10) * eflux_jy / flux_jy * u.mag
         tbl.add_column(Column(flux_jy, name='flux_jy', unit=u.Jy))
         tbl.add_column(Column(abmag, name='mag_ab', unit=u.mag))
+        tbl.add_column(Column(vegamag, name='mag_vega', unit=u.mag))
         tbl.add_column(Column(eflux_jy, name='eflux_jy', unit=u.Jy))
         tbl.add_column(Column(abmag_err, name='emag_ab', unit=u.mag))
 
@@ -1015,9 +1071,11 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
     except KeyError:
         eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    abmag = -2.5*np.log10(flux_jy / zeropoint) * u.mag
+    abmag = (-2.5*np.log10(flux_jy) + ABMAG_OFFSET) * u.mag
+    abvega = -2.5*np.log10(flux_jy / zeropoint) * u.mag
     abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
     satstar_cat['mag_ab'] = abmag
+    satstar_cat['mag_vega'] = abvega
     satstar_cat['emag_ab'] = abmag_err
 
     idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
@@ -1050,6 +1108,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
             cat['dy'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        cat['mag_vega'][idx_cat] = abvega[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
 
         # ID the stars that are saturated-only (not INCluded in the orig cat)
@@ -1088,6 +1147,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
             cat['y_err'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
         cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        cat['mag_vega'][idx_cat] = abvega[idx_sat]
         cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
 
         # ID the stars that are saturated-only (not INCluded in the orig cat)
@@ -1149,6 +1209,10 @@ def main():
                       default=False,
                       action="store_true",
                       help="skip_daophot", metavar="skip_daophot")
+    parser.add_option("--strict-require-blur", dest="strict_require_blur",
+                      default=False,
+                      action="store_true",
+                      help="Fail if blur files are not found?", metavar="strict_require_blur")
     parser.add_option("--make-refcat", dest='make_refcat', default=False,
                       action='store_true')
     parser.add_option('--max-expnum', dest='max_expnum', default=24, type='int')
@@ -1197,20 +1261,26 @@ def main():
                                                       'daoiterative': '_iterative',
                                                       'iterative': '_iterative',
                                                       }[method]
-                                            merge_individual_frames(module=module,
-                                                                    desat=desat,
-                                                                    filtername=filtername,
-                                                                    progid=progid,
-                                                                    bgsub=bgsub,
-                                                                    epsf=epsf,
-                                                                    fitpsf=fitpsf,
-                                                                    blur=blur,
-                                                                    suffix=suffix,
-                                                                    target=target,
-                                                                    exposure_numbers=np.arange(1, options.max_expnum + 1),
-                                                                    offsets_table=offsets_tables[progid],
-                                                                    method=method,
-                                                                    basepath=basepath)
+                                            try:
+                                                merge_individual_frames(module=module,
+                                                                        desat=desat,
+                                                                        filtername=filtername,
+                                                                        progid=progid,
+                                                                        bgsub=bgsub,
+                                                                        epsf=epsf,
+                                                                        fitpsf=fitpsf,
+                                                                        blur=blur,
+                                                                        suffix=suffix,
+                                                                        target=target,
+                                                                        exposure_numbers=np.arange(1, options.max_expnum + 1),
+                                                                        offsets_table=offsets_tables[progid],
+                                                                        method=method,
+                                                                        basepath=basepath)
+                                            except ValueError as ex:
+                                                if blur and not options.strict_require_blur:
+                                                    print("Skipping missing blur files")
+                                                else:
+                                                    raise ex
                                             print(f"Finished merge_individual_frames {suffix} {progid} {filtername} {method}")
                                             if os.getenv('SLURM_ARRAY_TASK_ID') is not None:
                                                 singlefield_done = True
@@ -1262,26 +1332,35 @@ def main():
                             if not options.skip_daophot:
                                 t0 = time.time()
                                 print("DAOPHOT")
+                                print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                 try:
+                                    merge_daophot(daophot_type='basic', module=module, desat=desat,
+                                                  bgsub=bgsub, epsf=epsf,
+                                                  target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
+                                except Exception as ex:
                                     print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
-                                    merge_daophot(daophot_type='basic', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
-                                                  target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
-                                except Exception as ex:
-                                    print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}")
-                                    exc_tb = sys.exc_info()[2]
-                                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}")
-                                    raise ex
+                                    if blur and not options.strict_require_blur:
+                                        print("Skipping missing blur files")
+                                    else:
+                                        print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}", flush=True)
+                                        exc_tb = sys.exc_info()[2]
+                                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                                        print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
+                                        print(f"Exception {ex} was in {fname} line {exc_tb.tb_next.tb_lineno}", flush=True)
+                                        raise ex
                                 try:
-                                    print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}')
-                                    merge_daophot(daophot_type='iterative', module=module, desat=desat, bgsub=bgsub, epsf=epsf,
+                                    print(f'daophot iterative {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
+                                    merge_daophot(daophot_type='iterative', module=module, desat=desat,
+                                                  bgsub=bgsub, epsf=epsf,
                                                   target=target, basepath=basepath, blur=blur, indivexp=options.merge_singlefields)
                                 except Exception as ex:
-                                    print(f"Exception: {ex}, {type(ex)}, {str(ex)}")
-                                    exc_tb = sys.exc_info()[2]
-                                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                    print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
+                                    if blur and not options.strict_require_blur:
+                                        print("Skipping missing blur files")
+                                    else:
+                                        print(f"Exception running merge daophot iterative: {ex}, {type(ex)}, {str(ex)}", flush=True)
+                                        exc_tb = sys.exc_info()[2]
+                                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                                        print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}", flush=True)
                                 print(f'dao phase done.  time elapsed={time.time()-t0}')
                                 print()
 
