@@ -38,6 +38,7 @@ import numpy as np
 
 import pylab as pl
 from cycler import cycler
+import re
 
 
 # Load mix bases
@@ -54,6 +55,41 @@ water_ammonia = read_ocdb_file(f'{optical_constants_cache_dir}/265_H2O:NH3_(4:1)
 co_hudgins = read_ocdb_file(f'{optical_constants_cache_dir}/85_CO_(1)_10K_Hudgins.txt')
 
 
+def _format_author_label(author):
+    author = str(author).strip()
+    match = re.fullmatch(r'([A-Za-z]+)(\d{4})([A-Za-z]?)', author)
+    if match:
+        surname, year, suffix = match.groups()
+        return f'{surname}+ {year}{suffix}'
+    return author
+
+
+def _format_species_label(species):
+    species = str(species).strip()
+    return species.replace('CO2', 'CO$_2$')
+
+
+def _format_temperature_label(temperature):
+    temperature = str(temperature).strip()
+    if temperature.lower().endswith('k'):
+        temperature = temperature[:-1].strip()
+    if re.fullmatch(r'[+-]?\d+(?:\.\d+)?', temperature):
+        temperature = f'{float(temperature):g}'
+    return f'{temperature}K'
+
+
+def _opacity_label(tb):
+    if 'author' in tb.meta:
+        author = _format_author_label(tb.meta['author'])
+        composition = _format_species_label(tb.meta['composition'])
+        temperature = _format_temperature_label(tb.meta['temperature'])
+        return f'{author} {composition} {temperature}'
+
+    molecule = _format_species_label(tb.meta['molecule'])
+    temperature = _format_temperature_label(tb.meta['temperature'])
+    return f'{tb.meta["index"]} {molecule} {tb.meta["ratio"]} {temperature}'
+
+
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, water_ammonia),
                         colors=None,
                         ylim=(1e-21, 6e-18)):
@@ -65,9 +101,7 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
         opacity = ((kk.quantity * tb['Wavelength'].to(u.cm**-1, u.spectral()) * 4 * np.pi / (1*u.g/u.cm**3 / (molwt)))).to(u.cm**2)
         pl.plot(tb['Wavelength'],
                 opacity,
-                label=f'{tb.meta["author"]} {tb.meta["composition"]} {tb.meta["temperature"]}'
-                        if 'author' in tb.meta else
-                    f'{tb.meta["index"]} {tb.meta["molecule"]} {tb.meta["ratio"]} {tb.meta["temperature"]}',
+            label=_opacity_label(tb),
                 linestyle='-',
                 color=colors[ii] if colors is not None else None,
                 )
