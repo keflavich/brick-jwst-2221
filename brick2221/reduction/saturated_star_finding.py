@@ -82,13 +82,7 @@ def get_psf(header, path_prefix='.', use_merged_psf_for_merged=False):
     if detector.lower() == 'mirimage':
         detector = 'mirim'
 
-    detector_upper = detector.upper()
-    if header['INSTRUME'].lower() == 'nircam':
-        if detector_upper.startswith('NRCA'):
-            psfgen.module = 'A'
-        elif detector_upper.startswith('NRCB'):
-            psfgen.module = 'B'
-    psfgen.detector = detector_upper
+    psfgen.detector = detector.upper()
 
     psf_fn = f'{path_prefix}/{instrument.lower()}_{detector.lower()}_{filtername.lower()}_fovp{fov_pixels}_samp{oversample}_npsf{npsf}.fits'
 
