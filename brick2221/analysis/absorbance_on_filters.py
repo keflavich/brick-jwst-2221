@@ -97,7 +97,7 @@ def _opacity_label(tb):
     return f'{tb.meta["index"]} {molecule} {tb.meta["ratio"]} {temperature}'
 
 
-def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, nh4p, water_ammonia),
+def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
                         colors=None,
                         ylim=(1e-21, 6e-18),
                         legend=True
