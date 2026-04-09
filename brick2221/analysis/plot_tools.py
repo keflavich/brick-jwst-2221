@@ -613,7 +613,8 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
 
         ax.scatter(radiff, decdiff, marker=',', s=1, alpha=alpha)
         if regs is None:
-            ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=alpha)
+            #ax.scatter(radiff[ok], decdiff[ok], marker=',', s=1, alpha=alpha)
+            ax.hexbin(radiff[ok]*1e3, decdiff[ok]*1e3, gridsize=100, mincnt=1, alpha=0.75, cmap='inferno', norm=mpl.colors.LogNorm(), extent=np.array(axlims)*1e3, edgecolor='none')
         else:
             for reg in regs:
                 reg = regions.Regions.read(f'{basepath}/regions_/{reg}')[0]
