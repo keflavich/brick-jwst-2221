@@ -618,15 +618,17 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
             for reg in regs:
                 reg = regions.Regions.read(f'{basepath}/regions_/{reg}')[0]
                 match = reg.contains(crds, refwcs)
-                ax.scatter(radiff[ok & match], decdiff[ok & match], marker=',', s=1, alpha=alpha)
+                #ax.scatter(radiff[ok & match], decdiff[ok & match], marker=',', s=1, alpha=alpha)
+                ax.hexbin(radiff[ok & match]*1e3, decdiff[ok & match]*1e3, gridsize=100, mincnt=1, alpha=0.75, cmap='inferno', norm=mpl.colors.LogNorm(), extent=np.array(axlims)*1e3, edgecolor='none')
 
-        ax.axis(axlims)
-        ax.set_title(filtername)
+        ax.axis(np.array(axlims)*1e3)
+        ax.set_title(f'{filtername} $\mu$={np.median(sep).to(u.marcsec).value:0.1f} $\sigma$={np.std(sep).to(u.marcsec).value:0.1f}', fontsize=10)
+        ax.set_aspect('equal')
 
         ax2 = fig2.add_subplot(gridspec[ii])
-        ax2.hist(sep.to(u.arcsec).value, bins=np.linspace(0, maxsep.to(u.arcsec).value))
+        ax2.hist(sep.to(u.marcsec).value, bins=np.linspace(0, maxsep.to(u.marcsec).value), log=True)
         #ax2.set_xlabel("Separation (\")")
-        ax2.set_title(filtername)
+        ax2.set_title(f'{filtername} $\mu$={np.median(sep).to(u.marcsec).value:0.1f} $\sigma$={np.std(sep).to(u.marcsec).value:0.1f}', fontsize=10)
 
         print(f"med sep: {np.median(sep)}, std(sep): {np.std(sep)}")
         statsd[filtername] = {
@@ -645,9 +647,9 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
         }
         ii+=1
 
-    fig1.supxlabel("RA Offset (\")")
-    fig1.supylabel("Dec Offset (\")")
-    fig2.supxlabel("Offset (\")")
+    fig1.supxlabel("RA Offset (m\")")
+    fig1.supylabel("Dec Offset (m\")")
+    fig2.supxlabel("Offset (m\")")
     fig1.tight_layout()
     fig2.tight_layout()
     return statsd
