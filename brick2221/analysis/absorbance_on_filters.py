@@ -94,6 +94,13 @@ def _format_temperature_label(temperature):
     return f'{temperature}K'
 
 
+def _format_ratio_label(ratio):
+    ratio = str(ratio).strip()
+    # Replace spaces with colons in ratios like (4 1) -> (4:1)
+    ratio = re.sub(r'\(\s*(\d+)\s+(\d+(?:\s+\d+)*)\s*\)', lambda m: f'({m.group(1)}:{m.group(2).replace(" ", ":")})', ratio)
+    return ratio
+
+
 def _opacity_label(tb):
     if 'author' in tb.meta:
         author = _format_author_label(tb.meta['author'])
@@ -103,7 +110,8 @@ def _opacity_label(tb):
 
     molecule = _format_species_label(tb.meta['molecule'])
     temperature = _format_temperature_label(tb.meta['temperature'])
-    return f'{tb.meta["index"]} {molecule} {tb.meta["ratio"]} {temperature}'
+    ratio = _format_ratio_label(tb.meta['ratio'])
+    return f'{tb.meta["index"]} {molecule} {ratio} {temperature}'
 
 
 def _opacity_label_from_meta(meta):
@@ -115,7 +123,8 @@ def _opacity_label_from_meta(meta):
 
     molecule = _format_species_label(meta['molecule'])
     temperature = _format_temperature_label(meta['temperature'])
-    return f'{meta["index"]} {molecule} {meta["ratio"]} {temperature}'
+    ratio = _format_ratio_label(meta['ratio'])
+    return f'{meta["index"]} {molecule} {ratio} {temperature}'
 
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
