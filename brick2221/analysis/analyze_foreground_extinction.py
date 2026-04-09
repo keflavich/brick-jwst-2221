@@ -17,8 +17,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 from matplotlib.path import Path
+from astropy.io import fits
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
+from astropy.wcs import WCS
 from astropy import units as u
 from dust_extinction.parameter_averages import G23
 from dust_extinction.averages import CT06_MWGC
@@ -106,6 +108,31 @@ def knn_density_map(table, nth_neighbor=10, map_pixels=220):
     density_deg2 = nth_neighbor / (np.pi * r_n**2)
     density_map = density_deg2.reshape(gx.shape)
     return x_edges, y_edges, density_map
+
+
+def knn_density_map_on_grid(table, x_edges, y_edges, nth_neighbor=10):
+    """Compute n-th nearest-neighbor density map on a pre-defined RA/Dec grid."""
+    shape = (len(y_edges) - 1, len(x_edges) - 1)
+    if len(table) < nth_neighbor:
+        return np.full(shape, np.nan, dtype=float)
+
+    skycoord = get_skycoord(table)
+    x = skycoord.ra.deg
+    y = skycoord.dec.deg
+
+    x_cent = 0.5 * (x_edges[:-1] + x_edges[1:])
+    y_cent = 0.5 * (y_edges[:-1] + y_edges[1:])
+    gx, gy = np.meshgrid(x_cent, y_cent, indexing='xy')
+    grid_points = np.column_stack([gx.ravel(), gy.ravel()])
+
+    points = np.column_stack([x, y])
+    tree = cKDTree(points)
+    dists, _ = tree.query(grid_points, k=nth_neighbor)
+    r_n = np.asarray(dists[:, -1], dtype=float)
+    r_n = np.maximum(r_n, 1e-6)
+
+    density_deg2 = nth_neighbor / (np.pi * r_n**2)
+    return density_deg2.reshape(gx.shape)
 
 
 def create_field_figure(
@@ -215,6 +242,14 @@ def run_polygon_av_slices(
     points = np.column_stack((color, mag))
     av_max_data = np.nanmax(av_coord[base_mask])
 
+    # Define a common sky grid so all Av slices can be stacked into a cube.
+    base_table = table[base_mask]
+    base_skycoord = get_skycoord(base_table)
+    x_base = base_skycoord.ra.deg
+    y_base = base_skycoord.dec.deg
+    x_edges_cube = np.linspace(np.nanpercentile(x_base, 0.5), np.nanpercentile(x_base, 99.5), MAP_PIXELS + 1)
+    y_edges_cube = np.linspace(np.nanpercentile(y_base, 0.5), np.nanpercentile(y_base, 99.5), MAP_PIXELS + 1)
+
     av_bins = []
     av_lo = 0.0
     while av_lo < av_max_potential:
@@ -257,6 +292,68 @@ def run_polygon_av_slices(
         print(f'{av_lo:6.0f} {av_hi:6.0f} {n:10,d}')
     print(f'(showing every 3rd bin; empty bins indicated by N=0)')
 
+    # Build a density cube with z-axis = Av bin midpoint.
+    density_planes = []
+    av_los = []
+    av_his = []
+    av_mids = []
+    n_stars_per_bin = []
+
+    for av_lo, av_hi, n, polygon_vertices in av_bins:
+        poly_path = Path(polygon_vertices)
+        in_bin = base_mask & poly_path.contains_points(points)
+        table_slice = table[in_bin]
+
+        dens_plane = knn_density_map_on_grid(
+            table_slice,
+            x_edges=x_edges_cube,
+            y_edges=y_edges_cube,
+            nth_neighbor=nth_neighbor,
+        )
+
+        density_planes.append(dens_plane.astype(np.float32))
+        av_los.append(float(av_lo))
+        av_his.append(float(av_hi))
+        av_mids.append(float(0.5 * (av_lo + av_hi)))
+        n_stars_per_bin.append(int(n))
+
+    density_cube = np.stack(density_planes, axis=0)  # (n_av, ny, nx)
+
+    x_cent_cube = 0.5 * (x_edges_cube[:-1] + x_edges_cube[1:])
+    y_cent_cube = 0.5 * (y_edges_cube[:-1] + y_edges_cube[1:])
+    dx = float(x_cent_cube[1] - x_cent_cube[0])
+    dy = float(y_cent_cube[1] - y_cent_cube[0])
+
+    wcs3d = WCS(naxis=3)
+    wcs3d.wcs.ctype = ['RA---TAN', 'DEC--TAN', 'A_V']
+    wcs3d.wcs.cunit = ['deg', 'deg', 'mag']
+    wcs3d.wcs.crpix = [1.0, 1.0, 1.0]
+    wcs3d.wcs.crval = [float(x_cent_cube[0]), float(y_cent_cube[0]), float(av_mids[0])]
+    wcs3d.wcs.cdelt = [dx, dy, float(av_step)]
+
+    cube_header = wcs3d.to_header()
+    cube_header['BUNIT'] = '1 / deg2'
+    cube_header['EXTNAME'] = 'DENSITY_CUBE'
+    cube_header['KNN'] = int(nth_neighbor)
+    cube_header['YINTCPT'] = float(y_intercept)
+    cube_header['COMMENT'] = 'Axis 1=RA, 2=Dec, 3=A_V bin midpoint; data are n-th NN density.'
+
+    cube_hdu = fits.PrimaryHDU(data=density_cube, header=cube_header)
+
+    av_cols = fits.ColDefs([
+        fits.Column(name='AV_LO', format='E', array=np.asarray(av_los, dtype=np.float32)),
+        fits.Column(name='AV_HI', format='E', array=np.asarray(av_his, dtype=np.float32)),
+        fits.Column(name='AV_MID', format='E', array=np.asarray(av_mids, dtype=np.float32)),
+        fits.Column(name='N_STARS', format='J', array=np.asarray(n_stars_per_bin, dtype=np.int32)),
+    ])
+    av_table_hdu = fits.BinTableHDU.from_columns(av_cols, name='AV_BINS')
+    x_edges_hdu = fits.ImageHDU(data=np.asarray(x_edges_cube, dtype=np.float32), name='RA_EDGES_DEG')
+    y_edges_hdu = fits.ImageHDU(data=np.asarray(y_edges_cube, dtype=np.float32), name='DEC_EDGES_DEG')
+
+    cube_outfile = os.path.join(outdir, f'{outprefix}_av_density_cube.fits')
+    fits.HDUList([cube_hdu, av_table_hdu, x_edges_hdu, y_edges_hdu]).writeto(cube_outfile, overwrite=True)
+    print(f'Av density cube: {cube_outfile}')
+
     for av_lo, av_hi, polygon_vertices in av_bins_with_data:
         poly_path = Path(polygon_vertices)
         in_bin = base_mask & poly_path.contains_points(points)
@@ -265,7 +362,14 @@ def run_polygon_av_slices(
         if len(table_slice) < nth_neighbor:
             continue
 
-        xe, ye, dens = knn_density_map(table_slice, nth_neighbor=nth_neighbor, map_pixels=MAP_PIXELS)
+        xe = x_edges_cube
+        ye = y_edges_cube
+        dens = knn_density_map_on_grid(
+            table_slice,
+            x_edges=x_edges_cube,
+            y_edges=y_edges_cube,
+            nth_neighbor=nth_neighbor,
+        )
         log_dens = np.log10(dens[np.isfinite(dens)])
         vmin = np.nanpercentile(log_dens, 5)
         vmax = np.nanpercentile(log_dens, 99)
@@ -755,194 +859,50 @@ def analyze_f200w_f444w_av_slices_ct06(brick_all, nth_neighbor=NTH_NEIGHBOR, out
     mag444w = filled_float(brick_all['mag_ab_f444w'])
     color_200_444 = mag200w - mag444w
 
+    # Preserve the current selection behavior: finite-only base mask, fixed intercept,
+    # same Av step/range, and same strip half-width used in the existing function.
     base_mask = np.isfinite(mag200w) & np.isfinite(mag444w) & np.isfinite(color_200_444)
+    y_intercept = y_intercept_f200w
+    av_step = 2.0
+    av_max_potential = 50.0
+    width = 0.5
 
-    # Reference line: (1.25, 14.5) -> (4.0, 20.0) in (F200W-F444W, F200W) space
-    # all data that are relevant lie within these lines, but they are ONLY a reference, they're note meant to be used.
+    extinction_ct06 = CT06_MWGC()
+    k_200w = float(extinction_ct06(2.00 * u.um))
+    k_444w = float(extinction_ct06(4.44 * u.um))
+
+    # Keep diagnostic printouts comparable to the previous implementation.
     p1_color, p1_mag = 1.25, 14.5
     p2_color, p2_mag = 4.0, 20.0
     ref_slope = (p2_mag - p1_mag) / (p2_color - p1_color)
-    y_intercept = p1_mag - p1_color * ref_slope  # F200W at color=0
-    y_intercept = y_intercept_f200w
-
-    # CT06 extinction model
-    extinction_ct06 = CT06_MWGC()
-    # Get k-values (A_lambda per unit A_V)
-    k_200w = float(extinction_ct06(2.00 * u.um))
-    k_444w = float(extinction_ct06(4.44 * u.um))
     k_color = k_200w - k_444w
     k_mag = k_200w
-    vv = k_color**2 + k_mag**2
-    av_coord = ((color_200_444 * k_color) + ((mag200w - y_intercept) * k_mag)) / vv
 
     print(f'Reference line Y-intercept: {y_intercept:.2f} mag (at F200W-F444W=0)')
     print(f'Reference line slope: {ref_slope:.4f}')
     print(f'CT06 k-values: k_color={k_color:.4f}, k_mag={k_mag:.4f}')
     print(f'Validation (k_mag/k_color): {k_mag/k_color:.4f} (should ≈ {ref_slope:.4f})')
 
-    points = np.column_stack((color_200_444, mag200w))
-
-    # Identify Av bins by scanning from Av=0 upward
-    av_step = 2.0
-    av_max_potential = 50.0
-    width = 0.5
-    av_max_data = np.nanmax(av_coord[base_mask])
-
-    # List of (av_lo, av_hi, n_selected, polygon_vertices)
-    av_bins = []
-    av_lo = 0.0
-    while av_lo < av_max_potential:
-        av_hi = av_lo + av_step
-
-        blc = av_lo * (k_200w - k_444w), y_intercept + width + av_lo * k_200w
-        tlc = av_lo * (k_200w - k_444w), y_intercept - width + av_lo * k_200w
-        brc = av_hi * (k_200w - k_444w), y_intercept + width + av_hi * k_200w
-        trc = av_hi * (k_200w - k_444w), y_intercept - width + av_hi * k_200w
-
-        polygon_vertices = np.array([blc, tlc, trc, brc], dtype=float)
-        polygon_vertices_closed = ordered_closed_polygon(polygon_vertices)
-        poly_path = Path(polygon_vertices_closed)
-        in_bin = base_mask & poly_path.contains_points(points)
-        n_selected = int(in_bin.sum())
-
-        # Include bin even if empty - we'll skip it when creating figures, but keep contiguity
-        av_bins.append((av_lo, av_hi, n_selected, polygon_vertices_closed))
-
-        if av_lo > av_max_data:
-            break
-
-        av_lo = av_hi
-    
-    if len(av_bins) == 0:
-        print('WARNING: No Av bins found in range!')
-        return
-    
-    # Filter to bins with data
-    av_bins_with_data = [
-        (av_lo, av_hi, polygon_vertices)
-        for av_lo, av_hi, n, polygon_vertices in av_bins
-        if n >= nth_neighbor
-    ]
-    
-    n_av_slices = len(av_bins_with_data)
-    print(f'Av bins (step {av_step} mag): Av={av_bins[0][0]:.0f} to {av_bins[-1][1]:.0f}')
-    print(f'Total bins: {len(av_bins)}, Bins with data (N≥{nth_neighbor}): {n_av_slices}')
-    
-    # Diagnostic: show bin statistics for all bins
-    print(f'\nDiagnostic: Av bin statistics')
-    print(f'{"Av_lo":>6} {"Av_hi":>6} {"N_stars":>10}')
-    print('-' * 30)
-    for av_lo, av_hi, n, _ in av_bins[::3]:  # Every 3rd bin for brevity
-        print(f'{av_lo:6.0f} {av_hi:6.0f} {n:10,d}')
-    print(f'(showing every 3rd bin; empty bins indicated by N=0)')
-
-    # Create individual 1x2 figures for each Av bin with data
-    for av_lo, av_hi, polygon_vertices in av_bins_with_data:
-        poly_path = Path(polygon_vertices)
-        in_bin = base_mask & poly_path.contains_points(points)
-        brick_av_slice = brick_all[in_bin]
-
-        if len(brick_av_slice) < nth_neighbor:
-            continue
-
-        # Density map
-        brick_xe, brick_ye, brick_dens = knn_density_map(
-            brick_av_slice,
-            nth_neighbor=nth_neighbor,
-            map_pixels=MAP_PIXELS,
-        )
-        log_dens = np.log10(brick_dens[np.isfinite(brick_dens)])
-        vmin = np.nanpercentile(log_dens, 5)
-        vmax = np.nanpercentile(log_dens, 99)
-
-        # Create 1x2 figure
-        fig, (ax_dens, ax_cmd) = plt.subplots(1, 2, figsize=(14, 6), constrained_layout=True)
-
-        # Left: Density map
-        im = ax_dens.pcolormesh(
-            brick_xe, brick_ye, np.log10(brick_dens),
-            shading='auto', cmap='viridis', vmin=vmin, vmax=vmax,
-        )
-        ax_dens.set_xlim(np.max(brick_xe), np.min(brick_xe))
-        ax_dens.set_aspect('equal')
-        ax_dens.set_title(f'Brick F200W-F444W Av [{av_lo:.0f}, {av_hi:.0f})\nN={len(brick_av_slice):,}')
-        ax_dens.set_xlabel('RA (deg)')
-        ax_dens.set_ylabel('Dec (deg)')
-        cbar = fig.colorbar(im, ax=ax_dens)
-        cbar.set_label(r'log10(surface density [deg$^{-2}$])')
-
-        # Right: CMD
-        cmd_mask_all = base_mask
-        ax_cmd.scatter(color_200_444[cmd_mask_all], mag200w[cmd_mask_all], s=1, alpha=0.1,
-                      color='gray', label='All stars')
-        ax_cmd.scatter(color_200_444[in_bin], mag200w[in_bin], s=3, alpha=0.8,
-                      color='blue', label=f'Av [{av_lo:.0f}, {av_hi:.0f}) selection')
-
-        # Draw polygon showing Av-bin boundaries in CMD space
-        poly_x = polygon_vertices[:, 0]
-        poly_y = polygon_vertices[:, 1]
-        ax_cmd.plot(poly_x, poly_y, color='red', linestyle='--', linewidth=1.8, label=f'Av bin ±{width:.2f} mag')
-
-        # Also draw reference line for context
-        color_range = np.array([0, 4.5])
-        mag_range = y_intercept + ref_slope * color_range
-        ax_cmd.plot(color_range, mag_range, 'k:', lw=1.5, alpha=0.5, label='Reference line')
-
-        ax_cmd.set_xlabel('F200W - F444W (mag)')
-        ax_cmd.set_ylabel('F200W (mag)')
-        ax_cmd.set_title('Brick Color-Magnitude Diagram')
-        ax_cmd.invert_yaxis()
-        ax_cmd.grid(alpha=0.3)
-        ax_cmd.set_xlim(-0.5, 4.5)
-        ax_cmd.legend(loc='upper right', fontsize=9)
-
-        outfile = os.path.join(outdir, f'rc_200w444w_av_{av_tag(av_lo)}_{av_tag(av_hi)}_ct06_knn{nth_neighbor}_brick.png')
-        fig.savefig(outfile, dpi=220)
-        plt.close(fig)
-        print(f'Brick F200W-F444W Av=[{av_lo:.0f}, {av_hi:.0f}): {len(brick_av_slice):,} stars → {outfile}')
-
-    # Create summary CMD plot showing all Av bins
-    fig_cmd, ax = plt.subplots(figsize=(10, 8))
-    
-    # Plot all stars in gray
-    ax.scatter(color_200_444[base_mask], mag200w[base_mask], s=1, alpha=0.05, color='gray', label='All stars')
-    
-    # Plot reference line
-    color_range = np.array([0, 4.5])
-    mag_range = y_intercept + ref_slope * color_range
-    ax.plot(color_range, mag_range, 'k--', lw=2.5, label='Reference line')
-    
-    # Draw all Av bin rectangles (show contiguity, color by whether they have data)
-    for av_lo, av_hi, n, polygon_vertices in av_bins[::2]:  # Every other bin for readability
-        poly_x = polygon_vertices[:, 0]
-        poly_y = polygon_vertices[:, 1]
-        
-        # Color: red if has data, light gray if empty
-        color = 'red' if n >= nth_neighbor else 'lightgray'
-        linewidth = 1.5 if n >= nth_neighbor else 0.8
-        ax.plot(poly_x, poly_y, color=color, alpha=0.4, lw=linewidth)
-        
-        # Label with star count
-        mid_color = np.mean(polygon_vertices[:-1, 0])
-        mid_mag = np.mean(polygon_vertices[:-1, 1])
-        label_text = f'{av_lo:.0f}\n({n})'
-        ax.text(mid_color, mid_mag, label_text, ha='center', fontsize=7,
-               bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7 if n >= nth_neighbor else 0.3))
-    
-    ax.set_xlabel('F200W - F444W (mag)', fontsize=11)
-    ax.set_ylabel('F200W (mag)', fontsize=11)
-    ax.set_title('Brick F200W-F444W: Av Bins vs Reference Line (CT06)\n(Red=has data, Gray=empty)', fontsize=12)
-    ax.invert_yaxis()
-    ax.grid(alpha=0.3)
-    ax.set_xlim(-0.5, 4.5)
-    ax.set_ylim(22, 10)
-    ax.legend(loc='upper right', fontsize=10)
-    
-    outfile_cmd = os.path.join(outdir, f'rc_200w444w_av_slices_summary_y{av_tag(y_intercept)}_ct06_brick.png')
-    fig_cmd.savefig(outfile_cmd, dpi=220)
-    plt.close(fig_cmd)
-    
-    print(f'\nSummary CMD plot: {outfile_cmd}')
+    run_polygon_av_slices(
+        table=brick_all,
+        color=color_200_444,
+        mag=mag200w,
+        base_mask=base_mask,
+        k_num=k_200w,
+        k_den=k_444w,
+        y_intercept=y_intercept,
+        width=width,
+        av_step=av_step,
+        av_max_potential=av_max_potential,
+        nth_neighbor=nth_neighbor,
+        outdir=outdir,
+        outprefix='rc_200w444w_ct06_brick',
+        field_label='Brick F200W-F444W (CT06)',
+        cmd_xlabel='F200W - F444W (mag)',
+        cmd_ylabel='F200W (mag)',
+        cmd_xlim=(-0.5, 4.5),
+        cmd_ylim=(22, 10),
+    )
 
 
 def analyze_cloudc_f182m_f212n_diagonal_av(cloudc_all, nth_neighbor=NTH_NEIGHBOR, outdir=OUTDIR):
