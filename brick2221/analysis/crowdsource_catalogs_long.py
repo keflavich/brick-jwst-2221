@@ -2,9 +2,11 @@ print("Starting crowdsource_catalogs_long", flush=True)
 import sys
 import glob
 import time
+import json
 import numpy
 import regions
 import numpy as np
+from pathlib import Path
 from functools import cache
 from astropy.convolution import convolve, convolve_fft, Gaussian2DKernel, interpolate_replace_nans
 from astropy.table import Table
@@ -23,6 +25,9 @@ import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from jwst.datamodels import dqflags
+from jwst.associations import asn_from_list
+from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
+from jwst.resample import ResampleStep
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import extract_stars, EPSFStars, EPSFBuilder
 # IntegratedGaussianPRF was renamed to CircularGaussianPRF in photutils 2.0
@@ -63,6 +68,8 @@ print(f"Webbpsf version: {webbpsf.__version__}")
 from stpsf.utils import to_griddedpsfmodel
 import datetime
 print("Done with imports", flush=True)
+
+FWHM_TABLE = Path(__file__).resolve().parents[1] / 'reduction' / 'fwhm_table.ecsv'
 
 
 def print(*args, **kwargs):
@@ -247,6 +254,34 @@ def catalog_zoom_diagnostic(data, modsky, zoomcut, stars):
     pl.tight_layout()
 
 
+def _get_source_xy(tbl):
+    """Return source x/y columns using the first available coordinate convention."""
+    if 'x_fit' in tbl.colnames and 'y_fit' in tbl.colnames:
+        return np.asarray(tbl['x_fit']), np.asarray(tbl['y_fit'])
+    if 'xcentroid' in tbl.colnames and 'ycentroid' in tbl.colnames:
+        return np.asarray(tbl['xcentroid']), np.asarray(tbl['ycentroid'])
+    if 'x_init' in tbl.colnames and 'y_init' in tbl.colnames:
+        return np.asarray(tbl['x_init']), np.asarray(tbl['y_init'])
+    if 'x' in tbl.colnames and 'y' in tbl.colnames:
+        return np.asarray(tbl['x']), np.asarray(tbl['y'])
+    raise KeyError(f"No recognized x/y coordinate columns in {tbl.colnames}")
+
+
+def _sample_background_map(background_map, xvals, yvals):
+    """Sample a 2D background image at source coordinates using nearest-neighbor lookup."""
+    sampled = np.full(len(xvals), np.nan, dtype='float32')
+    if background_map is None:
+        return sampled
+
+    xi = np.rint(np.asarray(xvals)).astype(int)
+    yi = np.rint(np.asarray(yvals)).astype(int)
+    inbounds = ((xi >= 0) & (yi >= 0) &
+                (yi < background_map.shape[0]) &
+                (xi < background_map.shape[1]))
+    sampled[inbounds] = background_map[yi[inbounds], xi[inbounds]]
+    return sampled
+
+
 def save_photutils_results(result, ww, filename,
                            im1, detector,
                            basepath, filtername, module, desat, bgsub, exposure_, visitid_, vgroupid_,
@@ -256,7 +291,8 @@ def save_photutils_results(result, ww, filename,
                            options=None,
                            epsf_="",
                            group="",
-                           fpsf=""):
+                           fpsf="",
+                           background_map=None):
     print("Saving photutils results.")
     blur_ = "_blur" if blur else ""
 
@@ -306,6 +342,15 @@ def save_photutils_results(result, ww, filename,
         result['dra'] = result['x_err'] * pixscale
         result['ddec'] = result['y_err'] * pixscale
 
+    if 'local_bkg' in result.colnames:
+        result.meta['BKGCOL'] = 'local_bkg'
+        result.meta['BKGMETH'] = 'photutils_local'
+    else:
+        xpos, ypos = _get_source_xy(result)
+        result['local_bkg'] = _sample_background_map(background_map, xpos, ypos)
+        result.meta['BKGCOL'] = 'local_bkg'
+        result.meta['BKGMETH'] = 'bkg2d_sampled' if background_map is not None else 'none'
+
     tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_{basic_or_iterative}.fits"
 
     # FITS header keywords are limited to 8 characters. photutils 2.x stores
@@ -346,6 +391,9 @@ def save_crowdsource_results(results, ww, filename, suffix,
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
     stars['dra'] = stars['dx'] * pixscale
     stars['ddec'] = stars['dy'] * pixscale
+    stars['local_bkg'] = _sample_background_map(skymsky, stars['x'], stars['y'])
+    stars.meta['BKGCOL'] = 'local_bkg'
+    stars.meta['BKGMETH'] = 'skymsky_sample'
 
     stars.meta['filename'] = filename
     stars.meta['filter'] = filtername
@@ -558,6 +606,56 @@ def get_uncertainty(err, data, dq=None, wht=None):
     return dq, weight, bad
 
 
+def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, module,
+                                   residual_kind='iterative', desat=False, bgsub=False,
+                                   epsf=False, blur=False, group=False, pupil='clear'):
+    """
+    Resample per-exposure residual images into one JWST-style *_residual_i2d.fits product.
+    """
+    if residual_kind not in ('basic', 'iterative'):
+        raise ValueError(f"residual_kind must be one of ('basic', 'iterative'), got {residual_kind}")
+
+    pipeline_dir = f'{basepath}/{filtername}/pipeline'
+    desat_ = '_unsatstar' if desat else ''
+    bgsub_ = '_bgsub' if bgsub else ''
+    epsf_ = '_epsf' if epsf else ''
+    blur_ = '_blur' if blur else ''
+    group_ = '_group' if group else ''
+
+    residual_glob = (
+        f'{pipeline_dir}/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-'
+        f'{module}_visit*_vgroup*_exp*{desat_}{bgsub_}{epsf_}{blur_}{group_}'
+        f'_daophot_{residual_kind}_residual.fits'
+    )
+    residual_files = sorted(glob.glob(residual_glob))
+    if len(residual_files) == 0:
+        raise ValueError(f'No per-exposure residuals found matching {residual_glob}')
+
+    product_name = (
+        f'jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}'
+        f'{desat_}{bgsub_}{epsf_}{blur_}{group_}_daophot_{residual_kind}_residual'
+    )
+    asn = asn_from_list.asn_from_list(
+        residual_files,
+        rule=DMS_Level3_Base,
+        product_name=product_name,
+    )
+
+    asn_filename = f'{pipeline_dir}/{product_name}_asn.json'
+    with open(asn_filename, 'w') as asn_fh:
+        _, serialized = asn.dump()
+        asn_fh.write(serialized)
+
+    print(f'Resampling {len(residual_files)} residual exposures into {product_name}_i2d.fits')
+    ResampleStep.call(asn_filename, output_dir=pipeline_dir, save_results=True)
+
+    output_filename = f'{pipeline_dir}/{product_name}_i2d.fits'
+    if not os.path.exists(output_filename):
+        raise FileNotFoundError(f'Expected output was not created: {output_filename}')
+    print(f'Wrote residual mosaic {output_filename}')
+    return output_filename
+
+
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                            'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
@@ -614,6 +712,11 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     parser.add_option('--each-suffix', dest='each_suffix',
                       default='destreak_o001_crf',
                       help='Suffix for the level-2 products', metavar='each_suffix')
+    parser.add_option('--skip-mosaic-each-exposure-residuals',
+                      dest='skip_mosaic_each_exposure_residuals',
+                      default=False,
+                      action='store_true',
+                      help='After --each-exposure, resample all per-exposure residuals into a residual_i2d product by default; this parameter skips that step. Residual kinds are auto-determined based on enabled photometry types.')
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
@@ -622,14 +725,19 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     target = options.target
 
     nvisits = {'2221': {'brick': 1, 'cloudc': 2},
-               '1182': {'brick': 2}
+               '1182': {'brick': 2},
+               '3958': {'sickle': 1}
                }
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
-                            '1182': {'004': 'brick'}}[proposal_id]
+                            '1182': {'004': 'brick'},
+                            '3958': {'007': 'sickle'}}[proposal_id]
     reg_to_field_mapping = {v:k for k,v in field_to_reg_mapping.items()}
     field = reg_to_field_mapping[target]
 
-    basepath = f'/blue/adamginsburg/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
+    if field_to_reg_mapping[field] == 'sickle':
+        basepath = f'/orange/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
+    else:
+        basepath = f'/blue/adamginsburg/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
 
     pl.close('all')
 
@@ -668,6 +776,29 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                                visit_id=visit_id, vgroup_id=vgroup_id,
                                                use_webbpsf=True,
                                                bg_boxsizes=bg_boxsizes)
+
+                if not options.skip_mosaic_each_exposure_residuals:
+                    if os.getenv('SLURM_ARRAY_TASK_ID') is None:
+                        # Determine which residual kinds to mosaic based on enabled photometry types
+                        mosaic_residual_kinds = []
+                        if options.daophot:
+                            mosaic_residual_kinds = ['basic', 'iterative']
+                        
+                        for residual_kind in mosaic_residual_kinds:
+                            mosaic_each_exposure_residuals(basepath=basepath,
+                                                          filtername=filtername,
+                                                          proposal_id=proposal_id,
+                                                          field=field,
+                                                          module=module,
+                                                          residual_kind=residual_kind,
+                                                          desat=options.desaturated,
+                                                          bgsub=options.bgsub,
+                                                          epsf=options.epsf,
+                                                          blur=options.blur,
+                                                          group=options.group,
+                                                          pupil='clear')
+                    else:
+                        print('Skipping residual mosaicking in SLURM array-task mode.')
             else:
                 filename = get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear')
                 do_photometry_step(options, filtername, module, detector, field,
@@ -696,30 +827,27 @@ def get_filename(basepath, filtername, proposal_id, field, module, options, pupi
     #blur_ = "_blur" if options.blur else ""
 
     filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d.fits'
-    if not os.path.exists(filename):
-        filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits'
-    if not os.path.exists(filename):
-        # merged-reproject_i2d.fits lives here
-        # 12/22/2023: that is generally the best-behaved; it's the only one with no clear misalignments.  tweakreg-based merge just doesn't lock in coords
-        filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
-    if not os.path.exists(filename):
-        pupil = 'F444W'
-        filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_nodestreak_realigned-to-refcat.fits'
-    if not os.path.exists(filename):
-        filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits'
-    if not os.path.exists(filename):
-        # merged-reproject_i2d.fits lives here
-        # 12/22/2023: that is generally the best-behaved; it's the only one with no clear misalignments.  tweakreg-based merge just doesn't lock in coords
-        filename = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits'
-    if not os.path.exists(filename):
-        glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_*-{module}_realigned-to-refcat.fits'
-        fglob = glob.glob(glstr)
-        if len(fglob) == 1:
-            filename = fglob[0]
-        else:
-            raise ValueError(f"File {filename} does not exist, and nothing matching {glstr} exists either.  pupil={pupil}")
+    if os.path.exists(filename):
+        return filename
 
-    return filename
+    candidate_patterns = [
+        f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_realigned-to-refcat.fits',
+        f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}_i2d{desat}.fits',
+        f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_F444W-{filtername.lower()}-{module}_nodestreak_realigned-to-refcat.fits',
+        f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t*_nircam_*{filtername.lower()}*{module}*i2d*.fits',
+        f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t*_nircam_*{filtername.lower()}*i2d*.fits',
+        f'{basepath}/mastDownload/JWST/**/jw0{proposal_id}-o{field}_t*_nircam_*{filtername.lower()}*{module}*i2d*.fits',
+        f'{basepath}/mastDownload/JWST/**/jw0{proposal_id}-o{field}_t*_nircam_*{filtername.lower()}*i2d*.fits',
+    ]
+
+    for glstr in candidate_patterns:
+        fglob = glob.glob(glstr, recursive=True)
+        if len(fglob) == 1:
+            return fglob[0]
+        if len(fglob) > 1:
+            return sorted(fglob)[-1]
+
+    raise ValueError(f"No input file found for filter={filtername} proposal={proposal_id} field={field} module={module} in {basepath}")
 
 
 def do_photometry_step(options, filtername, module, detector, field, basepath,
@@ -733,7 +861,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     nsigma is the threshold to multiply the error estimate by to get the detection threshold
     """
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
-    fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
+    fwhm_tbl = Table.read(FWHM_TABLE)
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
     fwhm_pix = float(row['PSF FWHM (pixel)'][0])
@@ -753,6 +881,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     print(f"Starting cataloging on {filename}", flush=True)
     fh, im1, data, wht, err, instrument, telescope, obsdate = load_data(filename)
+    background_map = None
 
     # set up coordinate system
     ww = wcs.WCS(im1[1].header)
@@ -763,6 +892,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         # background subtraction
         # see BackgroundEstimationExperiments.ipynb
         bkg = Background2D(data, box_size=bg_boxsizes[filt.lower()], bkg_estimator=MedianBackground())
+        background_map = bkg.background
         fits.PrimaryHDU(data=bkg.background,
                         header=im1['SCI'].header).writeto(filename.replace(".fits",
                                                                            "_background.fits"),
@@ -852,7 +982,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                     epsf_="",
                                     fpsf="",
                                     group=group,
-                                    psf=None)
+                                    psf=None,
+                                    background_map=background_map)
 
     stars = finstars # because I'm copy-pasting code...
 
@@ -1090,7 +1221,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                         options=options,
                                         epsf_=epsf_,
                                         group=group,
-                                        psf=None)
+                                        psf=None,
+                                        background_map=background_map)
 
         stars = result
         stars['x'] = stars['x_fit']
@@ -1158,7 +1290,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
             for star in stars:
                 # background subtraction
-                star.data[:] -= np.nanpercentile(star.data, 5)
+                background = np.nanpercentile(star.data, 5)
+                star.data[:] -= background
 
 
             epsf, fitted_stars = epsf_builder(stars)
@@ -1208,7 +1341,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                          options=options,
                                          epsf_=epsf_,
                                          group=group,
-                                         psf=None)
+                                         psf=None,
+                                         background_map=background_map)
 
         stars = result2
         stars['x'] = stars['x_fit']
