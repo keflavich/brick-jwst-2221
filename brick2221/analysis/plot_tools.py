@@ -133,14 +133,31 @@ def ccd(basetable,
         hexbin=False,
         hexbin_cmap='gray',
         n_hexbin_bins=100,
+        A_V=None,
         **kwargs
        ):
+
     keys1 = [f'mag_ab_{col}' for col in color1]
     keys2 = [f'mag_ab_{col}' for col in color2]
 
     try:
         colorp1 = basetable[keys1[0]] - basetable[keys1[1]]
         colorp2 = basetable[keys2[0]] - basetable[keys2[1]]
+
+        if A_V is not None and ext is not None:
+            A_V = np.asarray(A_V)
+            if len(A_V) != len(basetable):
+                raise ValueError(f"A_V has length {len(A_V)} but basetable has {len(basetable)} rows.")
+            w1 = int(color1[0][1:-1])/100*u.um
+            w2 = int(color1[1][1:-1])/100*u.um
+            w3 = int(color2[0][1:-1])/100*u.um
+            w4 = int(color2[1][1:-1])/100*u.um
+            e1 = ext(w1)
+            e2 = ext(w2)
+            e3 = ext(w3)
+            e4 = ext(w4)
+            colorp1 = colorp1 - A_V * (e1 - e2)
+            colorp2 = colorp2 - A_V * (e3 - e4)
 
         if max_uncertainty is not None:
             reject_1 = (basetable['e'+keys1[0]] > max_uncertainty) | (basetable['e'+keys1[1]] > max_uncertainty)
@@ -186,6 +203,7 @@ def ccds(basetable, sel=True,
          rasterized=True,
          gridspec_kwargs={},
          head_width=0.1,
+         A_V=None,
          **kwargs
         ):
     if fig is None:
@@ -197,6 +215,7 @@ def ccds(basetable, sel=True,
         ccd(basetable, ax=ax, color1=color1, color2=color2,
             axlims=axlims, sel=sel,
             rasterized=rasterized, ext=ext, extvec_scale=extvec_scale, head_width=head_width,
+            A_V=A_V,
             **kwargs)
 
     fig.subplots_adjust(**gridspec_kwargs)
@@ -210,6 +229,7 @@ def cmds(basetable, sel=True,
          ext=CT06_MWGC(),
          fig=None,
          extvec_scale=30,
+         extvec_start=(0, 18),
          head_width=0.5,
          markersize=5,
          rasterized=True,
@@ -218,6 +238,15 @@ def cmds(basetable, sel=True,
          alpha_sel=0.5,
          xlim_percentiles=None,
          max_uncertainty=None,
+         color='k',
+         selcolor='r',
+         hexbin=False,
+         hexbin_cmap='gray',
+         sel_hexbin_cmap='Reds',
+         n_hexbin_bins=100,
+         zorder=None,
+         sel_zorder=None,
+         A_V=None,
         ):
     if fig is None:
         fig = pl.figure()
@@ -225,10 +254,10 @@ def cmds(basetable, sel=True,
 
     if exclude is None:
         include = slice(None)
-        default_sel = sel
+        default_sel = True if sel is None else sel
     else:
         include = ~exclude
-        default_sel = sel & include
+        default_sel = (True if sel is None else sel) & include
 
     for ii, (f1, f2) in enumerate(colors):
 
@@ -240,7 +269,14 @@ def cmds(basetable, sel=True,
             sel = default_sel
 
         ax = fig.add_subplot(gridspec[ii])
-        cmd(ax=ax, basetable=basetable, f1=f1, f2=f2, include=include, sel=sel, axlims=axlims, xlim_percentiles=xlim_percentiles, ext=ext, extvec_scale=extvec_scale, head_width=head_width, markersize=markersize, alpha=alpha, alpha_sel=alpha_sel, rasterized=rasterized)
+        cmd(ax=ax, basetable=basetable, f1=f1, f2=f2, include=include, sel=sel,
+            axlims=axlims, xlim_percentiles=xlim_percentiles, ext=ext,
+            extvec_scale=extvec_scale, head_width=head_width, markersize=markersize,
+            alpha=alpha, alpha_sel=alpha_sel, rasterized=rasterized,
+            extvec_start=extvec_start, color=color, selcolor=selcolor,
+            hexbin=hexbin, n_hexbin_bins=n_hexbin_bins, hexbin_cmap=hexbin_cmap,
+            sel_hexbin_cmap=sel_hexbin_cmap, zorder=zorder, sel_zorder=sel_zorder,
+            A_V=A_V)
     return fig
 
 def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
@@ -251,12 +287,24 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
         zorder=None,
         sel_zorder=None,
         extvec_start=None,
+        A_V=None,
         ):
     if ax is None:
         ax = pl.gca()
 
     colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
     magp = basetable[f'mag_ab_{f1}']
+
+    if A_V is not None and ext is not None:
+        A_V = np.asarray(A_V)
+        if len(A_V) != len(basetable):
+            raise ValueError(f"A_V has length {len(A_V)} but basetable has {len(basetable)} rows.")
+        w1 = 4.10*u.um if f1 == '410m405' else 4.05*u.um if f1 == '405m410' else int(f1[1:-1])/100*u.um
+        w2 = 4.10*u.um if f2 == '410m405' else 4.05*u.um if f2 == '405m410' else int(f2[1:-1])/100*u.um
+        e_f1 = ext(w1)
+        e_f2 = ext(w2)
+        magp = magp - A_V * e_f1
+        colorp = colorp - A_V * (e_f1 - e_f2)
     if axlims is not None and axlims[2] > axlims[3]:
         # hexbin extent requires ymin < ymax; axis inversion is applied via ax.axis()
         extent = axlims[0], axlims[1], axlims[3], axlims[2]
@@ -282,7 +330,7 @@ def cmd(ax=None, basetable=None, f1=None, f2=None, include=slice(None),
             if np.isfinite(xlow) and np.isfinite(xhigh):
                 ax.set_xlim(xlow, xhigh)
             else:
-                print(f"xlow={xlow} xhigh={xhigh}")
+                print(f"xlow={xlow} xhigh={xhigh} xpercentiles={xlim_percentiles} include={include.sum()}")
         except Exception as ex:
             print(ex)
 
@@ -387,6 +435,91 @@ def color_plot(basetable,
     return fig
 
 
+def _mist_phase_mask(phase_include=None, phase_exclude=None, phase_column='phase',
+                     log_g_min=None, log_g_max=None, log_g_range=None,
+                     log_g_column='log_g'):
+    """Return a boolean mask selecting MIST rows by evolutionary phase.
+
+    Supported phase values in the current MIST table are:
+        [-1.0, 0.0, 2.0, 3.0, 4.0, 5.0, 6.0, 9.0]
+
+    Parameters
+    ----------
+    phase_include : scalar or sequence, optional
+        Keep only these phase values.
+    phase_exclude : scalar or sequence, optional
+        Remove these phase values after any include filtering.
+    phase_column : str or None, optional
+        Name of the MIST phase column.  If None, the first column containing
+        the substring "phase" is used.
+    log_g_min : float, optional
+        Keep only rows with log_g >= log_g_min.
+    log_g_max : float, optional
+        Keep only rows with log_g <= log_g_max.
+    log_g_range : tuple or list, optional
+        Keep only rows with log_g in [min, max].
+    log_g_column : str, optional
+        Name of the MIST surface gravity column.  Default is "log_g".
+
+    Example
+    -------
+    Exclude white dwarf rows (if your table encodes them with a known value):
+        phase_exclude=[wd_phase_value]
+    """
+    if (phase_include is None and phase_exclude is None and log_g_min is None
+            and log_g_max is None and log_g_range is None):
+        return np.ones(len(mist), dtype=bool)
+
+    if phase_column is None:
+        phase_colnames = [col for col in mist.colnames if 'phase' in col.lower()]
+        if len(phase_colnames) == 0:
+            raise ValueError("No phase column found in MIST table; set phase_column explicitly.")
+        phase_column = phase_colnames[0]
+
+    if phase_column not in mist.colnames:
+        raise ValueError(f"Requested phase_column={phase_column} not present in MIST table.")
+
+    phase_values = mist[phase_column]
+    mask = np.ones(len(mist), dtype=bool)
+
+    if phase_include is not None:
+        include_vals = np.atleast_1d(phase_include)
+        mask &= np.isin(phase_values, include_vals)
+
+    if phase_exclude is not None:
+        exclude_vals = np.atleast_1d(phase_exclude)
+        mask &= ~np.isin(phase_values, exclude_vals)
+
+    if log_g_column not in mist.colnames:
+        raise ValueError(f"Requested log_g_column={log_g_column} not present in MIST table.")
+
+    log_g_values = mist[log_g_column]
+
+    if log_g_range is not None:
+        if len(log_g_range) != 2:
+            raise ValueError("log_g_range must have exactly two elements: (min, max).")
+        log_g_lo, log_g_hi = log_g_range
+        if log_g_lo > log_g_hi:
+            raise ValueError("log_g_range must be ordered as (min, max).")
+        mask &= (log_g_values >= log_g_lo) & (log_g_values <= log_g_hi)
+
+    if log_g_min is not None:
+        mask &= log_g_values >= log_g_min
+
+    if log_g_max is not None:
+        mask &= log_g_values <= log_g_max
+
+    return mask
+
+
+def _phase_transition_indices(phase_values):
+    """Return indices where phase changes between adjacent isochrone points."""
+    phase_values = np.asarray(phase_values)
+    if len(phase_values) < 2:
+        return np.array([], dtype=int)
+    return np.flatnonzero(phase_values[1:] != phase_values[:-1]) + 1
+
+
 def cmds_withiso(basetable, sel=True,
                  colors=[('f410m', 'f466n'), ('f410m', 'f405n'), ('f405n', 'f466n'), ('410m405', 'f405n')],
                  axlims=(-5,10,25,12),
@@ -396,93 +529,105 @@ def cmds_withiso(basetable, sel=True,
                  iso=True,
                  exclude=None,
                  alpha_k=0.5,
+                 alpha_sel=0.5,
                  distance_modulus=0,
                  markersize=5,
                  arrowhead_width=0.5,
                  arrow_start=(0, 18),
                  extinction_scaling_av=20,
                  rasterized=True,
+                 xlim_percentiles=None,
+                 max_uncertainty=None,
+                 phase_include=None,
+                 phase_exclude=None,
+                 phase_column='phase',
+                 log_g_min=None,
+                 log_g_max=None,
+                 log_g_range=None,
+                 log_g_column='log_g',
+                 phase_transition_markers=True,
+                 phase_transition_marker_size=8,
+                 **kwargs
         ):
-    if fig is None:
-        fig = pl.figure()
-    gridspec = sqgrid.get_grid(len(colors))
-    for ii, (f1, f2) in enumerate(colors):
-        w1 = (4.10*u.um if f1 == '410m405'
-              else 4.05*u.um if f1 == '405m410'
-              else 1.82*u.um if f1 == '182m187'
-              else 1.87*u.um if f1 == '187m182'
-              else int(f1[1:-1])/100*u.um)
-        w2 = (4.10*u.um if f2 == '410m405'
-              else 4.05*u.um if f2 == '405m410'
-              else 1.82*u.um if f2 == '182m187'
-              else 1.87*u.um if f2 == '187m182'
-              else int(f2[1:-1])/100*u.um)
+    """Plot CMD panels and overlay isochrones, with optional phase filtering.
 
-        if w1 > w2:
-            w1,w2 = w2,w1
-            f1,f2 = f2,f1
-        if (w1 == 1.82*u.um) and (w2 == 1.87*u.um):
-            # for consistency w/F405/F410, we want narrow - medium
-            w1,w2 = w2,w1
-            f1,f2 = f2,f1
+    The phase filter is applied only to isochrone rows (MIST model points),
+    not to the observed catalog points.
 
-        ax = fig.add_subplot(gridspec[ii])
-        colorp = basetable[f'mag_ab_{f1}'] - basetable[f'mag_ab_{f2}']
-        if yval == 'f1':
-            magp = basetable[f'mag_ab_{f1}']
-            ax.set_ylabel(f"{f1}")
-            yval_ = f1
-        elif yval == 'f2':
-            magp = basetable[f'mag_ab_{f2}']
-            ax.set_ylabel(f"{f2}")
-            yval_ = f2
+    Supported phase values in the current MIST table are:
+        [-1.0, 0.0, 2.0, 3.0, 4.0, 5.0, 6.0, 9.0]
+    """
+    if yval != 'f1':
+        raise ValueError("cmds_withiso currently supports yval='f1' only")
+
+    fig = cmds(
+        basetable,
+        sel=sel,
+        colors=colors,
+        axlims=axlims,
+        ext=ext,
+        fig=fig,
+        extvec_scale=extinction_scaling_av,
+        extvec_start=arrow_start,
+        head_width=arrowhead_width,
+        markersize=markersize,
+        rasterized=rasterized,
+        exclude=exclude,
+        alpha=alpha_k,
+        alpha_sel=alpha_sel,
+        xlim_percentiles=xlim_percentiles,
+        max_uncertainty=max_uncertainty,
+        **kwargs,
+    )
+
+    if iso:
+        if iso is True:
+            isochrone_ages = (5, 7, 9, 10)
         else:
-            raise ValueError("yval must be f1 or f2")
-        if exclude is None:
-            ax.scatter(colorp, magp, s=markersize, alpha=alpha_k, c='k', rasterized=rasterized)
-        else:
-            ax.scatter(colorp[~exclude], magp[~exclude], s=markersize, alpha=alpha_k, c='k', rasterized=rasterized)
-        ax.scatter(colorp[sel], magp[sel], s=markersize, alpha=0.5, c='r', rasterized=rasterized)
-        ax.set_xlabel(f"{f1} - {f2}")
-        ax.axis(axlims)
-        if iso:
-            agesel = mist['log10_isochrone_age_yr'] == 5
-            ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[yval_.upper()][agesel] + distance_modulus,
-                    color='b', linestyle='-', linewidth=0.5,
-                    label='10$^5$ yr'
-                    )
-            agesel = mist['log10_isochrone_age_yr'] == 7
-            ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[yval_.upper()][agesel] + distance_modulus,
-                    color='g', linestyle=':', linewidth=0.5,
-                    label='10$^7$ yr'
-                    )
-            agesel = mist['log10_isochrone_age_yr'] == 9
-            ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[yval_.upper()][agesel] + distance_modulus,
-                    color='c', linestyle='--', linewidth=0.5,
-                    label='10$^9$ yr'
-                    )
-            agesel = mist['log10_isochrone_age_yr'] == 10
-            ax.plot(mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
-                    mist[yval_.upper()][agesel] + distance_modulus,
-                    color='c', linestyle='--', linewidth=0.5,
-                    label='10$^{10}$ yr'
-                    )
+            isochrone_ages = tuple(iso)
 
-        if ext is not None:
-            #print(w1,w2)
-            e_1 = ext(w1) * extinction_scaling_av
-            e_2 = ext(w2) * extinction_scaling_av
+        phase_mask = _mist_phase_mask(
+            phase_include=phase_include,
+            phase_exclude=phase_exclude,
+            phase_column=phase_column,
+            log_g_min=log_g_min,
+            log_g_max=log_g_max,
+            log_g_range=log_g_range,
+            log_g_column=log_g_column,
+        )
 
-            if yval == 'f2':
-                ax.arrow(arrow_start[0], arrow_start[1], e_1-e_2, e_2, color='y', head_width=arrowhead_width)
-            elif yval == 'f1':
-                ax.arrow(arrow_start[0], arrow_start[1], e_1-e_2, e_1, color='y', head_width=arrowhead_width)
+        axes = fig.axes[-len(colors):]
+        for ii, ((f1, f2), ax) in enumerate(zip(colors, axes)):
+            for age, color, linestyle in zip(isochrone_ages, 'bgcmy', ('-', '--', ':', '-.')):
+                agesel = (mist['log10_isochrone_age_yr'] == age) & phase_mask
+                ax.plot(
+                    mist[f1.upper()][agesel] - mist[f2.upper()][agesel],
+                    mist[f1.upper()][agesel] + distance_modulus,
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=0.5,
+                    label=f'10$^{{{age}}}$ yr',
+                )
 
-        if ii == 1:
-            ax.legend(bbox_to_anchor=(1.5, 1))
+                if phase_transition_markers:
+                    phase_vals = mist[phase_column][agesel]
+                    transition_inds = _phase_transition_indices(phase_vals)
+                    if len(transition_inds) > 0:
+                        xvals = mist[f1.upper()][agesel] - mist[f2.upper()][agesel]
+                        yvals = mist[f1.upper()][agesel] + distance_modulus
+                        ax.scatter(
+                            xvals[transition_inds],
+                            yvals[transition_inds],
+                            marker='s',
+                            s=phase_transition_marker_size,
+                            c=color,
+                            edgecolors='none',
+                            zorder=5,
+                        )
+
+            # Keep legacy legend placement behavior.
+            if ii == 0:
+                ax.legend(bbox_to_anchor=(1.5, 1))
 
     return fig
 
@@ -494,6 +639,15 @@ def ccds_withiso(basetable, sel=True,
                  ext=CT06_MWGC(),
                  exclude=False,
                  iso=True,
+                 phase_include=None,
+                 phase_exclude=None,
+                 phase_column='phase',
+                 log_g_min=None,
+                 log_g_max=None,
+                 log_g_range=None,
+                 log_g_column='log_g',
+                 phase_transition_markers=True,
+                 phase_transition_marker_size=8,
                  arrowhead_width=0.5,
                  rasterized=True,
                  max_uncertainty=None,
@@ -557,18 +711,42 @@ def ccds_withiso(basetable, sel=True,
         ax.set_ylabel(f"{color2[0]} - {color2[1]}")
         ax.axis(axlims)
         if iso:
-            agesel = mist['log10_isochrone_age_yr'] == 5
-            ax.plot(mist[color1[0].upper()][agesel] - mist[color1[1].upper()][agesel],
-                    mist[color2[0].upper()][agesel] - mist[color2[1].upper()][agesel],
-                    color='b', linestyle='-', linewidth=1)
-            agesel = mist['log10_isochrone_age_yr'] == 7
-            ax.plot(mist[color1[0].upper()][agesel] - mist[color1[1].upper()][agesel],
-                    mist[color2[0].upper()][agesel] - mist[color2[1].upper()][agesel],
-                    color='g', linestyle='-', linewidth=1)
-            agesel = mist['log10_isochrone_age_yr'] == 9
-            ax.plot(mist[color1[0].upper()][agesel] - mist[color1[1].upper()][agesel],
-                    mist[color2[0].upper()][agesel] - mist[color2[1].upper()][agesel],
-                    color='c', linestyle='-', linewidth=1)
+            phase_mask = _mist_phase_mask(
+            phase_include=phase_include,
+            phase_exclude=phase_exclude,
+            phase_column=phase_column,
+            log_g_min=log_g_min,
+            log_g_max=log_g_max,
+            log_g_range=log_g_range,
+            log_g_column=log_g_column,
+            )
+            agesel = (mist['log10_isochrone_age_yr'] == 5) & phase_mask
+            xvals = mist[color1[0].upper()][agesel] - mist[color1[1].upper()][agesel]
+            yvals = mist[color2[0].upper()][agesel] - mist[color2[1].upper()][agesel]
+            ax.plot(xvals, yvals, color='b', linestyle='-', linewidth=1)
+            if phase_transition_markers:
+                transition_inds = _phase_transition_indices(mist[phase_column][agesel])
+                if len(transition_inds) > 0:
+                    ax.scatter(xvals[transition_inds], yvals[transition_inds], marker='s', s=phase_transition_marker_size,
+                               c='b', edgecolors='none', zorder=5)
+            agesel = (mist['log10_isochrone_age_yr'] == 7) & phase_mask
+            xvals = mist[color1[0].upper()][agesel] - mist[color1[1].upper()][agesel]
+            yvals = mist[color2[0].upper()][agesel] - mist[color2[1].upper()][agesel]
+            ax.plot(xvals, yvals, color='g', linestyle='-', linewidth=1)
+            if phase_transition_markers:
+                transition_inds = _phase_transition_indices(mist[phase_column][agesel])
+                if len(transition_inds) > 0:
+                    ax.scatter(xvals[transition_inds], yvals[transition_inds], marker='s', s=phase_transition_marker_size,
+                               c='g', edgecolors='none', zorder=5)
+            agesel = (mist['log10_isochrone_age_yr'] == 9) & phase_mask
+            xvals = mist[color1[0].upper()][agesel] - mist[color1[1].upper()][agesel]
+            yvals = mist[color2[0].upper()][agesel] - mist[color2[1].upper()][agesel]
+            ax.plot(xvals, yvals, color='c', linestyle='-', linewidth=1)
+            if phase_transition_markers:
+                transition_inds = _phase_transition_indices(mist[phase_column][agesel])
+                if len(transition_inds) > 0:
+                    ax.scatter(xvals[transition_inds], yvals[transition_inds], marker='s', s=phase_transition_marker_size,
+                               c='c', edgecolors='none', zorder=5)
         ax.arrow(0, 0, e_1-e_2, e_3-e_4, color='y', head_width=arrowhead_width)
     return fig
 
