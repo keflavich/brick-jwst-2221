@@ -42,3 +42,11 @@ The analysis has been done haphazardly in notebooks, but then I tried to reconci
  * `plot_tools.py` - contains many plot templates for color-color, color-magnitude, etc.
  * `selections.py` - downselects from the full merged catalog of NIRCAM data of the brick, in all 6 filters, to the subset(s) that are reliable
  * `ColorVsCOIceAnalysis.ipynb` - makes several color-color plots
+
+
+
+### Setup for Reduction
+
+There are a few basic setup needs before you get started with reduction of a new project:
+ * if the project has a name (e.g., 2221 or brick), there should be a ``crds/`` directory under that directory. e.g., for `/orange/adamginsburg/brick`, there is `/orange/adamginsburg/brick/crds`.  
+ * you need to add mappings from target/region name to project code and vice versa in a few places.  TODO: enumerate these
