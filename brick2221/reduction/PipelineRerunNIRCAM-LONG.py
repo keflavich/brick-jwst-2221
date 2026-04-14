@@ -47,8 +47,8 @@ from jwst.datamodels import ImageModel
 
 from destreak import destreak
 
-from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
-from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
+from brick2221.reduction.align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
+from brick2221.reduction.saturated_star_finding import remove_saturated_stars
 
 import crds
 import jwst
@@ -77,11 +77,13 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
 
 fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
+               'sickle': 'regions_/nircam_sickle_fov.reg',
                
                }
 
 refnames = {'2221': 'F405ref',
             '1182': 'VVV',
+            '3958': 'VVV',
             }
 
 # it's very difficult to modify the Webb pipeline in this way
@@ -132,6 +134,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             assert field == '004'
     elif regionname == 'cloudc':
         assert field == '002'
+    elif regionname == 'sickle':
+        if proposal_id == '3958':
+            assert field in ('007', '001', '002',)
 
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
@@ -160,8 +165,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                             )
     print("Obs table length:", len(obs_table))
 
-    msk = ((np.char.find(obs_table['filters'], filtername.upper()) >= 0) |
-           (np.char.find(obs_table['obs_id'], filtername.lower()) >= 0))
+    # np.array wrapper needed as of 2026-04-10 to avoid masked array type error that shouldn't happen
+    msk = ((np.char.find(np.array(obs_table['filters']), filtername.upper()) >= 0) |
+           (np.char.find(np.array(obs_table['obs_id']), filtername.lower()) >= 0))
     data_products_by_obs = Observations.get_product_list(obs_table[msk])
     print("data prodcts by obs length: ", len(data_products_by_obs))
 
@@ -218,7 +224,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         else:
             raise ValueError(f"Mismatch: Did not find any asn files for module {module} for field {field} in {output_dir}")
 
-        mapping = crds.rmap.load_mapping(f'/orange/adamginsburg/jwst/{regionname}/crds/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
+        crds_dir = os.getenv("CRDS_PATH") or f'/orange/adamginsburg/jwst/{regionname}/crds'
+        mapping = crds.rmap.load_mapping(f'{crds_dir}/mappings/jwst/jwst_nircam_pars-tweakregstep_0003.rmap')
         print(f"Mapping: {mapping.todict()['selections']}")
         print(f"Filtername: {filtername}")
         filter_match = [x for x in mapping.todict()['selections'] if filtername in x]
@@ -370,7 +377,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         tweakreg_parameters.update({'abs_refcat': abs_refcat})
         tweakreg_parameters.update({'skip': True})
 
-        if target in ('brick', 'cloudc'):
+        if regionname in ('brick', 'cloudc'):
             # for the VVV cat, use the merged version: no need for independent versions
             abs_refcat = vvvdr2fn = (f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername}-merged_vvvcat.ecsv')
             print(f"Loaded VVV catalog {vvvdr2fn}")
@@ -769,7 +776,8 @@ if __name__ == "__main__":
 
 
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
-                            '1182': {'004': 'brick'}}[proposal_id]
+                            '1182': {'004': 'brick'},
+                            '3958': {'007': 'sickle', '001': 'sickle', '002': 'sickle'}}[proposal_id]
 
     for field in fields:
         for filtername in filternames:
