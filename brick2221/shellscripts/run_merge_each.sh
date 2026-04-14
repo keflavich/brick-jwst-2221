@@ -1,4 +1,81 @@
 logdir=/blue/adamginsburg/adamginsburg/brick_logs/
+python_exe=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
+analysis_dir=/blue/adamginsburg/adamginsburg/jwst/brick/analysis
+basepath=/blue/adamginsburg/adamginsburg/jwst/brick
+
+submit_residual_mosaic_backstop() {
+	local filter="$1"
+	local module="$2"
+	local proposal_id="$3"
+	local target="$4"
+
+	local field=""
+	if [[ "${proposal_id}" == "2221" && "${target}" == "brick" ]]; then
+		field="001"
+	elif [[ "${proposal_id}" == "2221" && "${target}" == "cloudc" ]]; then
+		field="002"
+	elif [[ "${proposal_id}" == "1182" && "${target}" == "brick" ]]; then
+		field="004"
+	else
+		echo "Skipping backstop for unknown proposal/target: proposal_id=${proposal_id} target=${target}"
+		return
+	fi
+
+	sbatch --job-name=webb-mosaic-backstop-${filter}-${module}-${target} --output=${logdir}/webb-mosaic-backstop-${filter}-${module}-${target}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import glob, os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; pipeline_dir=f'{os.environ['BASEPATH']}/{os.environ['FILTER']}/pipeline';
+for kind in ('basic', 'iterative'):
+	pattern=(f'{pipeline_dir}/jw0{os.environ['PROPOSAL_ID']}-o{os.environ['FIELD']}_t001_nircam_clear-{os.environ['FILTER'].lower()}-{os.environ['MODULE']}_visit*_vgroup*_exp*_daophot_{kind}_residual.fits')
+	files=sorted(glob.glob(pattern))
+	out=(f'{pipeline_dir}/jw0{os.environ['PROPOSAL_ID']}-o{os.environ['FIELD']}_t001_nircam_clear-{os.environ['FILTER'].lower()}-{os.environ['MODULE']}_daophot_{kind}_residual_i2d.fits')
+	if files and (not os.path.exists(out)):
+		print(f'Residual backstop: mosaicking {kind} for {os.environ[\'FILTER\']} {os.environ[\'MODULE\']} target field {os.environ[\'FIELD\']}')
+		c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear')
+	elif files:
+		print(f'Residual backstop: output already exists for {kind}: {out}')
+	else:
+		print(f'Residual backstop: no per-exposure residual inputs for {kind} matching {pattern}')\""
+}
+
+for filter in F410M F405N F466N; do
+	for module in nrca nrcb; do
+		submit_residual_mosaic_backstop "${filter}" "${module}" "2221" "brick"
+	done
+done
+
+for filter in F212N F182M F187N; do
+	for modnum in 1 2 3 4; do
+		for module in nrca${modnum} nrcb${modnum}; do
+			submit_residual_mosaic_backstop "${filter}" "${module}" "2221" "brick"
+		done
+	done
+done
+
+for filter in F410M F405N F466N; do
+	for module in nrca nrcb; do
+		submit_residual_mosaic_backstop "${filter}" "${module}" "2221" "cloudc"
+	done
+done
+
+for filter in F212N F182M F187N; do
+	for modnum in 1 2 3 4; do
+		for module in nrca${modnum} nrcb${modnum}; do
+			submit_residual_mosaic_backstop "${filter}" "${module}" "2221" "cloudc"
+		done
+	done
+done
+
+for filter in F356W F444W; do
+	for module in nrca nrcb; do
+		submit_residual_mosaic_backstop "${filter}" "${module}" "1182" "brick"
+	done
+done
+
+for filter in F115W F200W; do
+	for modnum in 1 2 3 4; do
+		for module in nrca${modnum} nrcb${modnum}; do
+			submit_residual_mosaic_backstop "${filter}" "${module}" "1182" "brick"
+		done
+	done
+done
 
 sbatch --array=0-4,6-7 --job-name=webb-cat-merge-singlefields-dao-brick --output=${logdir}/webb-cat-merge-singlefields-dao-brick_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource"
 sbatch --array=0-4,6-7 --job-name=webb-cat-merge-singlefields-dao-cloudc --output=${logdir}/webb-cat-merge-singlefields-dao-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource --target=cloudc"
