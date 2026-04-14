@@ -247,8 +247,17 @@ def run_polygon_av_slices(
     base_skycoord = get_skycoord(base_table)
     x_base = base_skycoord.ra.deg
     y_base = base_skycoord.dec.deg
-    x_edges_cube = np.linspace(np.nanpercentile(x_base, 0.5), np.nanpercentile(x_base, 99.5), MAP_PIXELS + 1)
-    y_edges_cube = np.linspace(np.nanpercentile(y_base, 0.5), np.nanpercentile(y_base, 99.5), MAP_PIXELS + 1)
+    x_min = np.nanpercentile(x_base, 0.5)
+    x_max = np.nanpercentile(x_base, 99.5)
+    y_min = np.nanpercentile(y_base, 0.5)
+    y_max = np.nanpercentile(y_base, 99.5)
+    x_center = 0.5 * (x_min + x_max)
+    y_center = 0.5 * (y_min + y_max)
+    pixel_scale = max((x_max - x_min), (y_max - y_min)) / MAP_PIXELS
+    half_span = 0.5 * MAP_PIXELS * pixel_scale
+    # Reverse the RA axis so larger RA appears to the left in the final cube.
+    x_edges_cube = np.linspace(x_center + half_span, x_center - half_span, MAP_PIXELS + 1)
+    y_edges_cube = np.linspace(y_center - half_span, y_center + half_span, MAP_PIXELS + 1)
 
     av_bins = []
     av_lo = 0.0
@@ -323,15 +332,43 @@ def run_polygon_av_slices(
     y_cent_cube = 0.5 * (y_edges_cube[:-1] + y_edges_cube[1:])
     dx = float(x_cent_cube[1] - x_cent_cube[0])
     dy = float(y_cent_cube[1] - y_cent_cube[0])
+    if not np.isclose(np.abs(dx), np.abs(dy)):
+        raise ValueError(f'Cube grid is not square: dx={dx}, dy={dy}')
 
-    wcs3d = WCS(naxis=3)
-    wcs3d.wcs.ctype = ['RA---TAN', 'DEC--TAN', 'A_V']
-    wcs3d.wcs.cunit = ['deg', 'deg', 'mag']
-    wcs3d.wcs.crpix = [1.0, 1.0, 1.0]
-    wcs3d.wcs.crval = [float(x_cent_cube[0]), float(y_cent_cube[0]), float(av_mids[0])]
-    wcs3d.wcs.cdelt = [dx, dy, float(av_step)]
-
-    cube_header = wcs3d.to_header()
+    # Create a proper 3D FITS header with celestial 2D WCS + linear third axis
+    # Use WCS for RA/Dec only, then manually configure the third axis
+    from astropy.io.fits import Header
+    
+    # Create base header with proper FITS structure
+    cube_header = Header()
+    cube_header['SIMPLE'] = True
+    cube_header['BITPIX'] = -32  # 32-bit float
+    cube_header['NAXIS'] = 3
+    cube_header['NAXIS1'] = len(x_cent_cube)
+    cube_header['NAXIS2'] = len(y_cent_cube)
+    cube_header['NAXIS3'] = len(av_mids)
+    
+    # Axis 1: RA (celestial) - use square pixels
+    cube_header['CTYPE1'] = 'RA---TAN'
+    cube_header['CUNIT1'] = 'deg'
+    cube_header['CRPIX1'] = 1.0
+    cube_header['CRVAL1'] = float(x_cent_cube[0])
+    cube_header['CDELT1'] = dx
+    
+    # Axis 2: Dec (celestial) - use square pixels
+    cube_header['CTYPE2'] = 'DEC--TAN'
+    cube_header['CUNIT2'] = 'deg'
+    cube_header['CRPIX2'] = 1.0
+    cube_header['CRVAL2'] = float(y_cent_cube[0])
+    cube_header['CDELT2'] = dy
+    
+    # Axis 3: A_V (linear, not celestial - uses CTYPE='LINEAR' which FITS/CARTA understands)
+    cube_header['CTYPE3'] = 'LINEAR'
+    cube_header['CUNIT3'] = 'mag'
+    cube_header['CRPIX3'] = 1.0
+    cube_header['CRVAL3'] = float(av_mids[0])
+    cube_header['CDELT3'] = float(av_step)
+    
     cube_header['BUNIT'] = '1 / deg2'
     cube_header['EXTNAME'] = 'DENSITY_CUBE'
     cube_header['KNN'] = int(nth_neighbor)
