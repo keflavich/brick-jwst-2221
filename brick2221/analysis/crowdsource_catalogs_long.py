@@ -3,6 +3,7 @@ import sys
 import glob
 import time
 import json
+import re
 import numpy
 import regions
 import numpy as np
@@ -70,6 +71,24 @@ import datetime
 print("Done with imports", flush=True)
 
 FWHM_TABLE = Path(__file__).resolve().parents[1] / 'reduction' / 'fwhm_table.ecsv'
+
+
+def normalize_vgroup_id(vgroup_id):
+    if vgroup_id is None or vgroup_id == '':
+        return '', None
+
+    vgroup_token = str(vgroup_id)
+    if vgroup_token.startswith('_vgroup'):
+        vgroup_token = vgroup_token.removeprefix('_vgroup')
+
+    if vgroup_token.isdigit():
+        return f'_vgroup{vgroup_token}', int(vgroup_token)
+
+    digit_match = re.search(r'\d+', vgroup_token)
+    if digit_match is not None:
+        return f'_vgroup{vgroup_token}', int(digit_match.group(0))
+
+    return f'_vgroup{vgroup_token}', None
 
 
 def print(*args, **kwargs):
@@ -318,10 +337,10 @@ def save_photutils_results(result, ww, filename,
     detector = "" # no detector #'s for long
     if options.each_exposure:
         result.meta['exposure'] = exposure_
-    if visitid_ is not None:
-        result.meta['visit'] = int(visitid_[-3:]) if visitid_ != '' else None
-    if vgroupid_ is not None:
-        result.meta['vgroup'] = int(vgroupid_[-4:]) if vgroupid_ != '' else None
+    if visitid_ is not None and visitid_ != '':
+        result.meta['visit'] = int(visitid_[-3:])
+    if vgroupid_ is not None and vgroupid_ != '':
+        result.meta['vgroup'] = vgroupid_.removeprefix('_vgroup')
         
     result.meta['filename'] = filename
     result.meta['filter'] = filtername
@@ -391,10 +410,10 @@ def save_crowdsource_results(results, ww, filename, suffix,
     pixscale = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
     stars['dra'] = stars['dx'] * pixscale
     stars['ddec'] = stars['dy'] * pixscale
-    stars['local_bkg'] = _sample_background_map(skymsky, stars['x'], stars['y'])
-    stars.meta['BKGCOL'] = 'local_bkg'
-    stars.meta['BKGMETH'] = 'skymsky_sample'
-
+    if visitid_ is not None and visitid_ != '':
+        stars.meta['visit'] = int(visitid_[-3:])
+    if vgroupid_ is not None and vgroupid_ != '':
+        stars.meta['vgroup'] = vgroupid_.removeprefix('_vgroup')
     stars.meta['filename'] = filename
     stars.meta['filter'] = filtername
     stars.meta['module'] = module
@@ -407,7 +426,7 @@ def save_crowdsource_results(results, ww, filename, suffix,
     if visitid_:
         stars.meta['visit'] = int(visitid_[-3:])
     if vgroupid_:
-        stars.meta['vgroup'] = int(vgroupid_[-4:])
+        stars.meta['vgroup'] = vgroupid_.removeprefix('_vgroup')
 
     if 'RAOFFSET' in im1[0].header:
         stars.meta['RAOFFSET'] = im1[0].header['RAOFFSET']
@@ -875,7 +894,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     epsf_ = "_epsf" if options.epsf else ""
     exposure_ = f'_exp{exposurenumber:05d}' if exposurenumber is not None else ''
     visitid_ = f'_visit{int(visit_id):03d}' if visit_id is not None else ''
-    vgroupid_ = f'_vgroup{int(vgroup_id)}' if vgroup_id is not None else ''
+    vgroupid_, vgroup_numeric = normalize_vgroup_id(vgroup_id)
     blur_ = "_blur" if options.blur else ""
     group = "_group" if options.group else ""
 
