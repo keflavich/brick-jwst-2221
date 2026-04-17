@@ -49,4 +49,5 @@ The analysis has been done haphazardly in notebooks, but then I tried to reconci
 
 There are a few basic setup needs before you get started with reduction of a new project:
  * if the project has a name (e.g., 2221 or brick), there should be a ``crds/`` directory under that directory. e.g., for `/orange/adamginsburg/brick`, there is `/orange/adamginsburg/brick/crds`.  
+ * create a field region for selecting stars for crossmatching, e.g., `/orange/adamginsburg/jwst/sickle/regions_/nircam_sickle_fov.reg`
  * you need to add mappings from target/region name to project code and vice versa in a few places.  TODO: enumerate these
