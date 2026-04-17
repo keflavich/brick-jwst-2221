@@ -78,12 +78,15 @@ medfilt_size = {'F410M': 15, 'F405N': 256, 'F466N': 55,
 fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
                'sickle': 'regions_/nircam_sickle_fov.reg',
-               
+               'sgrb2': 'regions_/nircam_sgrb2_fov.reg',
+               'w51': 'regions_/nircam_w51_fov.reg',
                }
 
 refnames = {'2221': 'F405ref',
             '1182': 'VVV',
             '3958': 'VVV',
+            '5365': 'VVV',
+            '6151': 'UKIDSS', # gaia?
             }
 
 # Reference catalog configuration by proposal and field.
@@ -98,6 +101,12 @@ REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD = {
     },
     '3958': {
         '007': 'catalogs/pipeline_based_nircam-f210m_reference_astrometric_catalog.ecsv',
+    },
+    '5365': {
+        '001': 'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
+    },
+    '6151': {
+        '001': 'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
     },
 }
 
@@ -342,9 +351,10 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                                 if f'{module}' in row['expname']]
 
         if len(asn_data['products'][0]['members']) == 0:
-            # this is a 'guard' added by AI, but it may be skipping something real?  The logic of asn files is hard to parse so I'm leaving this as a note to future me that this _might_ be a place to look for unintentionally skipped steps
-            print(f"No {module} members found in {asn_file}; skipping module {module} for filter {filtername}.")
-            return
+            raise ValueError(
+                f"No {module} members found in {asn_file} for filter {filtername} field {field} proposal {proposal_id}. "
+                f"This is not a valid pipeline state because the module output cannot be produced."
+            )
 
         for member in asn_data['products'][0]['members']:
             print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
@@ -815,7 +825,10 @@ if __name__ == "__main__":
 
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
                             '1182': {'004': 'brick'},
-                            '3958': {'007': 'sickle', '001': 'sickle', '002': 'sickle'}}[proposal_id]
+                            '5365': {'001': 'sgrb2'},
+                            '6151': {'001': 'w51'},
+                            '3958': {'007': 'sickle', '001': 'sickle', '002': 'sickle'},
+                            }[proposal_id]
 
     for field in fields:
         for filtername in filternames:
