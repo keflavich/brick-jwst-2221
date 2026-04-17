@@ -753,6 +753,24 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     reg_to_field_mapping = {v:k for k,v in field_to_reg_mapping.items()}
     field = reg_to_field_mapping[target]
 
+    modules_by_proposal_field = {
+        '3958': {'007': ('nrcb',)},
+    }
+    allowed_modules = modules_by_proposal_field.get(proposal_id, {}).get(field)
+    if allowed_modules is not None:
+        filtered_modules = [module for module in modules if module in allowed_modules]
+        if len(filtered_modules) == 0:
+            raise ValueError(
+                f"No requested modules are allowed for proposal_id={proposal_id} field={field}. "
+                f"Requested modules={modules}, allowed modules={allowed_modules}"
+            )
+        if tuple(filtered_modules) != tuple(modules):
+            print(
+                f"Restricting modules for proposal_id={proposal_id} field={field} to {filtered_modules} "
+                f"because this dataset is explicitly single-module."
+            )
+        modules = filtered_modules
+
     if field_to_reg_mapping[field] == 'sickle':
         basepath = f'/orange/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
     else:

@@ -110,6 +110,12 @@ REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD = {
     },
 }
 
+MODULES_BY_PROPOSAL_FIELD = {
+    '3958': {
+        '007': ('nrcb',),
+    },
+}
+
 
 def get_reference_astrometric_catalog_path(basepath, proposal_id, field):
     if proposal_id not in REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD:
@@ -118,6 +124,25 @@ def get_reference_astrometric_catalog_path(basepath, proposal_id, field):
         raise KeyError(f"No reference catalog mapping configured for proposal_id={proposal_id} field={field}")
     relpath = REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD[proposal_id][field]
     return f'{basepath}/{relpath}'
+
+
+def get_allowed_modules(proposal_id, field, requested_modules):
+    allowed_modules = MODULES_BY_PROPOSAL_FIELD.get(proposal_id, {}).get(field)
+    if allowed_modules is None:
+        return requested_modules
+
+    filtered_modules = [module for module in requested_modules if module in allowed_modules]
+    if len(filtered_modules) == 0:
+        raise ValueError(
+            f"No requested modules are allowed for proposal_id={proposal_id} field={field}. "
+            f"Requested modules={requested_modules}, allowed modules={allowed_modules}"
+        )
+    if tuple(filtered_modules) != tuple(requested_modules):
+        print(
+            f"Restricting modules for proposal_id={proposal_id} field={field} to {filtered_modules} "
+            f"because this dataset is explicitly single-module."
+        )
+    return filtered_modules
 
 # it's very difficult to modify the Webb pipeline in this way
 # # replace Image2Pipeline's 'resample' with one that uses our hand-corrected coordinates
@@ -170,6 +195,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
     elif regionname == 'sickle':
         if proposal_id == '3958':
             assert field == '007'
+
+    expected_modules = get_allowed_modules(proposal_id, field, ('nrca', 'nrcb'))
+    do_merge = 'nrca' in expected_modules and 'nrcb' in expected_modules
 
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
@@ -515,10 +543,13 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
     if module == 'nrcb':
         # assume nrca is run before nrcb
-        print("Merging already-combined nrca + nrcb modules")
-        merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix=f'{destreak_suffix}_realigned-to-refcat',
-                       proposal_id=proposal_id)
-        print("DONE Merging already-combined nrca + nrcb modules")
+        if do_merge:
+            print("Merging already-combined nrca + nrcb modules")
+            merge_a_plus_b(filtername, basepath=basepath, fieldnumber=field, suffix=f'{destreak_suffix}_realigned-to-refcat',
+                           proposal_id=proposal_id)
+            print("DONE Merging already-combined nrca + nrcb modules")
+        else:
+            print("NRCB-only subarray mode; merge step is not expected or required.")
 
         #try:
         #    # this is probably wrong / has wrong path names.
@@ -831,8 +862,9 @@ if __name__ == "__main__":
                             }[proposal_id]
 
     for field in fields:
+        modules_for_field = get_allowed_modules(proposal_id, field, modules)
         for filtername in filternames:
-            for module in modules:
+            for module in modules_for_field:
                 print(f"Main Loop: {proposal_id} + {filtername} + {module} + {field}={field_to_reg_mapping[field]}")
                 results = main(filtername=filtername, module=module, Observations=Observations, field=field,
                                regionname=field_to_reg_mapping[field],
