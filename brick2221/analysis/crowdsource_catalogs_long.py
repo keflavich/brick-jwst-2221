@@ -753,21 +753,44 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     reg_to_field_mapping = {v:k for k,v in field_to_reg_mapping.items()}
     field = reg_to_field_mapping[target]
 
-    modules_by_proposal_field = {
-        '3958': {'007': ('nrcb',)},
+    # Module restrictions per proposal/field/filter for single-module datasets
+    # Sickle is NRCB-only (SUB640 subarray) but detectors differ by wavelength:
+    # - Short-wavelength (F187N, F210M): nrcb1, nrcb2, nrcb3, nrcb4
+    # - Long-wavelength (F335M, F470N, F480M): nrcb only
+    modules_by_proposal_field_filter = {
+        '3958': {
+            '007': {
+                'F187N': ('nrcb1', 'nrcb2', 'nrcb3', 'nrcb4'),
+                'F210M': ('nrcb1', 'nrcb2', 'nrcb3', 'nrcb4'),
+                'F335M': ('nrcb',),
+                'F470N': ('nrcb',),
+                'F480M': ('nrcb',),
+            }
+        }
     }
-    allowed_modules = modules_by_proposal_field.get(proposal_id, {}).get(field)
+    # Check if there's a filter-specific policy
+    allowed_modules = None
+    if proposal_id in modules_by_proposal_field_filter:
+        if field in modules_by_proposal_field_filter[proposal_id]:
+            field_policy = modules_by_proposal_field_filter[proposal_id][field]
+            # Check if any of the requested filters have a policy
+            for filt in filternames:
+                if filt in field_policy:
+                    allowed_modules = field_policy[filt]
+                    break
+    
     if allowed_modules is not None:
         filtered_modules = [module for module in modules if module in allowed_modules]
         if len(filtered_modules) == 0:
             raise ValueError(
-                f"No requested modules are allowed for proposal_id={proposal_id} field={field}. "
+                f"No requested modules are allowed for proposal_id={proposal_id} field={field} "
+                f"filters={filternames}. "
                 f"Requested modules={modules}, allowed modules={allowed_modules}"
             )
         if tuple(filtered_modules) != tuple(modules):
             print(
-                f"Restricting modules for proposal_id={proposal_id} field={field} to {filtered_modules} "
-                f"because this dataset is explicitly single-module."
+                f"Restricting modules for proposal_id={proposal_id} field={field} filters={filternames} "
+                f"to {filtered_modules} because this dataset is explicitly single-module."
             )
         modules = filtered_modules
 

@@ -110,10 +110,20 @@ REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD = {
     },
 }
 
-MODULES_BY_PROPOSAL_FIELD = {
+# Module restrictions per proposal/field/filter for single-module datasets
+# Sickle is NRCB-only (SUB640 subarray) but detectors differ by wavelength:
+# - Short-wavelength (F187N, F210M): nrcb1, nrcb2, nrcb3, nrcb4
+# - Long-wavelength (F335M, F470N, F480M): nrcb only
+MODULES_BY_PROPOSAL_FIELD_FILTER = {
     '3958': {
-        '007': ('nrcb',),
-    },
+        '007': {
+            'F187N': ('nrcb1', 'nrcb2', 'nrcb3', 'nrcb4'),
+            'F210M': ('nrcb1', 'nrcb2', 'nrcb3', 'nrcb4'),
+            'F335M': ('nrcb',),
+            'F470N': ('nrcb',),
+            'F480M': ('nrcb',),
+        }
+    }
 }
 
 
@@ -126,21 +136,30 @@ def get_reference_astrometric_catalog_path(basepath, proposal_id, field):
     return f'{basepath}/{relpath}'
 
 
-def get_allowed_modules(proposal_id, field, requested_modules):
-    allowed_modules = MODULES_BY_PROPOSAL_FIELD.get(proposal_id, {}).get(field)
+def get_allowed_modules(proposal_id, field, requested_modules, filtername=None):
+    allowed_modules = None
+    
+    # Check for filter-specific policy first
+    if proposal_id in MODULES_BY_PROPOSAL_FIELD_FILTER:
+        if field in MODULES_BY_PROPOSAL_FIELD_FILTER[proposal_id]:
+            field_policy = MODULES_BY_PROPOSAL_FIELD_FILTER[proposal_id][field]
+            if filtername and filtername in field_policy:
+                allowed_modules = field_policy[filtername]
+    
     if allowed_modules is None:
         return requested_modules
 
     filtered_modules = [module for module in requested_modules if module in allowed_modules]
     if len(filtered_modules) == 0:
         raise ValueError(
-            f"No requested modules are allowed for proposal_id={proposal_id} field={field}. "
+            f"No requested modules are allowed for proposal_id={proposal_id} field={field} "
+            f"filtername={filtername}. "
             f"Requested modules={requested_modules}, allowed modules={allowed_modules}"
         )
     if tuple(filtered_modules) != tuple(requested_modules):
         print(
-            f"Restricting modules for proposal_id={proposal_id} field={field} to {filtered_modules} "
-            f"because this dataset is explicitly single-module."
+            f"Restricting modules for proposal_id={proposal_id} field={field} filtername={filtername} "
+            f"to {filtered_modules} because this dataset is explicitly single-module."
         )
     return filtered_modules
 
@@ -196,7 +215,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         if proposal_id == '3958':
             assert field == '007'
 
-    expected_modules = get_allowed_modules(proposal_id, field, ('nrca', 'nrcb'))
+    expected_modules = get_allowed_modules(proposal_id, field, ('nrca', 'nrcb'), filtername=filtername)
     do_merge = 'nrca' in expected_modules and 'nrcb' in expected_modules
 
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
@@ -862,8 +881,8 @@ if __name__ == "__main__":
                             }[proposal_id]
 
     for field in fields:
-        modules_for_field = get_allowed_modules(proposal_id, field, modules)
         for filtername in filternames:
+            modules_for_field = get_allowed_modules(proposal_id, field, modules, filtername=filtername)
             for module in modules_for_field:
                 print(f"Main Loop: {proposal_id} + {filtername} + {module} + {field}={field_to_reg_mapping[field]}")
                 results = main(filtername=filtername, module=module, Observations=Observations, field=field,
