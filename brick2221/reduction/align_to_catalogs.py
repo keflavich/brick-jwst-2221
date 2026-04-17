@@ -305,6 +305,12 @@ def merge_a_plus_b(filtername,
     filename_nrca = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrca{suffix}.fits'
     filename_nrcb = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername.lower()}-nrcb{suffix}.fits'
     files = [filename_nrca, filename_nrcb]
+    missing_files = [filename for filename in files if not os.path.exists(filename)]
+    if missing_files:
+        raise FileNotFoundError(
+            f"Missing expected module file(s) for {filtername} field={fieldnumber} proposal={proposal_id} suffix={suffix}: "
+            + ", ".join(missing_files)
+        )
 
     hdus = [fits.open(fn)[('SCI', 1)] for fn in files]
     ehdus = [fits.open(fn)[('ERR', 1)] for fn in files]
@@ -327,7 +333,7 @@ def merge_a_plus_b(filtername,
                                                  shape_out=target_shape,
                                                  parallel=parallel,
                                                  reproject_function=reproject.reproject_exact)
-    header = fits.getheader(filename_nrca)
+    header = fits.getheader(files[0])
     header.update(target_wcs.to_header())
     hdul = fits.HDUList([fits.PrimaryHDU(header=header),
                          fits.ImageHDU(data=merged, name='SCI', header=header),
