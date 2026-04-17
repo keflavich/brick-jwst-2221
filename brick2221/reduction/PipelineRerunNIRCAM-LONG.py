@@ -86,6 +86,30 @@ refnames = {'2221': 'F405ref',
             '3958': 'VVV',
             }
 
+# Reference catalog configuration by proposal and field.
+# Paths are relative to basepath.
+REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD = {
+    '2221': {
+        '001': 'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
+        '002': 'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
+    },
+    '1182': {
+        '004': 'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
+    },
+    '3958': {
+        '007': 'catalogs/pipeline_based_nircam-f210m_reference_astrometric_catalog.ecsv',
+    },
+}
+
+
+def get_reference_astrometric_catalog_path(basepath, proposal_id, field):
+    if proposal_id not in REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD:
+        raise KeyError(f"No reference catalog mapping configured for proposal_id={proposal_id}")
+    if field not in REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD[proposal_id]:
+        raise KeyError(f"No reference catalog mapping configured for proposal_id={proposal_id} field={field}")
+    relpath = REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD[proposal_id][field]
+    return f'{basepath}/{relpath}'
+
 # it's very difficult to modify the Webb pipeline in this way
 # # replace Image2Pipeline's 'resample' with one that uses our hand-corrected coordinates
 # def pre_resample(func):
@@ -136,7 +160,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         assert field == '002'
     elif regionname == 'sickle':
         if proposal_id == '3958':
-            assert field in ('007', '001', '002',)
+            assert field == '007'
 
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
@@ -317,6 +341,11 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         asn_data['products'][0]['members'] = [row for row in asn_data['products'][0]['members']
                                                 if f'{module}' in row['expname']]
 
+        if len(asn_data['products'][0]['members']) == 0:
+            # this is a 'guard' added by AI, but it may be skipping something real?  The logic of asn files is hard to parse so I'm leaving this as a note to future me that this _might_ be a place to look for unintentionally skipped steps
+            print(f"No {module} members found in {asn_file}; skipping module {module} for filter {filtername}.")
+            return
+
         for member in asn_data['products'][0]['members']:
             print(f"Running destreak={do_destreak} and maybe alignment on {member} for module={module}")
             hdr = fits.getheader(member['expname'])
@@ -356,7 +385,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             reftbl.meta['name'] = f'VVV Reference Catalog {filtername}'
             assert 'skycoord' in reftbl.colnames
         else:
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            abs_refcat = get_reference_astrometric_catalog_path(basepath, proposal_id, field)
             reftbl = Table.read(abs_refcat)
             # For non-F410M, try aligning to F410M instead of VVV?
             reftblversion = reftbl.meta['VERSION']
@@ -387,7 +416,7 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             reftbl = Table.read(abs_refcat)
             reftbl.meta['name'] = f'VVV Reference Catalog {filtername}'
             assert 'skycoord' in reftbl.colnames
-            abs_refcat = f'{basepath}/NB/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            abs_refcat = get_reference_astrometric_catalog_path(basepath, proposal_id, field)
             reftbl = Table.read(abs_refcat)
             # For non-F410M, try aligning to F410M instead of VVV?
             reftblversion = reftbl.meta['VERSION']
@@ -425,23 +454,28 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             check_wcs(member['expname'].replace('destreak', 'i2d'))
         check_wcs(asn_data['products'][0]['name'] + "_i2d.fits")
 
-        print(f"Realigning to VVV (module={module}, filter={filtername})")
-        realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
-        shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
-                    realigned_vvv_filename)
-        print(f"Realigned to VVV filename: {realigned_vvv_filename}")
-        realigned = realign_to_vvv(filtername=filtername.lower(),
-                                   fov_regname=fov_regname[regionname],
-                                   basepath=basepath, module=module,
-                                   fieldnumber=field, proposal_id=proposal_id,
-                                   imfile=realigned_vvv_filename,
-                                   ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
-                                   mag_limit=18 if filtername.lower() == 'f115w' else 15,
-                                   max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
-                                   #raoffset=raoffset,
-                                   #decoffset=decoffset
-                                   )
-        print(f"Done realigning to VVV (module={module}, filtername={filtername})")
+        did_vvv_realign = False
+        if regionname in ('brick', 'cloudc'):
+            print(f"Realigning to VVV (module={module}, filter={filtername})")
+            realigned_vvv_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits'
+            shutil.copy(f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits',
+                        realigned_vvv_filename)
+            print(f"Realigned to VVV filename: {realigned_vvv_filename}")
+            realigned = realign_to_vvv(filtername=filtername.lower(),
+                                       fov_regname=fov_regname[regionname],
+                                       basepath=basepath, module=module,
+                                       fieldnumber=field, proposal_id=proposal_id,
+                                       imfile=realigned_vvv_filename,
+                                       ksmag_limit=15 if filtername.lower() == 'f410m' else 11,
+                                       mag_limit=18 if filtername.lower() == 'f115w' else 15,
+                                       max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
+                                       #raoffset=raoffset,
+                                       #decoffset=decoffset
+                                       )
+            print(f"Done realigning to VVV (module={module}, filtername={filtername})")
+            did_vvv_realign = True
+        else:
+            print(f"Skipping VVV realignment for region {regionname} (module={module}, filter={filtername})")
 
         print(f"Realigning to refcat (module={module}, filtername={filtername})")
         realigned_refcat_filename = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-refcat.fits'
@@ -459,12 +493,14 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        )
         print(f"Done realigning to refcat (module={module}, filtername={filtername})")
 
-        print(f"Removing saturated stars.  cwd={os.getcwd()}")
-        try:
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits')
-        except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
-            print("Failed to run remove_saturated_stars with failure {ex}")
+        # saturated star "removal" should only be done in the cataloging stage
+        # print(f"Removing saturated stars.  cwd={os.getcwd()}")
+        # try:
+        #     remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}_i2d.fits')
+        #     if did_vvv_realign:
+        #         remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits')
+        # except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
+        #     print("Failed to run remove_saturated_stars with failure {ex}")
 
 
     if module == 'nrcb':
@@ -526,14 +562,15 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
             reftbl = Table.read(abs_refcat)
             assert 'skycoord' in reftbl.colnames
         else:
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv'
+            abs_refcat = get_reference_astrometric_catalog_path(basepath, proposal_id, field)
             reftbl = Table.read(abs_refcat)
             assert 'skycoord' in reftbl.colnames
             reftblversion = reftbl.meta['VERSION']
 
             # truncate to top 10,000 sources
-            reftbl[:10000].write(f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv', overwrite=True)
-            abs_refcat = f'{basepath}/catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog_truncated10000.ecsv'
+            abs_refcat_truncated = abs_refcat.replace('.ecsv', '_truncated10000.ecsv')
+            reftbl[:10000].write(abs_refcat_truncated, overwrite=True)
+            abs_refcat = abs_refcat_truncated
 
             tweakreg_parameters['abs_searchrad'] = 0.4
             tweakreg_parameters['searchrad'] = 0.05
@@ -586,12 +623,13 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        #raoffset=raoffset, decoffset=decoffset
                                        )
 
-        print(f"Removing saturated stars.  cwd={os.getcwd()}")
-        try:
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
-            remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits')
-        except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
-            print("Failed to run remove_saturated_stars with failure {ex}")
+        # removing saturated stars should only be done in cataloging stage
+        # print(f"Removing saturated stars.  cwd={os.getcwd()}")
+        # try:
+        #     remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-merged_i2d.fits')
+        #     remove_saturated_stars(f'jw0{proposal_id}-o{field}_t001_nircam_clear-{filtername.lower()}-{module}{destreak_suffix}_realigned-to-vvv.fits')
+        # except (TimeoutError, requests.exceptions.ReadTimeout) as ex:
+        #     print("Failed to run remove_saturated_stars with failure {ex}")
 
     globals().update(locals())
     return locals()
@@ -675,8 +713,8 @@ def fix_alignment(fn, proposal_id=None, module=None, field=None, basepath=None, 
                 decshift += 0.1*u.arcsec
                 rashift += -0.23*u.arcsec
     else:
-        rashift = 0*u.arsec
-        decshift = 0*u.arsec
+        rashift = 0*u.arcsec
+        decshift = 0*u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:
