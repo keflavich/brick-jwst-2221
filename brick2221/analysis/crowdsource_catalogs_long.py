@@ -351,6 +351,18 @@ def _skycoord_entries(tbl, colname):
     return entries
 
 
+def _skycoord_radec_arrays(tbl, colname):
+    ra = np.full(len(tbl), np.nan, dtype=float)
+    dec = np.full(len(tbl), np.nan, dtype=float)
+    entries = _skycoord_entries(tbl, colname)
+    for ii, coord in enumerate(entries):
+        if coord is None:
+            continue
+        ra[ii] = float(coord.ra.deg)
+        dec[ii] = float(coord.dec.deg)
+    return ra, dec
+
+
 def _resolve_seed_skycoords(seed_table, ww=None, preferred_skycoord_col=None):
     seed_table = _as_table(seed_table)
     nsrc = len(seed_table)
@@ -464,6 +476,8 @@ def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, w
         return seed_table
 
     det_sky = ww.pixel_to_world(det_x[det_finite], det_y[det_finite])
+    det_ra = np.asarray(det_sky.ra.deg, dtype=float)
+    det_dec = np.asarray(det_sky.dec.deg, dtype=float)
     detection_table = detection_table[det_finite]
     if 'skycoord' not in detection_table.colnames:
         detection_table['skycoord'] = np.empty(len(detection_table), dtype=object)
@@ -472,16 +486,20 @@ def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, w
     if 'is_saturated' not in detection_table.colnames:
         detection_table['is_saturated'] = np.zeros(len(detection_table), dtype=bool)
 
-    seed_sky_entries = _skycoord_entries(seed_table, 'skycoord')
-    valid_seed_idx = [ii for ii, coord in enumerate(seed_sky_entries) if coord is not None]
-    if len(valid_seed_idx) == 0:
+    seed_ra, seed_dec = _skycoord_radec_arrays(seed_table, 'skycoord')
+    valid_seed_idx = np.isfinite(seed_ra) & np.isfinite(seed_dec)
+    if not np.any(valid_seed_idx):
         combined = vstack([seed_table, detection_table], metadata_conflicts='silent')
         if 'is_saturated' not in combined.colnames:
             combined['is_saturated'] = np.zeros(len(combined), dtype=bool)
         return combined
 
-    seed_sky = SkyCoord([seed_sky_entries[ii] for ii in valid_seed_idx])
-    det_sky_all = SkyCoord([coord for coord in detection_table['skycoord']])
+    seed_sky = SkyCoord(ra=seed_ra[valid_seed_idx] * u.deg,
+                        dec=seed_dec[valid_seed_idx] * u.deg,
+                        frame='icrs')
+    det_sky_all = SkyCoord(ra=det_ra * u.deg,
+                           dec=det_dec * u.deg,
+                           frame='icrs')
     _, sep2d, _ = det_sky_all.match_to_catalog_sky(seed_sky)
     pixscale = ww.proj_plane_pixel_area()**0.5
     match_radius = (match_radius_pix * pixscale).to(u.arcsec)
@@ -508,15 +526,17 @@ class SeededFinder:
         if self.ww is None:
             xvals, yvals = _best_available_xy(seeds)
         else:
-            sky_entries = _skycoord_entries(seeds, 'skycoord')
-            valid_idx = [ii for ii, coord in enumerate(sky_entries) if coord is not None]
+            sky_ra, sky_dec = _skycoord_radec_arrays(seeds, 'skycoord')
+            valid_idx = np.isfinite(sky_ra) & np.isfinite(sky_dec)
             xvals = np.full(len(seeds), np.nan, dtype=float)
             yvals = np.full(len(seeds), np.nan, dtype=float)
-            if len(valid_idx) > 0:
-                skycoords = SkyCoord([sky_entries[ii] for ii in valid_idx])
+            if np.any(valid_idx):
+                skycoords = SkyCoord(ra=sky_ra[valid_idx] * u.deg,
+                                     dec=sky_dec[valid_idx] * u.deg,
+                                     frame='icrs')
                 xx, yy = self.ww.world_to_pixel(skycoords)
-                xvals[valid_idx] = xx
-                yvals[valid_idx] = yy
+                xvals[valid_idx] = np.asarray(xx, dtype=float)
+                yvals[valid_idx] = np.asarray(yy, dtype=float)
 
         finite = np.isfinite(xvals) & np.isfinite(yvals)
         seeds = seeds[finite]

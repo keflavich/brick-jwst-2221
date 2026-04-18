@@ -273,6 +273,7 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
     # nan_to_num data to avoid fitting NaNs
     data[np.isnan(fitsdata['VAR_POISSON'].data)] = 0
     dq = fitsdata['DQ'].data
+    full_model_image = np.zeros_like(data, dtype=float)
 
     saturated, sources, coms = find_saturated_stars(fitsdata, min_sep_from_edge=min_sep_from_edge, edge_npix=edge_npix)
 
@@ -474,6 +475,8 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
             # cut psf_eval to the image size
             model_image += psf_eval[0:ny, 0:nx]
 
+        full_model_image[y0:y1, x0:x1] += model_image
+
         threshold_image = np.zeros_like(cutout)
 
         #count the number of pixels above local background in the model_image
@@ -573,7 +576,8 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         if 'y_0' not in base_tab.colnames and 'ycentroid' in base_tab.colnames:
             base_tab['y_0'] = base_tab['ycentroid']
         builtins.satstar_table = base_tab
-        builtins.satstar_resid = data.copy()
+        builtins.satstar_model = full_model_image
+        builtins.satstar_resid = data - full_model_image
         return base_tab
 
 def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True, **kwargs):
@@ -595,8 +599,24 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True, *
         satstar_table.meta.update(header)
         print("Finished get_saturated_stars", flush=True)
 
-        satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=overwrite)
-        print(f"Saved saturated star catalog to {filename.replace('.fits', '_satstar_catalog.fits')}", flush=True)
+        satstar_catalog_filename = filename.replace(".fits", '_satstar_catalog.fits')
+        satstar_model_filename = filename.replace(".fits", '_satstar_model.fits')
+        satstar_residual_filename = filename.replace(".fits", '_satstar_residual.fits')
+
+        satstar_table.write(satstar_catalog_filename, overwrite=overwrite)
+        print(f"Saved saturated star catalog to {satstar_catalog_filename}", flush=True)
+
+        if hasattr(builtins, 'satstar_model'):
+            fits.PrimaryHDU(data=builtins.satstar_model, header=header).writeto(
+                satstar_model_filename, overwrite=overwrite
+            )
+            print(f"Saved saturated star model image to {satstar_model_filename}", flush=True)
+
+        if hasattr(builtins, 'satstar_resid'):
+            fits.PrimaryHDU(data=builtins.satstar_resid, header=header).writeto(
+                satstar_residual_filename, overwrite=overwrite
+            )
+            print(f"Saved saturated star residual image to {satstar_residual_filename}", flush=True)
     else:
         print("No saturated stars found", flush=True)
         return

@@ -632,6 +632,19 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         print(f"Writing table {tablename} with len={len(basetable)} and ncols={len(basetable.colnames)}", flush=True)
         # use caps b/c FITS will force it to caps anyway
         basetable.meta['VERSION'] = datetime.datetime.now().isoformat()
+        # FITS can mishandle masked bool columns; force saturated flags to plain bool.
+        for colname in basetable.colnames:
+            if 'saturated' in colname:
+                col = basetable[colname]
+                if hasattr(col, 'mask'):
+                    fixed = np.array(col.filled(False), dtype=bool)
+                else:
+                    arr = np.array(col)
+                    if arr.dtype.kind in 'fc':
+                        fixed = np.isfinite(arr) & (arr != 0)
+                    else:
+                        fixed = arr.astype(bool)
+                basetable.replace_column(colname, Column(fixed, name=colname))
         # DO NOT USE FITS in production, it drops critical metadata
         # I wish I had noted *what* metadata it drops, though, since I still seem to be using
         # it in production code down the line...
@@ -778,6 +791,9 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     minimal_table.meta = merged_exposure_table.meta.copy()
     for ii, fn in enumerate(tblfns):
         minimal_table.meta[f'fn{ii}'] = os.path.basename(fn)
+
+    # Ensure saturated stars are represented in indivexp merged products too.
+    replace_saturated(minimal_table, filtername=filtername, target=target, basepath=basepath)
 
     reject = np.isnan(minimal_table['skycoord'].ra) | np.isnan(minimal_table['skycoord'].dec)
     if np.any(reject):
@@ -1002,7 +1018,14 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
         tbl.meta['pixelscale_deg2'] = pixelscale_deg2
         tbl.meta['pixelscale_arcsec'] = pixelscale_arcsec
-        flux = tbl['flux_fit'] if 'flux_fit' in tbl.colnames else tbl['flux_0']
+        if 'flux_fit' in tbl.colnames:
+            flux = tbl['flux_fit']
+        elif 'flux_0' in tbl.colnames:
+            flux = tbl['flux_0']
+        elif 'flux' in tbl.colnames:
+            flux = tbl['flux']
+        else:
+            raise KeyError(f"No supported flux column found in table columns={tbl.colnames}")
         filtername = tbl.meta['filter']
 
         row = fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]
@@ -1040,21 +1063,40 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
                    basepath=basepath)
 
 
+def load_satstar_catalog(filtername, target='brick',
+                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
+    primary = (f'{basepath}/{filtername.upper()}/pipeline/'
+               f'jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}'
+               f'_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits')
+    if os.path.exists(primary):
+        print(f"Using saturated star catalog {primary}")
+        return Table.read(primary)
+
+    fallback = sorted(glob.glob(f'{basepath}/{filtername.upper()}/pipeline/*satstar_catalog.fits'))
+    if len(fallback) == 0:
+        print(f"No saturated star catalog files found for {filtername} in {basepath}/{filtername.upper()}/pipeline")
+        return None
+
+    print(f"Using {len(fallback)} fallback saturated star catalogs for {filtername}")
+    sat_tables = [Table.read(fn) for fn in fallback]
+    return table.vstack(sat_tables, metadata_conflicts='silent')
+
+
 def flag_near_saturated(cat, filtername, radius=None, target='brick',
                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     print(f"Flagging near saturated stars for filter {filtername}")
-    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
-    if not os.path.exists(satstar_cat_fn):
-        print(f"No saturated star catalog found for {filtername}: {satstar_cat_fn}")
+    satstar_cat = load_satstar_catalog(filtername, target=target, basepath=basepath)
+    if satstar_cat is None:
+        print(f"No saturated star catalog found for {filtername}")
         cat.add_column(np.zeros(len(cat), dtype='bool'), name=f'near_saturated_{filtername}')
         return
-    satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
     cat_coords = cat['skycoord']
 
     if radius is None:
         radius = {'f466n': 0.55*u.arcsec,
+                  'f480m': 0.55*u.arcsec,
                   'f212n': 0.55*u.arcsec,
                   'f187n': 0.55*u.arcsec,
                   'f405n': 0.55*u.arcsec,
@@ -1066,7 +1108,19 @@ def flag_near_saturated(cat, filtername, radius=None, target='brick',
                   'f115w': 0.55*u.arcsec,
                   }[filtername]
 
-    idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
+    satfinite = np.isfinite(satstar_coords.ra.deg) & np.isfinite(satstar_coords.dec.deg)
+    catfinite = np.isfinite(cat_coords.ra.deg) & np.isfinite(cat_coords.dec.deg)
+
+    satstar_cat = satstar_cat[satfinite]
+    satstar_coords = satstar_coords[satfinite]
+
+    valid_cat_inds = np.where(catfinite)[0]
+    if len(valid_cat_inds) > 0 and len(satstar_cat) > 0:
+        idx_cat_sub, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords[catfinite], radius)
+        idx_cat = valid_cat_inds[idx_cat_sub]
+    else:
+        idx_cat = np.array([], dtype=int)
+        idx_sat = np.array([], dtype=int)
 
     near_sat = np.zeros(len(cat), dtype='bool')
     near_sat[idx_cat] = True
@@ -1076,15 +1130,16 @@ def flag_near_saturated(cat, filtername, radius=None, target='brick',
 
 def replace_saturated(cat, filtername, radius=None, target='brick',
                       basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
-    satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
-    print(f"Saturated star catalog is {satstar_cat_fn}")
-    if not os.path.exists(satstar_cat_fn):
+    satstar_cat = load_satstar_catalog(filtername, target=target, basepath=basepath)
+    if satstar_cat is None:
         print(f"No saturated star catalog found for {filtername}; skipping replacement")
         cat.add_column(np.zeros(len(cat), dtype='bool'), name='replaced_saturated')
+        cat.add_column(np.zeros(len(cat), dtype='bool'), name='is_saturated')
         if 'flux_fit' in cat.colnames:
             cat.rename_column('flux_fit', 'flux')
         return
-    satstar_cat = Table.read(satstar_cat_fn)
+
+    print(f"Loaded saturated star catalog for {filtername} with {len(satstar_cat)} rows")
     satstar_coords = satstar_cat['skycoord_fit']
 
     cat_coords = cat['skycoord']
@@ -1094,6 +1149,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
 
     if radius is None:
         radius = {'f466n': 0.1*u.arcsec,
+                  'f480m': 0.1*u.arcsec,
                   'f212n': 0.05*u.arcsec,
                   'f187n': 0.05*u.arcsec,
                   'f405n': 0.1*u.arcsec,
@@ -1108,22 +1164,41 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
     fwhm = u.Quantity(fwhm_tbl[fwhm_tbl['Filter'] == filtername.upper()]['PSF FWHM (arcsec)'], u.arcsec)
 
-    filtername = cat.meta['filter']
-    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
+    filtername_meta = cat.meta.get('filter', filtername)
+    zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername_meta.upper()}']['ZeroPoint'], u.Jy)
 
-    flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    try:
-        eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    except KeyError:
-        eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    abmag = (-2.5*np.log10(flux_jy / u.Jy) + ABMAG_OFFSET) * u.mag
-    abvega = -2.5*np.log10(flux_jy / zeropoint) * u.mag
-    abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
+    pixelscale_deg2 = cat.meta.get('pixelscale_deg2', None)
+    if pixelscale_deg2 is not None:
+        flux_jy = (satstar_cat['flux_fit'] * u.MJy/u.sr * pixelscale_deg2).to(u.Jy)
+        try:
+            eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * pixelscale_deg2).to(u.Jy)
+        except KeyError:
+            eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * pixelscale_deg2).to(u.Jy)
+        abmag = (-2.5*np.log10(flux_jy / u.Jy) + ABMAG_OFFSET) * u.mag
+        abvega = -2.5*np.log10(flux_jy / zeropoint) * u.mag
+        abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
+    else:
+        print(f"Catalog metadata lacks pixelscale_deg2 for {filtername}; skipping satstar mag conversion")
+        abmag = np.full(len(satstar_cat), np.nan) * u.mag
+        abvega = np.full(len(satstar_cat), np.nan) * u.mag
+        abmag_err = np.full(len(satstar_cat), np.nan) * u.mag
     satstar_cat['mag_ab'] = abmag
     satstar_cat['mag_vega'] = abvega
     satstar_cat['emag_ab'] = abmag_err
 
-    idx_cat, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords, radius)
+    satfinite = np.isfinite(satstar_coords.ra.deg) & np.isfinite(satstar_coords.dec.deg)
+    catfinite = np.isfinite(cat_coords.ra.deg) & np.isfinite(cat_coords.dec.deg)
+
+    satstar_cat = satstar_cat[satfinite]
+    satstar_coords = satstar_coords[satfinite]
+
+    valid_cat_inds = np.where(catfinite)[0]
+    if len(valid_cat_inds) > 0 and len(satstar_cat) > 0:
+        idx_cat_sub, idx_sat, sep, _ = satstar_coords.search_around_sky(cat_coords[catfinite], radius)
+        idx_cat = valid_cat_inds[idx_cat_sub]
+    else:
+        idx_cat = np.array([], dtype=int)
+        idx_sat = np.array([], dtype=int)
 
     replaced_sat = np.zeros(len(cat), dtype='bool')
     replaced_sat[idx_cat] = True
@@ -1141,9 +1216,18 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         raise KeyError("Missing flux error column")
 
     if 'flux' in cat.colnames:
+        if 'dflux' in cat.colnames:
+            cat_fluxerr_col = 'dflux'
+        elif 'flux_err' in cat.colnames:
+            cat_fluxerr_col = 'flux_err'
+        elif 'eflux' in cat.colnames:
+            cat_fluxerr_col = 'eflux'
+        else:
+            cat_fluxerr_col = None
 
         cat['flux'][idx_cat] = satstar_cat['flux_fit'][idx_sat]
-        cat['dflux'][idx_cat] = satstar_cat[flux_err_colname][idx_sat]
+        if cat_fluxerr_col is not None:
+            cat[cat_fluxerr_col][idx_cat] = satstar_cat[flux_err_colname][idx_sat]
         cat['skycoord'][idx_cat] = satstar_cat['skycoord_fit'][idx_sat]
         if 'x' in cat.colnames:
             # the merged, individual field catalogs don't have these
@@ -1152,9 +1236,12 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
             cat['dx'][idx_cat] = satstar_cat[xerr_colname][idx_sat]
             cat['dy'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
-        cat['mag_ab'][idx_cat] = abmag[idx_sat]
-        cat['mag_vega'][idx_cat] = abvega[idx_sat]
-        cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
+        if 'mag_ab' in cat.colnames:
+            cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        if 'mag_vega' in cat.colnames:
+            cat['mag_vega'][idx_cat] = abvega[idx_sat]
+        if 'emag_ab' in cat.colnames:
+            cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
 
         # ID the stars that are saturated-only (not INCluded in the orig cat)
         satstar_not_inc = np.ones(len(satstar_cat), dtype='bool')
@@ -1162,7 +1249,8 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         satstar_toadd = satstar_cat[satstar_not_inc]
 
         satstar_toadd.rename_column('flux_fit', 'flux')
-        satstar_toadd.rename_column(flux_err_colname, 'dflux')
+        if cat_fluxerr_col is not None:
+            satstar_toadd.rename_column(flux_err_colname, cat_fluxerr_col)
         satstar_toadd.rename_column('skycoord_fit', 'skycoord')
         if 'x' in cat.colnames:
             satstar_toadd.rename_column('x_fit', 'x')
@@ -1191,9 +1279,12 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
             cat['x_err'][idx_cat] = satstar_cat[xerr_colname][idx_sat]
             cat['y_err'][idx_cat] = satstar_cat[yerr_colname][idx_sat]
 
-        cat['mag_ab'][idx_cat] = abmag[idx_sat]
-        cat['mag_vega'][idx_cat] = abvega[idx_sat]
-        cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
+        if 'mag_ab' in cat.colnames:
+            cat['mag_ab'][idx_cat] = abmag[idx_sat]
+        if 'mag_vega' in cat.colnames:
+            cat['mag_vega'][idx_cat] = abvega[idx_sat]
+        if 'emag_ab' in cat.colnames:
+            cat['emag_ab'][idx_cat] = abmag_err[idx_sat]
 
         # ID the stars that are saturated-only (not INCluded in the orig cat)
         satstar_not_inc = np.ones(len(satstar_cat), dtype='bool')
@@ -1223,6 +1314,12 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
           f"in filter {filtername}.  "
           f"{satstar_not_inc.sum()} are newly added.  The total replaced stars={replaced_sat_.sum()}")
 
+    if 'is_saturated' in cat.colnames:
+        cat.remove_column('is_saturated')
+    cat.add_column(replaced_sat_.astype(bool), name='is_saturated')
+
+    if 'replaced_saturated' in cat.colnames:
+        cat.remove_column('replaced_saturated')
     cat.add_column(replaced_sat_, name='replaced_saturated')
     if 'flux_fit' in cat.colnames:
         cat.rename_column('flux_fit', 'flux')
