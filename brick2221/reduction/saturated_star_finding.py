@@ -475,12 +475,13 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
 
         # check whether the pixels with dqflag = saturated are also flagged as HOT, DEAD, and RC
         # this is a sanity check to make sure that the saturated pixels are not being used in the fit
+        # modified 2026-04-18 to only check if _all_ pixels are flagged as HOT or DEAD, since some pixels may be flagged as both SATURATED and HOT/DEAD because a saturated star happened to land on top of a hot/dead pixel
         idx_saturated_in_cutout = (dq[y0:y1, x0:x1] & dqflags.pixel['SATURATED']) > 0
         saturated_dqflags = dq[y0:y1, x0:x1][idx_saturated_in_cutout]
-        if np.any((saturated_dqflags & dqflags.pixel['HOT'])!=0):
+        if np.all((saturated_dqflags & dqflags.pixel['HOT'])!=0):
             print(f"Warning: Some saturated pixels are flagged as HOT; skipping source", flush=True)
             continue
-        if np.any((saturated_dqflags & dqflags.pixel['DEAD'])!=0):
+        if np.all((saturated_dqflags & dqflags.pixel['DEAD'])!=0):
             print(f"Warning: Some saturated pixels are flagged as DEAD; skipping source", flush=True)
             continue
         #if np.any((saturated_dqflags & dqflags.pixel['RC'])!=0):
