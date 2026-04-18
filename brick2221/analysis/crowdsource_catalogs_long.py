@@ -4,13 +4,14 @@ import glob
 import time
 import json
 import re
+import inspect
 import numpy
 import regions
 import numpy as np
 from pathlib import Path
 from functools import cache
 from astropy.convolution import convolve, convolve_fft, Gaussian2DKernel, interpolate_replace_nans
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord
 from astropy.visualization import simple_norm
 from astropy.modeling.fitting import LevMarLSQFitter
@@ -55,6 +56,8 @@ warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 import crowdsource
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
+
+from brick2221.reduction.saturated_star_finding import remove_saturated_stars
 
 from astroquery.svo_fps import SvoFps
 
@@ -302,6 +305,128 @@ def _sample_background_map(background_map, xvals, yvals):
     return sampled
 
 
+def _iteration_token(iteration_label):
+    if iteration_label in (None, ''):
+        return ''
+
+    token = str(iteration_label)
+    if token.startswith('_'):
+        return token
+    return f'_{token}'
+
+
+def _as_table(data):
+    if isinstance(data, Table):
+        return Table(data, copy=True)
+    if isinstance(data, str):
+        return Table.read(data)
+    return Table(data)
+
+
+def _combine_seed_and_satstars(seed_catalog, satstar_table):
+    seed_table = _as_table(seed_catalog)
+    if 'is_saturated' not in seed_table.colnames:
+        seed_table['is_saturated'] = np.zeros(len(seed_table), dtype=bool)
+
+    if satstar_table is None:
+        return seed_table
+
+    satstar_table = _as_table(satstar_table)
+    if len(satstar_table) == 0:
+        return seed_table
+
+    if 'is_saturated' not in satstar_table.colnames:
+        satstar_table['is_saturated'] = np.ones(len(satstar_table), dtype=bool)
+
+    return vstack([seed_table, satstar_table], metadata_conflicts='silent')
+
+
+class SeededFinder:
+    def __init__(self, seed_table):
+        self.seed_table = _as_table(seed_table)
+
+    def __call__(self, data, mask=None):
+        seeds = Table(self.seed_table, copy=True)
+        xvals, yvals = _get_source_xy(seeds)
+        seeds['xcentroid'] = np.asarray(xvals, dtype=float)
+        seeds['ycentroid'] = np.asarray(yvals, dtype=float)
+        if 'flux' not in seeds.colnames:
+            if 'flux_fit' in seeds.colnames:
+                seeds['flux'] = np.asarray(seeds['flux_fit'], dtype=float)
+            else:
+                seeds['flux'] = np.ones(len(seeds), dtype=float)
+        return seeds
+
+
+def build_hybrid_saturated_artifact_mask(shape, satstar_table, core_radius_pix=12, halo_radius_pix=28,
+                                         flux_scale_pix=1.0):
+    mask = np.zeros(shape, dtype=bool)
+    if satstar_table is None:
+        return mask
+
+    satstar_table = _as_table(satstar_table)
+    if len(satstar_table) == 0:
+        return mask
+
+    xvals, yvals = _get_source_xy(satstar_table)
+    if 'flux_fit' in satstar_table.colnames:
+        fluxvals = np.asarray(satstar_table['flux_fit'], dtype=float)
+    else:
+        fluxvals = np.ones(len(satstar_table), dtype=float)
+
+    yy, xx = np.indices(shape)
+    for xval, yval, fluxval in zip(xvals, yvals, fluxvals):
+        if not (np.isfinite(xval) and np.isfinite(yval)):
+            continue
+        flux_term = flux_scale_pix * np.log10(max(float(fluxval), 1.0))
+        core_radius = max(float(core_radius_pix), core_radius_pix + flux_term)
+        halo_radius = max(core_radius + 2.0, halo_radius_pix + flux_term)
+        distance2 = (xx - xval) ** 2 + (yy - yval) ** 2
+        mask |= distance2 <= halo_radius ** 2
+        mask |= distance2 <= core_radius ** 2
+
+    return mask
+
+
+def postprocess_residual_image(data, fwhm_pix, negative_threshold=0.0, satstar_table=None,
+                               core_radius_pix=12, halo_radius_pix=28, flux_scale_pix=1.0):
+    processed = np.array(data, dtype=float, copy=True)
+    kernel = Gaussian2DKernel(x_stddev=fwhm_pix / 2.355)
+
+    if negative_threshold is not None:
+        negative_mask = processed < negative_threshold
+        if np.any(negative_mask):
+            processed[negative_mask] = np.nan
+
+    if satstar_table is not None:
+        saturated_mask = build_hybrid_saturated_artifact_mask(
+            processed.shape,
+            satstar_table,
+            core_radius_pix=core_radius_pix,
+            halo_radius_pix=halo_radius_pix,
+            flux_scale_pix=flux_scale_pix,
+        )
+        if np.any(saturated_mask):
+            processed[saturated_mask] = np.nan
+
+    if np.any(np.isnan(processed)):
+        processed = interpolate_replace_nans(processed, kernel, convolve=convolve_fft)
+
+    return processed
+
+
+def load_or_make_satstar_catalog(filename, path_prefix, use_merged_psf_for_merged=False, overwrite=True):
+    satstar_filename = filename.replace('.fits', '_satstar_catalog.fits')
+    if os.path.exists(satstar_filename):
+        return Table.read(satstar_filename)
+
+    remove_saturated_stars(filename, overwrite=overwrite, path_prefix=path_prefix,
+                           use_merged_psf_for_merged=use_merged_psf_for_merged)
+    if os.path.exists(satstar_filename):
+        return Table.read(satstar_filename)
+    return None
+
+
 def save_photutils_results(result, ww, filename,
                            im1, detector,
                            basepath, filtername, module, desat, bgsub, exposure_, visitid_, vgroupid_,
@@ -312,7 +437,8 @@ def save_photutils_results(result, ww, filename,
                            epsf_="",
                            group="",
                            fpsf="",
-                           background_map=None):
+                           background_map=None,
+                           iteration_label=None):
     print("Saving photutils results.")
     blur_ = "_blur" if blur else ""
 
@@ -335,14 +461,13 @@ def save_photutils_results(result, ww, filename,
     else:
         raise KeyError(f"No x value found in {result.colnames}")
     print(f'len(result) = {len(result)}, len(coords) = {len(coords)}, type(result)={type(result)}', flush=True)
-    detector = "" # no detector #'s for long
     if options.each_exposure:
         result.meta['exposure'] = exposure_
     if visitid_ is not None and visitid_ != '':
         result.meta['visit'] = int(visitid_[-3:])
     if vgroupid_ is not None and vgroupid_ != '':
         result.meta['vgroup'] = vgroupid_.removeprefix('_vgroup')
-        
+
     result.meta['filename'] = filename
     result.meta['filter'] = filtername
     result.meta['module'] = module
@@ -362,6 +487,9 @@ def save_photutils_results(result, ww, filename,
         result['dra'] = result['x_err'] * pixscale
         result['ddec'] = result['y_err'] * pixscale
 
+    if iteration_label not in (None, ''):
+        result.meta['iteration'] = str(iteration_label)
+
     if 'local_bkg' in result.colnames:
         result.meta['BKGCOL'] = 'local_bkg'
         result.meta['BKGMETH'] = 'photutils_local'
@@ -371,11 +499,9 @@ def save_photutils_results(result, ww, filename,
         result.meta['BKGCOL'] = 'local_bkg'
         result.meta['BKGMETH'] = 'bkg2d_sampled' if background_map is not None else 'none'
 
-    tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_{basic_or_iterative}.fits"
+    iter_ = _iteration_token(iteration_label)
+    tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_{basic_or_iterative}.fits"
 
-    # FITS header keywords are limited to 8 characters. photutils 2.x stores
-    # configuration objects (localbkg_estimator, psf_model, fitter, etc.) in
-    # result.meta with long key names that cause a ValueError on write.
     long_keys = [k for k in result.meta if len(k) > 8]
     for k in long_keys:
         result.meta[k[:8]] = result.meta[k]
@@ -395,14 +521,13 @@ def save_crowdsource_results(results, ww, filename, suffix,
                              psf=None,
                              blur=False,
                              options=None,
-                             fpsf=""):
+                             fpsf="",
+                             iteration_label=None):
     print("Saving crowdsource results.")
     blur_ = "_blur" if blur else ""
 
     stars, modsky, skymsky, psf_ = results
     stars = Table(stars)
-    # crowdsource explicitly inverts x & y from the numpy convention:
-    # https://github.com/schlafly/crowdsource/issues/11
     coords = ww.pixel_to_world(stars['y'], stars['x'])
     stars['skycoord'] = coords
     stars['x'], stars['y'] = stars['y'], stars['x']
@@ -424,6 +549,8 @@ def save_crowdsource_results(results, ww, filename, suffix,
     stars.meta['proposal_id'] = options.proposal_id
     if exposure_:
         stars.meta['exposure'] = exposure_
+    if iteration_label not in (None, ''):
+        stars.meta['iteration'] = str(iteration_label)
     if visitid_:
         stars.meta['visit'] = int(visitid_[-3:])
     if vgroupid_:
@@ -436,28 +563,26 @@ def save_crowdsource_results(results, ww, filename, suffix,
         stars.meta['RAOFFSET'] = im1[1].header['RAOFFSET']
         stars.meta['DEOFFSET'] = im1[1].header['DEOFFSET']
 
+    iter_ = _iteration_token(iteration_label)
     tblfilename = (f"{basepath}/{filtername}/"
-                   f"{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}"
+                   f"{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}{iter_}"
                    f"_crowdsource_{suffix}.fits")
 
-    print("tblfilename={tblfilename}, filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
+    print(f"tblfilename={tblfilename}, filename={filename}, suffix={suffix}, filtername={filtername}, module={module}, desat={desat}, bgsub={bgsub}, fpsf={fpsf} blur={blur}")
 
     stars.write(tblfilename, overwrite=True)
-    # add WCS-containing header
     with fits.open(tblfilename, mode='update', output_verify='fix') as fh:
         fh[0].header.update(im1[1].header)
     skymskyhdu = fits.PrimaryHDU(data=skymsky, header=im1[1].header)
     modskyhdu = fits.ImageHDU(data=modsky, header=im1[1].header)
-    # PSF doesn't need saving / can't be saved, it's a function
-    # psfhdu = fits.ImageHDU(data=psf)
     hdul = fits.HDUList([skymskyhdu, modskyhdu])
-    hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
+    hdul.writeto(f"{basepath}/{filtername}/{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}{iter_}_crowdsource_skymodel_{suffix}.fits", overwrite=True)
 
     if psf is not None:
         if hasattr(psf, 'stamp'):
             psfhdu = fits.PrimaryHDU(data=psf.stamp)
             psf_fn = (f"{basepath}/{filtername}/"
-                      f"{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}"
+                      f"{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{fpsf}{blur_}{iter_}"
                       f"_crowdsource_{suffix}_psf.fits")
             psfhdu.writeto(psf_fn, overwrite=True)
         else:
@@ -628,7 +753,8 @@ def get_uncertainty(err, data, dq=None, wht=None):
 
 def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, module,
                                    residual_kind='iterative', desat=False, bgsub=False,
-                                   epsf=False, blur=False, group=False, pupil='clear'):
+                                   epsf=False, blur=False, group=False, pupil='clear',
+                                   iteration_label=None):
     """
     Resample per-exposure residual images into one JWST-style *_residual_i2d.fits product.
     """
@@ -641,11 +767,12 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
     epsf_ = '_epsf' if epsf else ''
     blur_ = '_blur' if blur else ''
     group_ = '_group' if group else ''
+    iter_ = _iteration_token(iteration_label)
 
     residual_glob = (
         f'{pipeline_dir}/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-'
         f'{module}_visit*_vgroup*_exp*{desat_}{bgsub_}{epsf_}{blur_}{group_}'
-        f'_daophot_{residual_kind}_residual.fits'
+        f'{iter_}_daophot_{residual_kind}_residual.fits'
     )
     residual_files = sorted(glob.glob(residual_glob))
     if len(residual_files) == 0:
@@ -653,7 +780,7 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
 
     product_name = (
         f'jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}'
-        f'{desat_}{bgsub_}{epsf_}{blur_}{group_}_daophot_{residual_kind}_residual'
+        f'{desat_}{bgsub_}{epsf_}{blur_}{group_}{iter_}_daophot_{residual_kind}_residual'
     )
     asn = asn_from_list.asn_from_list(
         residual_files,
@@ -676,7 +803,22 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
     if not os.path.exists(output_filename):
         raise FileNotFoundError(f'Expected output was not created: {output_filename}')
     print(f'Wrote residual mosaic {output_filename}')
-    return output_filename
+
+    fwhm_tbl = Table.read(FWHM_TABLE)
+    row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
+    fwhm_pix = float(row['PSF FWHM (pixel)'][0])
+    with ImageModel(output_filename) as model:
+        infilled_data = postprocess_residual_image(
+            model.data,
+            fwhm_pix,
+            negative_threshold=0.0,
+            satstar_table=None,
+        )
+        model.data = infilled_data
+        infilled_filename = output_filename.replace('_residual_i2d.fits', '_residual_infilled_i2d.fits')
+        model.save(infilled_filename, overwrite=True)
+    print(f'Wrote residual infilled mosaic {infilled_filename}')
+    return infilled_filename
 
 
 def save_residual_datamodel(input_filename, output_filename, data):
@@ -743,6 +885,24 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     parser.add_option('--each-suffix', dest='each_suffix',
                       default='destreak_o001_crf',
                       help='Suffix for the level-2 products', metavar='each_suffix')
+    parser.add_option('--seed-catalog', dest='seed_catalog',
+                      default='',
+                      help='Optional seed catalog for a seeded photometry rerun', metavar='seed_catalog')
+    parser.add_option('--iteration-label', dest='iteration_label',
+                      default='',
+                      help='Optional iteration label to embed in output filenames', metavar='iteration_label')
+    parser.add_option('--postprocess-residuals', dest='postprocess_residuals',
+                      default=False,
+                      action='store_true',
+                      help='Apply negative-pixel masking and saturated-star infill before detection')
+    parser.add_option('--basic-only', dest='basic_only',
+                      default=False,
+                      action='store_true',
+                      help='Run only BASIC daophot photometry and residual generation')
+    parser.add_option('--residual-negative-threshold', dest='residual_negative_threshold',
+                      default=0.0,
+                      type='float',
+                      help='Pixels below this threshold are replaced with Gaussian infill before detection')
     parser.add_option('--skip-mosaic-each-exposure-residuals',
                       dest='skip_mosaic_each_exposure_residuals',
                       default=False,
@@ -796,7 +956,6 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
         if len(filtered_modules) == 0:
             raise ValueError(
                 f"No requested modules are allowed for proposal_id={proposal_id} field={field} "
-                f"filters={filternames}. "
                 f"Requested modules={modules}, allowed modules={allowed_modules}"
             )
         if tuple(filtered_modules) != tuple(modules):
@@ -847,14 +1006,18 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                                crowdsource_default_kwargs, exposurenumber=int(exposure_id),
                                                visit_id=visit_id, vgroup_id=vgroup_id,
                                                use_webbpsf=True,
-                                               bg_boxsizes=bg_boxsizes)
+                                               bg_boxsizes=bg_boxsizes,
+                                               seed_catalog=options.seed_catalog or None,
+                                               iteration_label=options.iteration_label or None,
+                                               postprocess_residuals=options.postprocess_residuals or bool(options.seed_catalog),
+                                               residual_negative_threshold=options.residual_negative_threshold)
 
                 if not options.skip_mosaic_each_exposure_residuals:
                     if os.getenv('SLURM_ARRAY_TASK_ID') is None:
                         # Determine which residual kinds to mosaic based on enabled photometry types
                         mosaic_residual_kinds = []
                         if options.daophot:
-                            mosaic_residual_kinds = ['basic', 'iterative']
+                            mosaic_residual_kinds = ['basic'] if options.basic_only else ['basic', 'iterative']
                         
                         for residual_kind in mosaic_residual_kinds:
                             mosaic_each_exposure_residuals(basepath=basepath,
@@ -875,7 +1038,11 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                 filename = get_filename(basepath, filtername, proposal_id, field, module, options=options, pupil='clear')
                 do_photometry_step(options, filtername, module, detector, field,
                                    basepath, filename, proposal_id, crowdsource_default_kwargs,
-                                   bg_boxsizes=bg_boxsizes
+                                   bg_boxsizes=bg_boxsizes,
+                                   seed_catalog=options.seed_catalog or None,
+                                   iteration_label=options.iteration_label or None,
+                                   postprocess_residuals=options.postprocess_residuals or bool(options.seed_catalog),
+                                   residual_negative_threshold=options.residual_negative_threshold
                                    )
 
 
@@ -928,7 +1095,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        bg_boxsizes=None,
                        use_webbpsf=False,
                        nsigma=5,
-                       pupil='clear'):
+                       pupil='clear',
+                       seed_catalog=None,
+                       iteration_label=None,
+                       postprocess_residuals=False,
+                       residual_negative_threshold=0.0):
     """
     nsigma is the threshold to multiply the error estimate by to get the detection threshold
     """
@@ -950,6 +1121,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     vgroupid_, vgroup_numeric = normalize_vgroup_id(vgroup_id)
     blur_ = "_blur" if options.blur else ""
     group = "_group" if options.group else ""
+    iter_ = _iteration_token(iteration_label)
 
     print(f"Starting cataloging on {filename}", flush=True)
     fh, im1, data, wht, err, instrument, telescope, obsdate = load_data(filename)
@@ -1032,8 +1204,30 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     nan_replaced_data = interpolate_replace_nans(data_, kernel, convolve=convolve_fft)
 
-    finstars = daofind_tuned(nan_replaced_data,
-                             mask=mask)
+    if seed_catalog is None and iteration_label not in (None, ''):
+        inferred_seed_catalog = (
+            f'{basepath}/{filtername}/'
+            f'{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits'
+        )
+        if os.path.exists(inferred_seed_catalog):
+            seed_catalog = inferred_seed_catalog
+
+    satstar_table = None
+    if options.each_exposure and seed_catalog is not None:
+        satstar_table = load_or_make_satstar_catalog(
+            filename,
+            path_prefix=f'{basepath}/psfs',
+            use_merged_psf_for_merged=(module == 'merged'),
+        )
+
+    if seed_catalog is not None:
+        seed_catalog = _combine_seed_and_satstars(seed_catalog, satstar_table)
+        finstars = SeededFinder(seed_catalog)(nan_replaced_data, mask=mask)
+        finding_label = 'seeded'
+    else:
+        finstars = daofind_tuned(nan_replaced_data,
+                                 mask=mask)
+        finding_label = 'daofind'
 
     print(f"Found {len(finstars)} with daofind_tuned", flush=True)
     # for diagnostic plotting convenience
@@ -1049,13 +1243,14 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                     blur="",
                                     exposure_=exposure_,
                                     visitid_=visitid_, vgroupid_=vgroupid_,
-                                    basic_or_iterative='daofind',
+                                    basic_or_iterative=finding_label,
                                     options=options,
                                     epsf_="",
                                     fpsf="",
                                     group=group,
                                     psf=None,
-                                    background_map=background_map)
+                                    background_map=background_map,
+                                    iteration_label=iteration_label)
 
     stars = finstars # because I'm copy-pasting code...
 
@@ -1123,7 +1318,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                              visitid_=visitid_,
                                              vgroupid_=vgroupid_,
                                              options=options,
-                                             suffix="unweighted", psf=None)
+                                             suffix="unweighted", psf=None,
+                                             iteration_label=iteration_label)
 
             zoomcut = slice(128, 256), slice(128, 256)
 
@@ -1182,7 +1378,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                                  vgroupid_=vgroupid_,
                                                  psf=psf if refit_psf else None,
                                                  options=options,
-                                                 suffix=f"nsky{nsky}")
+                                                 suffix=f"nsky{nsky}",
+                                                 iteration_label=iteration_label)
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
@@ -1212,73 +1409,19 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         t0 = time.time()
         print("Starting basic PSF photometry", flush=True)
 
-        if options.epsf:
-            print("Building EPSF")
-            epsf_builder = EPSFBuilder(oversampling=3, maxiters=10,
-                                       smoothing_kernel='quadratic',
-                                       progress_bar=True)
-
-            epsfsel = ((finstars['peak'] > 200) &
-                       (finstars['roundness1'] > -0.25) &
-                       (finstars['roundness1'] < 0.25) &
-                       (finstars['roundness2'] > -0.25) &
-                       (finstars['roundness2'] < 0.25) &
-                       (finstars['sharpness'] > 0.4) &
-                       (finstars['sharpness'] < 0.8))
-
-            print(f"Extracting {epsfsel.sum()} stars")
-            # TODO: we might need to figure out how to tell extract_stars what's masked
-            stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=25)
-
-            # reject stars with negative pixels
-            #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
-            # apparently this failed - too restrictive?
-
-            for star in stars:
-                # background subtraction
-                star.data[:] -= np.nanpercentile(star.data, 5)
-
-            epsf, fitted_stars = epsf_builder(stars)
-
-            # trim edges
-            epsf._data = epsf.data[2:-2, 2:-2]
-
-            norm = simple_norm(epsf.data, 'log', percent=99.0)
-            pl.figure(1).clf()
-            pl.imshow(epsf.data, norm=norm, origin='lower', cmap='viridis')
-            pl.colorbar()
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}_daophot_epsf.png',
-                       bbox_inches='tight')
-            dao_psf_model = epsf
-
-            save_epsf(epsf,
-                      f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}_daophot_epsf.fits')
-
-
-        phot_basic = PSFPhotometry(finder=daofind_tuned,#finder_maker(),
-                             #grouper=grouper, # the grouper is needed to jointly fit stars and avoid faint stars jumping onto bright ones
-                             grouper=grouper if options.group else None,
-                             # localbkg_estimator=None, # must be none or it un-saturates pixels
-                             localbkg_estimator=LocalBackground(5, 15),
-                             psf_model=dao_psf_model,
-                             fitter=LevMarLSQFitter(),
-                             fit_shape=(5, 5),
-                             aperture_radius=2*fwhm_pix,
-                             progress_bar=True,
-                            )
+        phot_basic = PSFPhotometry(finder=daofind_tuned,
+                                   localbkg_estimator=LocalBackground(2, 5),
+                                   grouper=grouper if options.group else None,
+                                   psf_model=dao_psf_model,
+                                   fitter=LevMarLSQFitter(),
+                                   fit_shape=(5, 5),
+                                   aperture_radius=2*fwhm_pix,
+                                   progress_bar=True,
+                                  )
 
         print("About to do BASIC photometry....")
         result = phot_basic(nan_replaced_data, mask=mask)
-        # I want to use daofind params in the future
-        result['roundness1'] = finstars['roundness1']
-        result['roundness2'] = finstars['roundness2']
-        result['sharpness'] = finstars['sharpness']
-        print(f"Done with BASIC photometry.  len(result)={len(result)} dt={time.time() - t0}")
-
-        # remove negative-peak and zero-peak sources (they affect the residuals badly)
-        # we don't want to remove them now; we need to flag out objects that are too close to negative stars
-        #bad = result['flux_fit'] <= 0
-        #result = result[~bad]
+        print(f"Done with BASIC photometry. len(result)={len(result)}  dt={time.time() - t0}")
 
         result = save_photutils_results(result, ww, filename,
                                         im1=im1, detector=detector,
@@ -1294,7 +1437,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                         epsf_=epsf_,
                                         group=group,
                                         psf=None,
-                                        background_map=background_map)
+                                        background_map=background_map,
+                                        iteration_label=iteration_label)
 
         stars = result
         stars['x'] = stars['x_fit']
@@ -1305,141 +1449,121 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print("Done creating BASIC residual image, using 21x21 patches")
         save_residual_datamodel(
             filename,
-            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic_residual.fits',
+            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_basic_residual.fits',
             residual,
         )
         save_residual_datamodel(
             filename,
-            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic_model.fits',
+            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_basic_model.fits',
             modsky,
         )
         print("Saved BASIC residual image, now making diagnostics.")
-        try:
-            catalog_zoom_diagnostic(data, modsky, nullslice, stars)
-            pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_daophot_basic.png',
-                    bbox_inches='tight')
+        catalog_zoom_diagnostic(data, modsky, nullslice, stars)
+        pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_daophot_basic.png',
+                bbox_inches='tight')
 
+        catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+        pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
+        pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_zoom_daophot_basic.png',
+                bbox_inches='tight')
+
+        for name, zoomcut in zoomcut_list.items():
             catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-            pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_zoom_daophot_basic.png',
+            pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group} zoom {name}")
+            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
                     bbox_inches='tight')
-
-            for name, zoomcut in zoomcut_list.items():
-                catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
-                pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group} zoom {name}")
-                pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
-                        bbox_inches='tight')
-        except Exception as ex:
-            print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} BASIC photometry: {ex}')
-            exc_tb = sys.exc_info()[2]
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
 
         print(f"Done with diagnostics for BASIC photometry.  dt={time.time() - t0}")
         pl.close('all')
 
-    if options.daophot:
-        t0 = time.time()
+        if not options.basic_only:
+            t0 = time.time()
+            print("Iterative PSF photometry")
+            if options.epsf:
+                print("Building EPSF")
+                epsf_builder = EPSFBuilder(oversampling=3, maxiters=10,
+                                           smoothing_kernel='quadratic',
+                                           progress_bar=True)
 
-        print("Iterative PSF photometry")
-        if options.epsf:
-            print("Building EPSF")
-            epsf_builder = EPSFBuilder(oversampling=3, maxiters=10,
-                                       smoothing_kernel='quadratic',
-                                       progress_bar=True)
+                epsfsel = ((finstars['peak'] > 200) &
+                           (finstars['roundness1'] > -0.25) &
+                           (finstars['roundness1'] < 0.25) &
+                           (finstars['roundness2'] > -0.25) &
+                           (finstars['roundness2'] < 0.25) &
+                           (finstars['sharpness'] > 0.4) &
+                           (finstars['sharpness'] < 0.8))
 
-            epsfsel = ((finstars['peak'] > 200) &
-                       (finstars['roundness1'] > -0.25) &
-                       (finstars['roundness1'] < 0.25) &
-                       (finstars['roundness2'] > -0.25) &
-                       (finstars['roundness2'] < 0.25) &
-                       (finstars['sharpness'] > 0.4) &
-                       (finstars['sharpness'] < 0.8))
+                print(f"Extracting {epsfsel.sum()} stars")
+                stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=35)
 
-            print(f"Extracting {epsfsel.sum()} stars")
-            stars = extract_stars(NDData(data=nan_replaced_data), finstars[epsfsel], size=35)
+                for star in stars:
+                    background = np.nanpercentile(star.data, 5)
+                    star.data[:] -= background
 
-            # reject stars with negative pixels
-            #stars = EPSFStars([x for x in stars if x.data.min() >= 0])
-            # apparently this failed - too restrictive?
+                epsf, fitted_stars = epsf_builder(stars)
+                epsf._data = epsf.data[2:-2, 2:-2]
 
-            for star in stars:
-                # background subtraction
-                background = np.nanpercentile(star.data, 5)
-                star.data[:] -= background
+                norm = simple_norm(epsf.data, 'log', percent=99.0)
+                pl.figure(1).clf()
+                pl.imshow(epsf.data, norm=norm, origin='lower', cmap='viridis')
+                pl.colorbar()
+                pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_epsf.png',
+                           bbox_inches='tight')
+                dao_psf_model = epsf
 
+            phot_iter = IterativePSFPhotometry(finder=daofind_tuned,
+                                               localbkg_estimator=LocalBackground(2, 5),
+                                               grouper=grouper if options.group else None,
+                                               psf_model=dao_psf_model,
+                                               fitter=LevMarLSQFitter(),
+                                               maxiters=5,
+                                               fit_shape=(5, 5),
+                                               sub_shape=(15, 15),
+                                               aperture_radius=2*fwhm_pix,
+                                               progress_bar=True,
+                                              )
 
-            epsf, fitted_stars = epsf_builder(stars)
+            print("About to do ITERATIVE photometry....")
+            result2 = phot_iter(nan_replaced_data, mask=mask)
+            print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
-            # trim edges
-            epsf._data = epsf.data[2:-2, 2:-2]
+            result2 = save_photutils_results(result2, ww, filename,
+                                             im1=im1, detector=detector,
+                                             basepath=basepath,
+                                             filtername=filtername, module=module,
+                                             desat=desat, bgsub=bgsub,
+                                             blur=options.blur,
+                                             exposure_=exposure_,
+                                             visitid_=visitid_,
+                                             vgroupid_=vgroupid_,
+                                             basic_or_iterative='iterative',
+                                             options=options,
+                                             epsf_=epsf_,
+                                             group=group,
+                                             psf=None,
+                                             background_map=background_map,
+                                             iteration_label=iteration_label)
 
-            norm = simple_norm(epsf.data, 'log', percent=99.0)
-            pl.figure(1).clf()
-            pl.imshow(epsf.data, norm=norm, origin='lower', cmap='viridis')
-            pl.colorbar()
-            pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_epsf.png',
-                       bbox_inches='tight')
-            dao_psf_model = epsf
+            stars = result2
+            stars['x'] = stars['x_fit']
+            stars['y'] = stars['y_fit']
 
-        # iterative takes for-ev-er
-        phot_iter = IterativePSFPhotometry(finder=daofind_tuned,
-                                           localbkg_estimator=LocalBackground(5, 15),
-                                           grouper=grouper if options.group else None,
-                                           psf_model=dao_psf_model,
-                                           fitter=LevMarLSQFitter(),
-                                           maxiters=5,
-                                           fit_shape=(5, 5),
-                                           sub_shape=(15, 15),
-                                           aperture_radius=2*fwhm_pix,
-                                           progress_bar=True,
-                                          )
-
-        print("About to do ITERATIVE photometry....")
-        result2 = phot_iter(nan_replaced_data, mask=mask)
-        print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
-
-        # need to flag stars near negative stars, so we don't want to exclude them _yet_
-        #bad = result2['flux_fit'] <= 0
-        #result2 = result2[~bad]
-
-        result2 = save_photutils_results(result2, ww, filename,
-                                         im1=im1, detector=detector,
-                                         basepath=basepath,
-                                         filtername=filtername, module=module,
-                                         desat=desat, bgsub=bgsub,
-                                         blur=options.blur,
-                                         exposure_=exposure_,
-                                         visitid_=visitid_,
-                                         vgroupid_=vgroupid_,
-                                         basic_or_iterative='iterative',
-                                         options=options,
-                                         epsf_=epsf_,
-                                         group=group,
-                                         psf=None,
-                                         background_map=background_map)
-
-        stars = result2
-        stars['x'] = stars['x_fit']
-        stars['y'] = stars['y_fit']
-
-        print("Creating iterative residual")
-        modsky = phot_iter.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
-        residual = data - modsky
-        print("finished iterative residual")
-        save_residual_datamodel(
-            filename,
-            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_iterative_residual.fits',
-            residual,
-        )
-        save_residual_datamodel(
-            filename,
-            f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_iterative_model.fits',
-            modsky,
-        )
-        print("Saved iterative residual")
-        try:
+            print("Creating iterative residual")
+            modsky = phot_iter.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
+            residual = data - modsky
+            print("finished iterative residual")
+            save_residual_datamodel(
+                filename,
+                f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_iterative_residual.fits',
+                residual,
+            )
+            save_residual_datamodel(
+                filename,
+                f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_iterative_model.fits',
+                modsky,
+            )
+            print("Saved iterative residual")
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
             pl.suptitle(f"daophot iterative Catalog Diagnostics zoomed {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_daophot_iterative.png',
@@ -1455,11 +1579,12 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group} zoom {name}")
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}__catalog_diagnostics_zoom_daophot_iterative{name.replace(" ","_")}.png',
                         bbox_inches='tight')
-        except Exception as ex:
-            print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for ITERATIVE daophot: {ex}')
-            exc_tb = sys.exc_info()[2]
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
+
+            print(f"Done with diagnostics for ITERATIVE photometry.  dt={time.time() - t0}")
+            pl.close('all')
+        else:
+            print("Skipping ITERATIVE photometry because --basic-only was requested")
+
 
 if __name__ == "__main__":
     main()
