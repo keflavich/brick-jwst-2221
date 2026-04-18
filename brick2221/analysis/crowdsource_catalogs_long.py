@@ -26,6 +26,7 @@ import requests.exceptions
 import urllib3
 import urllib3.exceptions
 from jwst.datamodels import dqflags
+from jwst.datamodels import ImageModel
 from jwst.associations import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from jwst.resample import ResampleStep
@@ -665,21 +666,32 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
         _, serialized = asn.dump()
         asn_fh.write(serialized)
 
-    print(f'Resampling {len(residual_files)} residual exposures into {product_name}_i2d.fits')
-    ResampleStep.call(asn_filename, output_dir=pipeline_dir, save_results=True)
-
     output_filename = f'{pipeline_dir}/{product_name}_i2d.fits'
+    print(f'Resampling {len(residual_files)} residual exposures into {product_name}_i2d.fits')
+    resampled = ResampleStep.call(asn_filename, output_dir=pipeline_dir, save_results=False)
+    resampled.save(output_filename, overwrite=True)
+    if hasattr(resampled, 'close'):
+        resampled.close()
+
     if not os.path.exists(output_filename):
         raise FileNotFoundError(f'Expected output was not created: {output_filename}')
     print(f'Wrote residual mosaic {output_filename}')
     return output_filename
 
 
+def save_residual_datamodel(input_filename, output_filename, data):
+    with ImageModel(input_filename) as model:
+        model.data = data
+        model.save(output_filename, overwrite=True)
+
+
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
-                           'f410m': 0.55, 'f405n':0.55, 'f466n':0.55},
+                           'f410m': 0.55, 'f405n':0.55, 'f466n':0.55,
+                           'f335m': 0.55, 'f470n': 0.55, 'f480m': 0.55},
         bg_boxsizes={'f182m': 19, 'f187n':11, 'f212n':11,
+                     'f210m': 11,
                      'f410m': 11, 'f405n':11, 'f466n':11,
-                     'f444w': 11, 'f356w':11,
+                     'f444w': 11, 'f356w':11, 'f335m': 11, 'f470n': 11, 'f480m': 11,
                      'f200w':19, 'f115w':19,
                     },
         crowdsource_default_kwargs={'maxstars': 500000, },
@@ -1291,12 +1303,16 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         modsky = phot_basic.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
         residual = data - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
-        fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
+        save_residual_datamodel(
+            filename,
             f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic_residual.fits',
-            overwrite=True)
-        fits.PrimaryHDU(data=modsky, header=im1[1].header).writeto(
+            residual,
+        )
+        save_residual_datamodel(
+            filename,
             f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic_model.fits',
-            overwrite=True)
+            modsky,
+        )
         print("Saved BASIC residual image, now making diagnostics.")
         try:
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
@@ -1412,12 +1428,16 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         modsky = phot_iter.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
         residual = data - modsky
         print("finished iterative residual")
-        fits.PrimaryHDU(data=residual, header=im1[1].header).writeto(
+        save_residual_datamodel(
+            filename,
             f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_iterative_residual.fits',
-            overwrite=True)
-        fits.PrimaryHDU(data=modsky, header=im1[1].header).writeto(
+            residual,
+        )
+        save_residual_datamodel(
+            filename,
             f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_iterative_model.fits',
-            overwrite=True)
+            modsky,
+        )
         print("Saved iterative residual")
         try:
             catalog_zoom_diagnostic(data, modsky, nullslice, stars)
