@@ -291,6 +291,106 @@ def _get_source_xy(tbl):
     raise KeyError(f"No recognized x/y coordinate columns in {tbl.colnames}")
 
 
+def _column_to_float_array(tbl, colname):
+    col = tbl[colname]
+    if hasattr(col, 'filled'):
+        return np.asarray(col.filled(np.nan), dtype=float)
+    return np.asarray(col, dtype=float)
+
+
+def _best_available_xy(tbl):
+    candidates = [
+        ('xcentroid', 'ycentroid'),
+        ('x_fit', 'y_fit'),
+        ('x_init', 'y_init'),
+        ('x', 'y'),
+    ]
+    best_pair = None
+    best_score = -1
+    best_x = None
+    best_y = None
+    for xname, yname in candidates:
+        if xname in tbl.colnames and yname in tbl.colnames:
+            xvals = _column_to_float_array(tbl, xname)
+            yvals = _column_to_float_array(tbl, yname)
+            score = np.isfinite(xvals).sum() + np.isfinite(yvals).sum()
+            if score > best_score:
+                best_score = score
+                best_pair = (xname, yname)
+                best_x = xvals
+                best_y = yvals
+    if best_pair is None:
+        raise KeyError(f"No recognized x/y coordinate columns in {tbl.colnames}")
+    return best_x, best_y
+
+
+def _has_any_xy_columns(tbl):
+    return any(
+        xname in tbl.colnames and yname in tbl.colnames
+        for xname, yname in (('xcentroid', 'ycentroid'), ('x_fit', 'y_fit'),
+                             ('x_init', 'y_init'), ('x', 'y'))
+    )
+
+
+def _skycoord_entries(tbl, colname):
+    if colname not in tbl.colnames:
+        return [None] * len(tbl)
+
+    col = tbl[colname]
+    mask = np.zeros(len(tbl), dtype=bool)
+    if hasattr(col, 'mask'):
+        mask = np.asarray(col.mask, dtype=bool)
+
+    entries = [None] * len(tbl)
+    for ii in range(len(tbl)):
+        if mask[ii]:
+            continue
+        val = col[ii]
+        if isinstance(val, SkyCoord):
+            entries[ii] = val
+    return entries
+
+
+def _resolve_seed_skycoords(seed_table, ww=None, preferred_skycoord_col=None):
+    seed_table = _as_table(seed_table)
+    nsrc = len(seed_table)
+    if nsrc == 0:
+        return seed_table
+
+    sky_entries = [None] * nsrc
+    sky_columns = []
+    if preferred_skycoord_col is not None:
+        sky_columns.append(preferred_skycoord_col)
+    sky_columns.extend(['skycoord', 'skycoord_fit', 'skycoord_centroid', 'skycoord_ref'])
+    for colname in sky_columns:
+        if colname not in seed_table.colnames:
+            continue
+        entries = _skycoord_entries(seed_table, colname)
+        for ii, entry in enumerate(entries):
+            if sky_entries[ii] is None and entry is not None:
+                sky_entries[ii] = entry
+
+    if ww is not None and _has_any_xy_columns(seed_table):
+        xvals, yvals = _best_available_xy(seed_table)
+        missing = np.array([entry is None for entry in sky_entries], dtype=bool)
+        finite = np.isfinite(xvals) & np.isfinite(yvals)
+        convert = missing & finite
+        if np.any(convert):
+            converted = ww.pixel_to_world(xvals[convert], yvals[convert])
+            for idx, coord in zip(np.where(convert)[0], converted):
+                sky_entries[idx] = coord
+
+    if all(entry is None for entry in sky_entries):
+        raise ValueError('Could not determine sky coordinates for any seed sources')
+
+    if 'skycoord' not in seed_table.colnames:
+        seed_table['skycoord'] = np.empty(nsrc, dtype=object)
+    for ii, coord in enumerate(sky_entries):
+        seed_table['skycoord'][ii] = coord
+
+    return seed_table
+
+
 def _sample_background_map(background_map, xvals, yvals):
     """Sample a 2D background image at source coordinates using nearest-neighbor lookup."""
     sampled = np.full(len(xvals), np.nan, dtype='float32')
@@ -343,7 +443,14 @@ def _combine_seed_and_satstars(seed_catalog, satstar_table):
 
 
 def _augment_seed_catalog_with_detections(seed_catalog, detection_catalog, match_radius_pix=1.0):
-    seed_table = _as_table(seed_catalog)
+    raise RuntimeError('Use _augment_seed_catalog_with_detections_sky for seeded augmentation')
+
+
+def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, ww,
+                                              match_radius_pix=1.0,
+                                              preferred_seed_skycoord_col=None):
+    seed_table = _resolve_seed_skycoords(_as_table(seed_catalog), ww=ww,
+                                         preferred_skycoord_col=preferred_seed_skycoord_col)
     detection_table = _as_table(detection_catalog)
 
     if len(seed_table) == 0:
@@ -351,22 +458,34 @@ def _augment_seed_catalog_with_detections(seed_catalog, detection_catalog, match
     if len(detection_table) == 0:
         return seed_table
 
-    seed_x, seed_y = _get_source_xy(seed_table)
-    detection_x, detection_y = _get_source_xy(detection_table)
+    det_x, det_y = _best_available_xy(detection_table)
+    det_finite = np.isfinite(det_x) & np.isfinite(det_y)
+    if not np.any(det_finite):
+        return seed_table
 
-    seed_finite = np.isfinite(seed_x) & np.isfinite(seed_y)
-    detection_finite = np.isfinite(detection_x) & np.isfinite(detection_y)
-    if not np.any(seed_finite):
-        return detection_table[detection_finite]
+    det_sky = ww.pixel_to_world(det_x[det_finite], det_y[det_finite])
+    detection_table = detection_table[det_finite]
+    if 'skycoord' not in detection_table.colnames:
+        detection_table['skycoord'] = np.empty(len(detection_table), dtype=object)
+    for ii, coord in enumerate(det_sky):
+        detection_table['skycoord'][ii] = coord
+    if 'is_saturated' not in detection_table.colnames:
+        detection_table['is_saturated'] = np.zeros(len(detection_table), dtype=bool)
 
-    seed_tree = cKDTree(np.column_stack([seed_x[seed_finite], seed_y[seed_finite]]))
-    keep = np.zeros(len(detection_table), dtype=bool)
-    if np.any(detection_finite):
-        distances, _ = seed_tree.query(
-            np.column_stack([detection_x[detection_finite], detection_y[detection_finite]]),
-            k=1,
-        )
-        keep[detection_finite] = distances > match_radius_pix
+    seed_sky_entries = _skycoord_entries(seed_table, 'skycoord')
+    valid_seed_idx = [ii for ii, coord in enumerate(seed_sky_entries) if coord is not None]
+    if len(valid_seed_idx) == 0:
+        combined = vstack([seed_table, detection_table], metadata_conflicts='silent')
+        if 'is_saturated' not in combined.colnames:
+            combined['is_saturated'] = np.zeros(len(combined), dtype=bool)
+        return combined
+
+    seed_sky = SkyCoord([seed_sky_entries[ii] for ii in valid_seed_idx])
+    det_sky_all = SkyCoord([coord for coord in detection_table['skycoord']])
+    _, sep2d, _ = det_sky_all.match_to_catalog_sky(seed_sky)
+    pixscale = ww.proj_plane_pixel_area()**0.5
+    match_radius = (match_radius_pix * pixscale).to(u.arcsec)
+    keep = sep2d > match_radius
 
     combined = vstack([seed_table, detection_table[keep]], metadata_conflicts='silent')
     if 'is_saturated' not in combined.colnames:
@@ -375,19 +494,45 @@ def _augment_seed_catalog_with_detections(seed_catalog, detection_catalog, match
 
 
 class SeededFinder:
-    def __init__(self, seed_table):
+    def __init__(self, seed_table, ww=None, preferred_skycoord_col=None):
         self.seed_table = _as_table(seed_table)
+        self.ww = ww
+        self.preferred_skycoord_col = preferred_skycoord_col
 
     def __call__(self, data, mask=None):
-        seeds = Table(self.seed_table, copy=True)
-        xvals, yvals = _get_source_xy(seeds)
-        seeds['xcentroid'] = np.asarray(xvals, dtype=float)
-        seeds['ycentroid'] = np.asarray(yvals, dtype=float)
+        seeds = _resolve_seed_skycoords(
+            Table(self.seed_table, copy=True),
+            ww=self.ww,
+            preferred_skycoord_col=self.preferred_skycoord_col,
+        )
+        if self.ww is None:
+            xvals, yvals = _best_available_xy(seeds)
+        else:
+            sky_entries = _skycoord_entries(seeds, 'skycoord')
+            valid_idx = [ii for ii, coord in enumerate(sky_entries) if coord is not None]
+            xvals = np.full(len(seeds), np.nan, dtype=float)
+            yvals = np.full(len(seeds), np.nan, dtype=float)
+            if len(valid_idx) > 0:
+                skycoords = SkyCoord([sky_entries[ii] for ii in valid_idx])
+                xx, yy = self.ww.world_to_pixel(skycoords)
+                xvals[valid_idx] = xx
+                yvals[valid_idx] = yy
+
+        finite = np.isfinite(xvals) & np.isfinite(yvals)
+        seeds = seeds[finite]
+        xvals = xvals[finite]
+        yvals = yvals[finite]
+
         if 'flux' not in seeds.colnames:
             if 'flux_fit' in seeds.colnames:
                 seeds['flux'] = np.asarray(seeds['flux_fit'], dtype=float)
             else:
                 seeds['flux'] = np.ones(len(seeds), dtype=float)
+        seeds['xcentroid'] = np.asarray(xvals, dtype=float)
+        seeds['ycentroid'] = np.asarray(yvals, dtype=float)
+        seeds['x_init'] = np.asarray(xvals, dtype=float)
+        seeds['y_init'] = np.asarray(yvals, dtype=float)
+        seeds['flux_init'] = np.asarray(seeds['flux'], dtype=float)
         return seeds
 
 
@@ -1092,7 +1237,8 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                                           epsf=options.epsf,
                                                           blur=options.blur,
                                                           group=options.group,
-                                                          pupil='clear')
+                                                          pupil='clear',
+                                                          iteration_label=options.iteration_label or None)
                     else:
                         print('Skipping residual mosaicking in SLURM array-task mode.')
             else:
@@ -1285,7 +1431,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             outside_star_fit_box=512,
         )
 
+    seeded_init_params = None
     if seed_catalog is not None:
+        preferred_seed_skycoord_col = f'skycoord_{filtername.lower()}'
         seed_catalog = _combine_seed_and_satstars(seed_catalog, satstar_table)
         detection_image = nan_replaced_data
         if postprocess_residuals:
@@ -1296,12 +1444,19 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 satstar_table=satstar_table,
             )
         extra_detections = daofind_tuned(detection_image, mask=mask)
-        seed_catalog = _augment_seed_catalog_with_detections(
+        seed_catalog = _augment_seed_catalog_with_detections_sky(
             seed_catalog,
             extra_detections,
+            ww=ww,
             match_radius_pix=max(1.0, 0.5 * fwhm_pix),
+            preferred_seed_skycoord_col=preferred_seed_skycoord_col,
         )
-        finstars = SeededFinder(seed_catalog)(nan_replaced_data, mask=mask)
+        finstars = SeededFinder(seed_catalog, ww=ww,
+                                preferred_skycoord_col=preferred_seed_skycoord_col)(nan_replaced_data, mask=mask)
+        seeded_init_params = Table()
+        seeded_init_params['x_init'] = np.asarray(finstars['x_init'], dtype=float)
+        seeded_init_params['y_init'] = np.asarray(finstars['y_init'], dtype=float)
+        seeded_init_params['flux_init'] = np.asarray(finstars['flux_init'], dtype=float)
         finding_label = 'seeded'
     else:
         finstars = daofind_tuned(nan_replaced_data,
@@ -1488,7 +1643,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         t0 = time.time()
         print("Starting basic PSF photometry", flush=True)
 
-        phot_basic = PSFPhotometry(finder=daofind_tuned,
+        basic_finder = None if seeded_init_params is not None else daofind_tuned
+        phot_basic = PSFPhotometry(finder=basic_finder,
                                    localbkg_estimator=LocalBackground(2, 5),
                                    grouper=grouper if options.group else None,
                                    psf_model=dao_psf_model,
@@ -1499,7 +1655,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                   )
 
         print("About to do BASIC photometry....")
-        result = phot_basic(nan_replaced_data, mask=mask)
+        if seeded_init_params is not None:
+            result = phot_basic(nan_replaced_data, mask=mask, init_params=seeded_init_params)
+        else:
+            result = phot_basic(nan_replaced_data, mask=mask)
         print(f"Done with BASIC photometry. len(result)={len(result)}  dt={time.time() - t0}")
 
         result = save_photutils_results(result, ww, filename,
@@ -1604,7 +1763,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                               )
 
             print("About to do ITERATIVE photometry....")
-            result2 = phot_iter(nan_replaced_data, mask=mask)
+            if seeded_init_params is not None:
+                result2 = phot_iter(nan_replaced_data, mask=mask, init_params=seeded_init_params)
+            else:
+                result2 = phot_iter(nan_replaced_data, mask=mask)
             print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
             result2 = save_photutils_results(result2, ww, filename,
