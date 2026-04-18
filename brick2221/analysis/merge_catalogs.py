@@ -44,11 +44,12 @@ obs_filters = {'brick': {'2221': filternames,
                          '1182': ['f444w', 'f356w', 'f200w', 'f115w'],
                          },
                'cloudc': {'2221': filternames},
+               'sickle': {'3958': ['f187n', 'f210m', 'f335m', 'f470n', 'f480m']},
                }
 
 # Using the 'brick' keyword here makes it work for now, need to figure out how to
 # refactor it in cases where there are more filters available for other targets!
-filter_to_project = {vv: key for key, val in obs_filters['brick'].items() for vv in val}
+filter_to_project = {vv: key for target_filters in obs_filters.values() for key, val in target_filters.items() for vv in val}
 # need to refactor this somehow for cloudc
 # project_obsnum = {'2221': '001',
 #                   '1182': '004',
@@ -58,6 +59,8 @@ project_obsnum = {'brick': {'2221': '001',
                             '1182': '004',
                             },
                   'cloudc': {'2221': '002',
+                             },
+                  'sickle': {'3958': '007',
                              },
                   }
 
@@ -354,7 +357,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
         print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]", flush=True)
 
     print("Compiling arrays into table", flush=True)
-    print(f"Table lengths are {len(tbl) for tbl in tbls}", flush=True)
+    print(f"Table lengths are {[len(tbl) for tbl in tbls]}", flush=True)
     print(f"Column names are {arrays.keys()} and should be {column_names} (plus detector, visit, exposure)", flush=True)
     arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
     del arrays['ra']
@@ -413,7 +416,12 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
     epsf_ = "_epsf" if epsf else ""
     blur_ = "_blur" if blur else ""
 
-    basetable = [tb for tb in tbls if tb.meta['filter'] == ref_filter][0].copy()
+    matching_ref_tables = [tb for tb in tbls if tb.meta['filter'] == ref_filter]
+    if len(matching_ref_tables) == 0:
+        ref_filter = tbls[0].meta['filter']
+        print(f"Requested ref_filter not found; using fallback ref_filter={ref_filter}")
+        matching_ref_tables = [tb for tb in tbls if tb.meta['filter'] == ref_filter]
+    basetable = matching_ref_tables[0].copy()
     basetable.meta['astrometric_reference_wavelength'] = ref_filter
 
     jfilts = SvoFps.get_filter_list('JWST')
@@ -544,39 +552,42 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
                   f"There are also {basetable[f'replaced_saturated_{wl}'].sum()} replaced saturated.", flush=True)
 
         print(f"Stacked all rows into table with len={len(basetable)}", flush=True)
-        zeropoint410 = u.Quantity(jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint'], u.Jy)
-        zeropoint182 = u.Quantity(jfilts.loc['JWST/NIRCam.F182M']['ZeroPoint'], u.Jy)
-        zeropoint405 = u.Quantity(jfilts.loc['JWST/NIRCam.F405N']['ZeroPoint'], u.Jy)
-        zeropoint187 = u.Quantity(jfilts.loc['JWST/NIRCam.F187N']['ZeroPoint'], u.Jy)
+        if 'flux_jy_f410m' in basetable.colnames and 'flux_jy_f405n' in basetable.colnames:
+            zeropoint410 = u.Quantity(jfilts.loc['JWST/NIRCam.F410M']['ZeroPoint'], u.Jy)
+            zeropoint405 = u.Quantity(jfilts.loc['JWST/NIRCam.F405N']['ZeroPoint'], u.Jy)
 
-        # Line-subtract the F410 continuum band
-        # 0.16 is from BrA_separation
-        # 0.196 is the 'post-destreak' version, which might (?) be better
-        # 0.11 is the theoretical version from RecombFilterDifferencing
-        # 0.16 still looks like the best; 0.175ish is the median, but 0.16ish is the mode
-        # but we use 0.11, the theoretica one, because we don't necessarily expect a good match!
-        f405to410_scale = 0.11
-        basetable.add_column(basetable['flux_jy_f410m'] - basetable['flux_jy_f405n'] * f405to410_scale, name='flux_jy_410m405')
+            # Line-subtract the F410 continuum band
+            # 0.16 is from BrA_separation
+            # 0.196 is the 'post-destreak' version, which might (?) be better
+            # 0.11 is the theoretical version from RecombFilterDifferencing
+            # 0.16 still looks like the best; 0.175ish is the median, but 0.16ish is the mode
+            # but we use 0.11, the theoretica one, because we don't necessarily expect a good match!
+            f405to410_scale = 0.11
+            basetable.add_column(basetable['flux_jy_f410m'] - basetable['flux_jy_f405n'] * f405to410_scale, name='flux_jy_410m405')
 
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405']) + ABMAG_OFFSET, name='mag_ab_410m405')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_vega_410m405')
-        # Then subtract that remainder back from the F405 band to get the continuum-subtracted F405
-        basetable.add_column(basetable['flux_jy_f405n'] - basetable['flux_jy_410m405'], name='flux_jy_405m410')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410']) + ABMAG_OFFSET, name='mag_ab_405m410')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_vega_405m410')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405']) + ABMAG_OFFSET, name='mag_ab_410m405')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_410m405'] / zeropoint410), name='mag_vega_410m405')
+            # Then subtract that remainder back from the F405 band to get the continuum-subtracted F405
+            basetable.add_column(basetable['flux_jy_f405n'] - basetable['flux_jy_410m405'], name='flux_jy_405m410')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410']) + ABMAG_OFFSET, name='mag_ab_405m410')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_405m410'] / zeropoint405), name='mag_vega_405m410')
 
-        # Line-subtract the F182 continuum band
-        # 0.11 is the theoretical bandwidth fraction
-        # PaA_separation_nrcb gives 0.175ish -> 0.183 with "latest"
-        # 0.18 is closer to the histogram mode
-        f187to182_scale = 0.11
-        basetable.add_column(basetable['flux_jy_f182m'] - basetable['flux_jy_f187n'] * f187to182_scale, name='flux_jy_182m187')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187']) + ABMAG_OFFSET, name='mag_ab_182m187')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_vega_182m187')
-        # Then subtract that remainder back from the F187 band to get the continuum-subtracted F187
-        basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182']) + ABMAG_OFFSET, name='mag_ab_187m182')
-        basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_vega_187m182')
+        if 'flux_jy_f182m' in basetable.colnames and 'flux_jy_f187n' in basetable.colnames:
+            zeropoint182 = u.Quantity(jfilts.loc['JWST/NIRCam.F182M']['ZeroPoint'], u.Jy)
+            zeropoint187 = u.Quantity(jfilts.loc['JWST/NIRCam.F187N']['ZeroPoint'], u.Jy)
+
+            # Line-subtract the F182 continuum band
+            # 0.11 is the theoretical bandwidth fraction
+            # PaA_separation_nrcb gives 0.175ish -> 0.183 with "latest"
+            # 0.18 is closer to the histogram mode
+            f187to182_scale = 0.11
+            basetable.add_column(basetable['flux_jy_f182m'] - basetable['flux_jy_f187n'] * f187to182_scale, name='flux_jy_182m187')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187']) + ABMAG_OFFSET, name='mag_ab_182m187')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_182m187'] / zeropoint182), name='mag_vega_182m187')
+            # Then subtract that remainder back from the F187 band to get the continuum-subtracted F187
+            basetable.add_column(basetable['flux_jy_f187n'] - basetable['flux_jy_182m187'], name='flux_jy_187m182')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182']) + ABMAG_OFFSET, name='mag_ab_187m182')
+            basetable.add_column(-2.5*np.log10(basetable['flux_jy_187m182'] / zeropoint187), name='mag_vega_187m182')
         """ # this adds to the file size too much
         # Add some important colors
 
@@ -612,8 +623,8 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
         # DEBUG for colname in basetable.colnames:
         # DEBUG     print(f"colname {colname} has mask: {hasattr(basetable[colname], 'mask')}")
         basetable.meta = meta
-        assert '212PXDG' in meta
-        assert '212PXDG' in basetable.meta
+        if '212PXDG' not in meta:
+            print("WARNING: 212PXDG not present in metadata for this target")
 
         indivexp = '_indivexp' if indivexp else ''
         tablename = f"{basepath}/catalogs/{catalog_type}_{module}{indivexp}_photometry_tables_merged{desat}{bgsub}{epsf_}{blur_}"
@@ -672,15 +683,24 @@ def merge_catalogs(tbls, catalog_type='crowdsource', module='nrca',
             basetable = basetable[fracfluxkeep]
 
         if min_nmatch_narrow is not None:
-            match_brick_narrow = np.array([basetable[f'nmatch_good_{filn}'] > min_nmatch_narrow for filn in filternames_narrow]).sum(axis=0) > 1
-            print(f"Keeping {match_brick_narrow.sum()} sources of {len(basetable)} with at least {min_nmatch_narrow} matches in two or more of the narrower bands")
-            basetable = basetable[match_brick_narrow]
+            available_nmatch_cols = [f'nmatch_good_{filn}' for filn in filternames_narrow if f'nmatch_good_{filn}' in basetable.colnames]
+            if len(available_nmatch_cols) >= 2:
+                match_brick_narrow = np.array([basetable[colname] > min_nmatch_narrow for colname in available_nmatch_cols]).sum(axis=0) > 1
+                print(f"Keeping {match_brick_narrow.sum()} sources of {len(basetable)} with at least {min_nmatch_narrow} matches in two or more of the narrower bands")
+                basetable = basetable[match_brick_narrow]
+            else:
+                print("Skipping narrow-band nmatch cut: insufficient narrow-band columns for this target")
 
         if qfcut is not None or fracfluxcut is not None:
             print(f"Saving merged version with qualcuts: {tablename}_qualcuts.fits with len={len(basetable)}")
             basetable.write(f"{tablename}_qualcuts.fits", overwrite=True)
 
-        oksep = (np.array([basetable[f'sep_{filtername}'] < 0.1*u.arcsec for filtername in filternames if 'w' not in filtername]).sum(axis=0) > 1)
+        sep_cols = [f'sep_{filtername}' for filtername in filternames if 'w' not in filtername and f'sep_{filtername}' in basetable.colnames]
+        if len(sep_cols) >= 2:
+            oksep = (np.array([basetable[colname] < 0.1*u.arcsec for colname in sep_cols]).sum(axis=0) > 1)
+        else:
+            oksep = np.ones(len(basetable), dtype=bool)
+            print("Skipping oksep cut: insufficient sep_* columns for this target")
         print(f"Writing {tablename}_qualcuts_oksep2221.fits")
         basetable[oksep].write(f"{tablename}_qualcuts_oksep2221.fits", overwrite=True)
 
@@ -956,17 +976,32 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
 
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')
 
-    for tbl, ww in zip(tbls, wcses):
-        if 'x_fit' in tbl.colnames:
+    for ii, tbl in enumerate(tbls):
+        ww = wcses[ii] if ii < len(wcses) else None
+
+        if ww is not None and 'x_fit' in tbl.colnames:
             crds = ww.pixel_to_world(tbl['x_fit'], tbl['y_fit'])
-        elif 'x_0' in tbl.colnames:
+        elif ww is not None and 'x_0' in tbl.colnames:
             crds = ww.pixel_to_world(tbl['x_0'], tbl['y_0'])
         else:
             crds = tbl['skycoord']
         if 'skycoord' not in tbl.colnames:
             tbl.add_column(crds, name='skycoord')
-        tbl.meta['pixelscale_deg2'] = ww.proj_plane_pixel_area()
-        tbl.meta['pixelscale_arcsec'] = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
+
+        if ww is not None:
+            pixelscale_deg2 = ww.proj_plane_pixel_area()
+            pixelscale_arcsec = (ww.proj_plane_pixel_area()**0.5).to(u.arcsec)
+        elif 'pixelscale_deg2' in tbl.meta:
+            pixelscale_deg2 = tbl.meta['pixelscale_deg2']
+            pixelscale_arcsec = (u.Quantity(pixelscale_deg2, u.deg**2)**0.5).to(u.arcsec)
+        elif 'PIXSCALE' in tbl.meta:
+            pixelscale_arcsec = u.Quantity(float(tbl.meta['PIXSCALE']), u.arcsec)
+            pixelscale_deg2 = pixelscale_arcsec.to(u.deg)**2
+        else:
+            raise ValueError(f"Could not determine pixel scale for {tbl.meta.get('filter', 'unknown')} table {tbl.meta.get('filename', '')}")
+
+        tbl.meta['pixelscale_deg2'] = pixelscale_deg2
+        tbl.meta['pixelscale_arcsec'] = pixelscale_arcsec
         flux = tbl['flux_fit'] if 'flux_fit' in tbl.colnames else tbl['flux_0']
         filtername = tbl.meta['filter']
 
@@ -980,7 +1015,7 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
             flux_jy = (flux * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             zeropoint = u.Quantity(jfilts.loc[f'JWST/NIRCam.{filtername.upper()}']['ZeroPoint'], u.Jy)
             vegamag = -2.5 * np.log10(flux_jy / zeropoint) * u.mag
-            abmag = (-2.5 * np.log10(flux_jy) + ABMAG_OFFSET) * u.mag
+            abmag = (-2.5 * np.log10(flux_jy / u.Jy) + ABMAG_OFFSET) * u.mag
             try:
                 eflux_jy = (tbl['flux_unc'] * u.MJy/u.sr * tbl.meta['pixelscale_deg2']).to(u.Jy)
             except KeyError:
@@ -1009,6 +1044,10 @@ def flag_near_saturated(cat, filtername, radius=None, target='brick',
                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     print(f"Flagging near saturated stars for filter {filtername}")
     satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
+    if not os.path.exists(satstar_cat_fn):
+        print(f"No saturated star catalog found for {filtername}: {satstar_cat_fn}")
+        cat.add_column(np.zeros(len(cat), dtype='bool'), name=f'near_saturated_{filtername}')
+        return
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
@@ -1039,6 +1078,12 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
                       basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
     satstar_cat_fn = f'{basepath}/{filtername.upper()}/pipeline/jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits'
     print(f"Saturated star catalog is {satstar_cat_fn}")
+    if not os.path.exists(satstar_cat_fn):
+        print(f"No saturated star catalog found for {filtername}; skipping replacement")
+        cat.add_column(np.zeros(len(cat), dtype='bool'), name='replaced_saturated')
+        if 'flux_fit' in cat.colnames:
+            cat.rename_column('flux_fit', 'flux')
+        return
     satstar_cat = Table.read(satstar_cat_fn)
     satstar_coords = satstar_cat['skycoord_fit']
 
@@ -1071,7 +1116,7 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
         eflux_jy = (satstar_cat['flux_err'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
     except KeyError:
         eflux_jy = (satstar_cat['flux_unc'] * u.MJy/u.sr * cat.meta['pixelscale_deg2']).to(u.Jy)
-    abmag = (-2.5*np.log10(flux_jy) + ABMAG_OFFSET) * u.mag
+    abmag = (-2.5*np.log10(flux_jy / u.Jy) + ABMAG_OFFSET) * u.mag
     abvega = -2.5*np.log10(flux_jy / zeropoint) * u.mag
     abmag_err = 2.5 / np.log(10) * np.abs(eflux_jy / flux_jy) * u.mag
     satstar_cat['mag_ab'] = abmag
@@ -1224,10 +1269,14 @@ def main():
     indiv_merge_methods = options.indiv_merge_methods.split(",")
     print("Options:", options)
 
-    basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
+    if target == 'sickle':
+        basepath = f'/orange/adamginsburg/jwst/{target}/'
+    else:
+        basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
 
     offsets_tables = {'1182': Table.read(f'/blue/adamginsburg/adamginsburg/jwst/brick/offsets/Offsets_JWST_Brick1182_F444ref.csv'),
-                      '2221': None}
+                      '2221': None,
+                      '3958': None}
 
     # need to have incrementing _before_ test
     index = -1

@@ -22,6 +22,7 @@ from astropy import units as u
 from astropy.nddata import NDData
 from astropy.io import fits
 from scipy import ndimage
+from scipy.spatial import cKDTree
 import requests
 import requests.exceptions
 import urllib3
@@ -339,6 +340,38 @@ def _combine_seed_and_satstars(seed_catalog, satstar_table):
         satstar_table['is_saturated'] = np.ones(len(satstar_table), dtype=bool)
 
     return vstack([seed_table, satstar_table], metadata_conflicts='silent')
+
+
+def _augment_seed_catalog_with_detections(seed_catalog, detection_catalog, match_radius_pix=1.0):
+    seed_table = _as_table(seed_catalog)
+    detection_table = _as_table(detection_catalog)
+
+    if len(seed_table) == 0:
+        return detection_table
+    if len(detection_table) == 0:
+        return seed_table
+
+    seed_x, seed_y = _get_source_xy(seed_table)
+    detection_x, detection_y = _get_source_xy(detection_table)
+
+    seed_finite = np.isfinite(seed_x) & np.isfinite(seed_y)
+    detection_finite = np.isfinite(detection_x) & np.isfinite(detection_y)
+    if not np.any(seed_finite):
+        return detection_table[detection_finite]
+
+    seed_tree = cKDTree(np.column_stack([seed_x[seed_finite], seed_y[seed_finite]]))
+    keep = np.zeros(len(detection_table), dtype=bool)
+    if np.any(detection_finite):
+        distances, _ = seed_tree.query(
+            np.column_stack([detection_x[detection_finite], detection_y[detection_finite]]),
+            k=1,
+        )
+        keep[detection_finite] = distances > match_radius_pix
+
+    combined = vstack([seed_table, detection_table[keep]], metadata_conflicts='silent')
+    if 'is_saturated' not in combined.colnames:
+        combined['is_saturated'] = np.zeros(len(combined), dtype=bool)
+    return combined
 
 
 class SeededFinder:
@@ -1222,6 +1255,20 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     if seed_catalog is not None:
         seed_catalog = _combine_seed_and_satstars(seed_catalog, satstar_table)
+        detection_image = nan_replaced_data
+        if postprocess_residuals:
+            detection_image = postprocess_residual_image(
+                nan_replaced_data,
+                fwhm_pix,
+                negative_threshold=residual_negative_threshold,
+                satstar_table=satstar_table,
+            )
+        extra_detections = daofind_tuned(detection_image, mask=mask)
+        seed_catalog = _augment_seed_catalog_with_detections(
+            seed_catalog,
+            extra_detections,
+            match_radius_pix=max(1.0, 0.5 * fwhm_pix),
+        )
         finstars = SeededFinder(seed_catalog)(nan_replaced_data, mask=mask)
         finding_label = 'seeded'
     else:
