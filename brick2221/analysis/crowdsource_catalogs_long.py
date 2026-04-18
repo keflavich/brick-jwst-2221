@@ -448,16 +448,44 @@ def postprocess_residual_image(data, fwhm_pix, negative_threshold=0.0, satstar_t
     return processed
 
 
-def load_or_make_satstar_catalog(filename, path_prefix, use_merged_psf_for_merged=False, overwrite=True):
+def load_or_make_satstar_catalog(filename, path_prefix, use_merged_psf_for_merged=False, overwrite=False,
+                                 outside_star_pixels=None, outside_star_fit_box=512):
     satstar_filename = filename.replace('.fits', '_satstar_catalog.fits')
-    if os.path.exists(satstar_filename):
+    if os.path.exists(satstar_filename) and not overwrite:
         return Table.read(satstar_filename)
 
     remove_saturated_stars(filename, overwrite=overwrite, path_prefix=path_prefix,
-                           use_merged_psf_for_merged=use_merged_psf_for_merged)
+                           use_merged_psf_for_merged=use_merged_psf_for_merged,
+                           outside_star_pixels=outside_star_pixels,
+                           outside_star_fit_box=outside_star_fit_box)
     if os.path.exists(satstar_filename):
         return Table.read(satstar_filename)
     return None
+
+
+def load_outside_fov_satstar_pixels(basepath, ww):
+    regfn = f'{basepath}/regions_/saturated_stars_outside_fov.reg'
+    if not os.path.exists(regfn):
+        return []
+
+    reglist = regions.Regions.read(regfn)
+    outside_pixels = []
+    for reg in reglist:
+        preg = reg
+        if hasattr(reg, 'to_pixel'):
+            preg = reg.to_pixel(ww)
+
+        center = getattr(preg, 'center', None)
+        if center is None:
+            continue
+
+        xval = float(center.x)
+        yval = float(center.y)
+        if np.isfinite(xval) and np.isfinite(yval):
+            outside_pixels.append((xval, yval))
+
+    print(f"Loaded {len(outside_pixels)} outside-FOV saturated-star seeds from {regfn}", flush=True)
+    return outside_pixels
 
 
 def save_photutils_results(result, ww, filename,
@@ -1247,10 +1275,14 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     satstar_table = None
     if options.each_exposure and seed_catalog is not None:
+        outside_star_pixels = load_outside_fov_satstar_pixels(basepath, ww)
         satstar_table = load_or_make_satstar_catalog(
             filename,
             path_prefix=f'{basepath}/psfs',
             use_merged_psf_for_merged=(module == 'merged'),
+            overwrite=bool(outside_star_pixels),
+            outside_star_pixels=outside_star_pixels,
+            outside_star_fit_box=512,
         )
 
     if seed_catalog is not None:

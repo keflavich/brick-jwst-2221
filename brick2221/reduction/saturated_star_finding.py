@@ -200,7 +200,18 @@ def find_saturated_stars(fitsdata, min_sep_from_edge=5, edge_npix=10000):
     return saturated, sources, coms
 
 
-def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=81, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=1, plot=True, rindsz=3, use_merged_psf_for_merged=False):
+def _nearest_window_bounds(center, full_size, window_size):
+    """Return [start, stop) bounds of the nearest window to a given center."""
+    window_size = int(min(max(1, window_size), full_size))
+    if window_size >= full_size:
+        return 0, full_size
+    start = int(round(center - window_size / 2))
+    start = max(0, min(start, full_size - window_size))
+    stop = start + window_size
+    return start, stop
+
+
+def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=81, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=1, plot=True, rindsz=3, use_merged_psf_for_merged=False, outside_star_pixels=None, outside_star_fit_box=512):
     """
     Detect and PSF-fit saturated sources in a JWST image.
 
@@ -264,7 +275,20 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
     dq = fitsdata['DQ'].data
 
     saturated, sources, coms = find_saturated_stars(fitsdata, min_sep_from_edge=min_sep_from_edge, edge_npix=edge_npix)
-    nsource = len(coms)
+
+    source_records = [{'com': com, 'label': ii + 1, 'forced': False}
+                      for ii, com in enumerate(coms)]
+    if outside_star_pixels is not None:
+        for xy in outside_star_pixels:
+            if xy is None:
+                continue
+            if len(xy) != 2:
+                continue
+            x_extra, y_extra = float(xy[0]), float(xy[1])
+            if np.isfinite(x_extra) and np.isfinite(y_extra):
+                source_records.append({'com': (y_extra, x_extra), 'label': None, 'forced': True})
+
+    nsource = len(source_records)
 
     big_grid = get_psf(header, path_prefix=path_prefix, use_merged_psf_for_merged=use_merged_psf_for_merged)
     ww = wcs.WCS(header)
@@ -303,10 +327,13 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
 
     index = 0
     print(f"Found {nsource} saturated sources to process", flush=True)
-    for ii in range(nsource):
+    for ii, src in enumerate(source_records):
         # get the center of pixels with this label
 
-        com = coms[ii] #center_of_mass(saturated, labels=sources, index=ii+1)
+        com = src['com']
+        src_label = src['label']
+        forced_source = src['forced']
+        #center_of_mass(saturated, labels=sources, index=ii+1)
         # center_of_mass can return (nan, nan) for degenerate labels; guard against that
         if com is None:
             print(f"Source {ii+1}: center_of_mass returned None; skipping", flush=True)
@@ -317,17 +344,26 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
             continue
         ycen = int(round(yf))
         xcen = int(round(xf))
-        print(f"Source {ii+1}: center at (x, y) = ({xcen}, {ycen})")
-        y0 = int(max(0, ycen - pad))
-        y1 = int(min(data.shape[0], ycen + pad))
-        x0 = int(max(0, xcen - pad))
-        x1 = int(min(data.shape[1], xcen + pad))
-        size_saturated = int(np.sqrt(sum_labels(saturated, labels=sources, index=ii+1))/2)
+        print(f"Source {ii+1}: center at (x, y) = ({xcen}, {ycen}), forced={forced_source}")
+
+        if forced_source:
+            y0, y1 = _nearest_window_bounds(ycen, data.shape[0], outside_star_fit_box)
+            x0, x1 = _nearest_window_bounds(xcen, data.shape[1], outside_star_fit_box)
+            size_saturated = max(5, int(3 * fwhm_pix))
+        else:
+            y0 = int(max(0, ycen - pad))
+            y1 = int(min(data.shape[0], ycen + pad))
+            x0 = int(max(0, xcen - pad))
+            x1 = int(min(data.shape[1], xcen + pad))
+            size_saturated = int(np.sqrt(sum_labels(saturated, labels=sources, index=src_label))/2)
+
         # area_saturated = sum_labels(saturated, labels=sources, index=ii+1)
         cutout = data[y0:y1, x0:x1]
         init_params = QTable()
-        init_params['x'] = [xcen - x0]
-        init_params['y'] = [ycen - y0]
+        x_init = float(np.clip(xcen - x0, 0, max(0, cutout.shape[1] - 1)))
+        y_init = float(np.clip(ycen - y0, 0, max(0, cutout.shape[0] - 1)))
+        init_params['x'] = [x_init]
+        init_params['y'] = [y_init]
         cutout[np.isnan(cutout)] = 0.0
         # if isinstance(grid, list):
         #     print(f"Grid is a list: {grid}")
@@ -343,10 +379,16 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
                                 psf_model=big_grid,
                                 fit_shape=size,
                                 aperture_radius=15*fwhm_pix)
-        low_x  = xcen - x0 - size_saturated
-        high_x = xcen - x0 + size_saturated
-        low_y  = ycen - y0 - size_saturated
-        high_y = ycen - y0 + size_saturated
+        if forced_source:
+            low_x = 0
+            high_x = cutout.shape[1] - 1
+            low_y = 0
+            high_y = cutout.shape[0] - 1
+        else:
+            low_x  = xcen - x0 - size_saturated
+            high_x = xcen - x0 + size_saturated
+            low_y  = ycen - y0 - size_saturated
+            high_y = ycen - y0 + size_saturated
 
         # get the underlying model and set bounds there
         model = getattr(psfphot, "psf_model", None)
@@ -400,6 +442,8 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         if len(result) == 0:
             print(f"All fit rows were invalid for source {ii+1}; skipping", flush=True)
             continue
+
+        result['outside_fov_seed'] = np.full(len(result), forced_source, dtype=bool)
 
         result['xcentroid'] = result['x_fit'] + x0
         result['ycentroid'] = result['y_fit'] + y0
@@ -478,12 +522,13 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         # modified 2026-04-18 to only check if _all_ pixels are flagged as HOT or DEAD, since some pixels may be flagged as both SATURATED and HOT/DEAD because a saturated star happened to land on top of a hot/dead pixel
         idx_saturated_in_cutout = (dq[y0:y1, x0:x1] & dqflags.pixel['SATURATED']) > 0
         saturated_dqflags = dq[y0:y1, x0:x1][idx_saturated_in_cutout]
-        if np.all((saturated_dqflags & dqflags.pixel['HOT'])!=0):
-            print(f"Warning: Some saturated pixels are flagged as HOT; skipping source", flush=True)
-            continue
-        if np.all((saturated_dqflags & dqflags.pixel['DEAD'])!=0):
-            print(f"Warning: Some saturated pixels are flagged as DEAD; skipping source", flush=True)
-            continue
+        if saturated_dqflags.size > 0:
+            if np.all((saturated_dqflags & dqflags.pixel['HOT'])!=0):
+                print(f"Warning: Some saturated pixels are flagged as HOT; skipping source", flush=True)
+                continue
+            if np.all((saturated_dqflags & dqflags.pixel['DEAD'])!=0):
+                print(f"Warning: Some saturated pixels are flagged as DEAD; skipping source", flush=True)
+                continue
         #if np.any((saturated_dqflags & dqflags.pixel['RC'])!=0):
         #    print(f"Warning: Some saturated pixels are flagged as RC; skipping source", flush=True)
         #    continue
@@ -496,8 +541,17 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         #    continue
 
         # process the result
-        if result is not None and np.isfinite(fluxerr) and snr > 1 and flux > 0:
-            print(f"Accepting source {ii+1} with flux={flux}, fluxerr={fluxerr}, snr={snr}", flush=True)
+        accept_source = result is not None and np.isfinite(fluxerr) and snr > 1 and flux > 0
+        if forced_source and result is not None:
+            xcent = np.asarray(result['xcentroid'], dtype=float)
+            ycent = np.asarray(result['ycentroid'], dtype=float)
+            accept_source = np.all(np.isfinite(xcent)) and np.all(np.isfinite(ycent))
+
+        if accept_source:
+            if forced_source:
+                print(f"Accepting forced outside-FOV source {ii+1} with flux={flux}, fluxerr={fluxerr}, snr={snr}", flush=True)
+            else:
+                print(f"Accepting source {ii+1} with flux={flux}, fluxerr={fluxerr}, snr={snr}", flush=True)
             if index == 0:
                 base_tab = result
             else:
@@ -536,7 +590,7 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True, *
     if 'CRPIX1' not in header:
         header.update(wcs.WCS(fh['SCI'].header).to_header())
     print("Running get_saturated_stars", flush=True)
-    satstar_table = get_saturated_stars(fh,)
+    satstar_table = get_saturated_stars(fh, **kwargs)
     if satstar_table is not None:
         satstar_table.meta.update(header)
         print("Finished get_saturated_stars", flush=True)
