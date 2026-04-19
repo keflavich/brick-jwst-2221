@@ -192,6 +192,8 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         imfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_i2d.fits'
         print(f"imfile file was None, so defaulting to {imfile}")
 
+    print(f"Realigning to catalog {catfile}")
+
     cat = Table.read(catfile)
 
     # HACKETY HACK HACK filtering by flux
