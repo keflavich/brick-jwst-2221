@@ -47,7 +47,62 @@ The analysis has been done haphazardly in notebooks, but then I tried to reconci
 
 ### Setup for Reduction
 
-There are a few basic setup needs before you get started with reduction of a new project:
- * if the project has a name (e.g., 2221 or brick), there should be a ``crds/`` directory under that directory. e.g., for `/orange/adamginsburg/brick`, there is `/orange/adamginsburg/brick/crds`.  
- * create a field region for selecting stars for crossmatching, e.g., `/orange/adamginsburg/jwst/sickle/regions_/nircam_sickle_fov.reg`
- * you need to add mappings from target/region name to project code and vice versa in a few places.  TODO: enumerate these
+There are a few basic setup requirements before reduction of a new target:
+
+ * The target data root must exist at `/orange/adamginsburg/jwst/{target}/`.
+ * A `crds/` directory must exist under that target root.
+ * A `reduction/fwhm_table.ecsv` file must exist under that target root.
+ * A `catalogs/` directory should exist under that target root (it will be created automatically by helper scripts if missing).
+ * If you want VVV-based alignment for that target, provide a field-of-view region file under `regions_/` and wire it into `fov_regname` in `brick2221/reduction/PipelineRerunNIRCAM-LONG.py`.
+
+Validated mapping locations in the codebase (these must be coherent for any new target):
+
+ * `brick2221/reduction/PipelineRerunNIRCAM-LONG.py`
+   * proposal/field -> target mapping in `field_to_reg_mapping`
+   * proposal/field -> reference catalog mapping in `REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD`
+   * optional target -> fov region mapping in `fov_regname`
+ * `brick2221/analysis/crowdsource_catalogs_long.py`
+   * proposal/field/target mapping in `field_to_reg_mapping`
+   * visit-count policy in `nvisits`
+ * `brick2221/analysis/merge_catalogs.py`
+   * filter inventory per target/proposal in `obs_filters`
+   * target/proposal -> field mapping in `project_obsnum`
+
+Current first-pass/second-pass behavior:
+
+ * If the configured reference catalog does not exist yet, `PipelineRerunNIRCAM-LONG.py` now runs a first pass and skips reference-catalog realignment steps.
+ * After building a reference catalog, rerun with `--skip_step1and2` to reuse existing `_cal` products and perform the aligned second pass.
+
+### Full Pipeline For cloudef/sgrc/sgrb2/arches/quintuplet/sgra
+
+Use:
+
+ * `brick2221/shellscripts/run_full_pipeline_cloudef_sgrc.sh`
+
+This script submits an end-to-end dependency tree for each target:
+
+ 1. First-pass pipeline jobs for all configured filters.
+ 2. Reference-catalog build via `make_reference_from_pipeline_catalogs.py`.
+ 3. Second-pass pipeline jobs with `--skip_step1and2`.
+ 4. Per-exposure DAO cataloging arrays via `crowdsource_catalogs_long.py`.
+ 5. Cross-filter merge via `merge_catalogs.py --merge-singlefields`.
+
+Defaults:
+
+ * cloudef: proposal `2092`, field `005`, filters `F162M,F210M,F360M,F480M`, reference filter `F210M`
+ * sgrc: proposal `4147`, field `012`, filters `F115W,F162M,F182M,F212N,F360M,F405N,F470N,F480M`, reference filter `F212N`
+ * sgrb2: proposal `5365`, field `001`, filters `F150W,F182M,F187N,F210M,F212N,F300M,F360M,F405N,F410M,F466N,F480M`, reference filter `F210M`
+ * arches: proposal `2045`, field `001`, filters `F212N,F323N`, reference filter `F212N`
+ * quintuplet: proposal `2045`, field `003`, filters `F212N,F323N`, reference filter `F212N`
+ * sgra: proposal `1939`, field `001`, filters `F115W,F212N,F405N`, reference filter `F212N`
+
+You can override these with environment variables before launching, for example:
+
+ * `CLOUDEF_FIELD`, `CLOUDEF_FILTERS`, `CLOUDEF_REF_FILTER`
+ * `SGRC_FIELD`, `SGRC_FILTERS`, `SGRC_REF_FILTER`
+ * `SGRB2_FIELD`, `SGRB2_FILTERS`, `SGRB2_REF_FILTER`
+ * `ARCHES_FIELD`, `ARCHES_FILTERS`, `ARCHES_REF_FILTER`
+ * `QUINTUPLET_FIELD`, `QUINTUPLET_FILTERS`, `QUINTUPLET_REF_FILTER`
+ * `SGRA_FIELD`, `SGRA_FILTERS`, `SGRA_REF_FILTER`
+ * `MODULES` (default `merged`)
+ * `ARRAY_RANGE` (default `0-23`)
