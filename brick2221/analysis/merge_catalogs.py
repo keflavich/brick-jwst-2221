@@ -45,6 +45,12 @@ obs_filters = {'brick': {'2221': filternames,
                          },
                'cloudc': {'2221': filternames},
                'sickle': {'3958': ['f187n', 'f210m', 'f335m', 'f470n', 'f480m']},
+               'cloudef': {'2092': ['f162m', 'f210m', 'f360m', 'f480m']},
+               'sgrc': {'4147': ['f115w', 'f162m', 'f182m', 'f212n', 'f360m', 'f405n', 'f470n', 'f480m']},
+               'sgrb2': {'5365': ['f150w', 'f182m', 'f187n', 'f210m', 'f212n', 'f300m', 'f360m', 'f405n', 'f410m', 'f466n', 'f480m']},
+               'arches': {'2045': ['f212n', 'f323n']},
+               'quintuplet': {'2045': ['f212n', 'f323n']},
+               'sgra': {'1939': ['f115w', 'f212n', 'f405n']},
                }
 
 # Using the 'brick' keyword here makes it work for now, need to figure out how to
@@ -62,6 +68,18 @@ project_obsnum = {'brick': {'2221': '001',
                              },
                   'sickle': {'3958': '007',
                              },
+                  'cloudef': {'2092': '005',
+                              },
+                  'sgrc': {'4147': '012',
+                           },
+                  'sgrb2': {'5365': '001',
+                            },
+                  'arches': {'2045': '001',
+                             },
+                  'quintuplet': {'2045': '003',
+                                 },
+                  'sgra': {'1939': '001',
+                           },
                   }
 
 
@@ -1369,14 +1387,20 @@ def main():
     indiv_merge_methods = options.indiv_merge_methods.split(",")
     print("Options:", options)
 
-    if target == 'sickle':
+    if target in ('sickle', 'cloudef', 'sgrc', 'sgrb2', 'arches', 'quintuplet', 'sgra'):
         basepath = f'/orange/adamginsburg/jwst/{target}/'
     else:
         basepath = f'/blue/adamginsburg/adamginsburg/jwst/{target}/'
 
     offsets_tables = {'1182': Table.read(f'/blue/adamginsburg/adamginsburg/jwst/brick/offsets/Offsets_JWST_Brick1182_F444ref.csv'),
                       '2221': None,
-                      '3958': None}
+                      '3958': None,
+                      '2092': None,
+                      '4147': None,
+                      '5365': None,
+                      '2045': None,
+                      '1939': None,
+    }
 
     # need to have incrementing _before_ test
     index = -1
