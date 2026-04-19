@@ -1255,11 +1255,21 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
     nvisits = {'2221': {'brick': 1, 'cloudc': 2},
                '1182': {'brick': 2},
-               '3958': {'sickle': 1}
+               '3958': {'sickle': 1},
+               '2092': {'cloudef': 1},
+               '4147': {'sgrc': 1},
+               '5365': {'sgrb2': 1},
+               '2045': {'arches': 1, 'quintuplet': 1},
+               '1939': {'sgra': 1},
                }
     field_to_reg_mapping = {'2221': {'001': 'brick', '002': 'cloudc'},
                             '1182': {'004': 'brick'},
-                            '3958': {'007': 'sickle'}}[proposal_id]
+                            '3958': {'007': 'sickle'},
+                            '2092': {'005': 'cloudef'},
+                            '4147': {'012': 'sgrc'},
+                            '5365': {'001': 'sgrb2'},
+                            '2045': {'001': 'arches', '003': 'quintuplet'},
+                            '1939': {'001': 'sgra'}}[proposal_id]
     reg_to_field_mapping = {v:k for k,v in field_to_reg_mapping.items()}
     field = reg_to_field_mapping[target]
 
@@ -1311,7 +1321,7 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
             )
         modules = filtered_modules
 
-    if field_to_reg_mapping[field] == 'sickle':
+    if field_to_reg_mapping[field] in ('sickle', 'cloudef', 'sgrc', 'sgrb2', 'arches', 'quintuplet', 'sgra'):
         basepath = f'/orange/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
     else:
         basepath = f'/blue/adamginsburg/adamginsburg/jwst/{field_to_reg_mapping[field]}/'
