@@ -243,6 +243,28 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
                        catfile=None, imfile=None,
                        threshold=0.001*u.arcsec,
                        raoffset=0*u.arcsec, decoffset=0*u.arcsec):
+    """
+    Realign one image to an external astrometric reference catalog.
+
+    Parameters
+    ----------
+    reference_coordinates : SkyCoord
+        The fixed reference frame to align *to* (for example VVV/GNS/JWST
+        bootstrap reference coordinates).
+    catfile : str or None
+        Catalog of sources measured from the image being aligned (``imfile``).
+        This is the moving/measurement catalog whose pixel positions are mapped
+        with the image WCS and shifted to match ``reference_coordinates``.
+        If None, defaults to the pipeline source catalog associated with the
+        image/filter/module/field.
+    imfile : str or None
+        FITS image whose WCS is updated in place.
+
+    Notes
+    -----
+    ``catfile`` should be the source catalog for ``imfile``, not the external
+    reference catalog.
+    """
     if catfile is None:
         catfile = f'{basepath}/{filtername.upper()}/pipeline/jw0{proposal_id}-o{fieldnumber}_t001_nircam_clear-{filtername}-{module}_cat.ecsv'
         print(f"Catalog file was None, so defaulting to {catfile}")
