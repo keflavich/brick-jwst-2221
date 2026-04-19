@@ -614,7 +614,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                        max_offset=(0.4 if wavelength > 250 else 0.2)*u.arcsec,
                                        imfile=realigned_refcat_filename,
                                        #raoffset=raoffset, decoffset=decoffset
-                                       catfile=get_reference_astrometric_catalog_path(basepath, proposal_id, field)
                                        )
         print(f"Done realigning to refcat (module={module}, filtername={filtername})")
 
@@ -758,7 +757,6 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
                                mag_limit=20,
                                proposal_id=proposal_id,
                                imfile=realigned_refcat_filename,
-                               catfile=abs_refcat,
                                )
         else:
             print(f"Skipping refcat realignment for proposal_id={proposal_id} field={field} because no reference catalog is available yet")

@@ -45,8 +45,7 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from jwst.tweakreg.utils import adjust_wcs
 from jwst.datamodels import ImageModel
 
-from align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
-from saturated_star_finding import iteratively_remove_saturated_stars, remove_saturated_stars
+from brick2221.reduction.align_to_catalogs import realign_to_vvv, realign_to_catalog, merge_a_plus_b, retrieve_vvv
 
 import crds
 import jwst
@@ -71,13 +70,91 @@ print(jwst.__version__)
 
 fov_regname = {'brick': 'regions_/nircam_brick_fov.reg',
                'cloudc': 'regions_/nircam_cloudc_fov.reg',
+               'sickle': 'regions_/nircam_sickle_fov.reg',
                'w51': 'nope',
                'sgrb2': 'nope',
                }
 
+# Reference catalog configuration by proposal and field.
+# Paths are relative to basepath.
+REFERENCE_ASTROMETRIC_CATALOG_CANDIDATES_BY_FIELD = {
+    # Sickle MIRI fields. Prefer the short-wave merged astrometric catalog,
+    # then bootstrapped catalogs if needed.
+    '3958': {
+        '001': (
+            'catalogs/pipeline_based_nircam-f210m_reference_astrometric_catalog.fits',
+            'catalogs/nircam_bootstrapped_to_gns_refcat.fits',
+            'catalogs/nircam_bootstrapped_to_vvv_refcat.fits',
+        ),
+        '002': (
+            'catalogs/pipeline_based_nircam-f210m_reference_astrometric_catalog.fits',
+            'catalogs/nircam_bootstrapped_to_gns_refcat.fits',
+            'catalogs/nircam_bootstrapped_to_vvv_refcat.fits',
+        ),
+        '003': (
+            'catalogs/pipeline_based_nircam-f210m_reference_astrometric_catalog.fits',
+            'catalogs/nircam_bootstrapped_to_gns_refcat.fits',
+            'catalogs/nircam_bootstrapped_to_vvv_refcat.fits',
+        ),
+    },
+    '2221': {
+        '001': (
+            'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits',
+            'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
+            'catalogs/twomass.fits',
+        ),
+        '002': (
+            'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.fits',
+            'catalogs/crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv',
+            'catalogs/twomass.fits',
+        ),
+    },
+}
+
+
+def get_reference_astrometric_catalog_path(basepath, proposal_id, field, explicit_refcat=None):
+    if explicit_refcat is not None:
+        return explicit_refcat
+    if proposal_id in REFERENCE_ASTROMETRIC_CATALOG_CANDIDATES_BY_FIELD:
+        if field in REFERENCE_ASTROMETRIC_CATALOG_CANDIDATES_BY_FIELD[proposal_id]:
+            for relpath in REFERENCE_ASTROMETRIC_CATALOG_CANDIDATES_BY_FIELD[proposal_id][field]:
+                candidate = f'{basepath}/{relpath}'
+                if os.path.exists(candidate):
+                    return candidate
+    twomass = f'{basepath}/catalogs/twomass.fits'
+    if os.path.exists(twomass):
+        return twomass
+    return None
+
+
+def relocate_manifest_products(manifest, output_dir):
+    """Flatten MAST download tree into output_dir with idempotent relocation."""
+    for row in manifest:
+        src = str(row['Local Path'])
+        dst = os.path.join(output_dir, os.path.basename(src))
+
+        if os.path.exists(dst):
+            # Common when rerunning and MAST points to a file already moved earlier.
+            print(f"Relocation skipped: destination already exists ({dst})")
+            continue
+
+        try:
+            shutil.move(src, dst)
+        except FileNotFoundError:
+            if os.path.exists(dst):
+                print(f"Relocation skipped: source missing but destination exists ({dst})")
+            else:
+                raise FileNotFoundError(
+                    f"MAST manifest source missing and destination not present: src={src} dst={dst}"
+                )
+        except shutil.Error as ex:
+            print(f"Failed to move file with error {ex}")
+
 
 def main(filtername, Observations=None, regionname='brick',
-         field='001', proposal_id='2221', skip_step1and2=False, use_average=True):
+         field='001', proposal_id='2221', skip_step1and2=False, use_average=True,
+         reference_catalog=None, skip_download_for_existing=False,
+         marshall_tuning=False):
     """
     skip_step1and2 will not re-fit the ramps to produce the _cal images.  This
     can save time if you just want to redo the tweakreg steps but already have
@@ -101,6 +178,9 @@ def main(filtername, Observations=None, regionname='brick',
     elif regionname == 'cloudc':
         # jw02221-o001_t001_miri_f2550w_i2d.fits
         assert field == '001'
+    elif regionname == 'sickle':
+        assert proposal_id == '3958'
+        assert field in ('001', '002', '003')
 
     os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
@@ -120,7 +200,7 @@ def main(filtername, Observations=None, regionname='brick',
     for fn in glob("../*cal.fits"):
         try:
             os.link(fn, './'+os.path.basename(fn))
-        except Exception as ex:
+        except FileExistsError as ex:
             print(f'Failed to link {fn} to {os.path.basename(fn)} because of {ex}')
 
     Observations.cache_location = output_dir
@@ -131,8 +211,18 @@ def main(filtername, Observations=None, regionname='brick',
                                             )
     print("Obs table length:", len(obs_table))
 
-    msk = ((np.char.find(obs_table['filters'], filtername.upper()) >= 0) |
-           (np.char.find(obs_table['obs_id'], filtername.lower()) >= 0))
+    if 'filters' in obs_table.colnames and 'obs_id' in obs_table.colnames:
+        try:
+            filters_col = np.array([str(val).upper() for val in obs_table['filters'].filled('')])
+            obs_id_col = np.array([str(val).lower() for val in obs_table['obs_id'].filled('')])
+        except AttributeError:
+            filters_col = np.array([str(val).upper() for val in obs_table['filters']])
+            obs_id_col = np.array([str(val).lower() for val in obs_table['obs_id']])
+        msk = ((np.char.find(filters_col, filtername.upper()) >= 0) |
+               (np.char.find(obs_id_col, filtername.lower()) >= 0))
+    else:
+        print("Warning: 'filters' or 'obs_id' column missing in obs_table; selecting all observations for this proposal")
+        msk = np.ones(len(obs_table), dtype=bool)
     data_products_by_obs = Observations.get_product_list(obs_table[msk])
     print("data prodcts by obs length: ", len(data_products_by_obs))
 
@@ -148,11 +238,7 @@ def main(filtername, Observations=None, regionname='brick',
     print("manifest:", manifest)
 
     # MAST creates deep directory structures we don't want
-    for row in manifest:
-        try:
-            shutil.move(row['Local Path'], os.path.join(output_dir, os.path.basename(row['Local Path'])))
-        except Exception as ex:
-            print(f"Failed to move file with error {ex}")
+    relocate_manifest_products(manifest, output_dir)
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
@@ -160,20 +246,17 @@ def main(filtername, Observations=None, regionname='brick',
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
-    already_downloaded = np.array([os.path.exists(os.path.basename(uri)) for uri in products_fits['dataURI']])
-    uncal_mask &= ~already_downloaded
-    print(f"uncal to download: {uncal_mask.sum()}; {already_downloaded.sum()} were already downloaded")
+    if skip_download_for_existing:
+        already_downloaded = np.array([os.path.exists(os.path.basename(uri)) for uri in products_fits['dataURI']])
+        uncal_mask &= ~already_downloaded
+        print(f"uncal to download: {uncal_mask.sum()}; {already_downloaded.sum()} were already downloaded")
 
     if uncal_mask.any():
         manifest = Observations.download_products(products_fits[uncal_mask], download_dir=output_dir)
         print("manifest:", manifest)
 
         # MAST creates deep directory structures we don't want
-        for row in manifest:
-            try:
-                shutil.move(row['Local Path'], os.path.join(output_dir, os.path.basename(row['Local Path'])))
-            except Exception as ex:
-                print(f"Failed to move file with error {ex}")
+        relocate_manifest_products(manifest, output_dir)
 
     if True: # just to preserve indendation
         print(f"Working on MIRI: running initial pipeline setup steps (skip_step1and2={skip_step1and2})")
@@ -226,29 +309,41 @@ def main(filtername, Observations=None, regionname='brick',
             asn_data = json.load(f_obj)
 
         print(f"In cwd={os.getcwd()}")
-        if not skip_step1and2:
-            # re-calibrate all uncal files -> cal files *without* suppressing first group
-            for member in asn_data['products'][0]['members']:
-                # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
+        members = asn_data['products'][0]['members']
+        if skip_step1and2:
+            missing_cal = [member['expname'] for member in members if not os.path.exists(member['expname'])]
+            if len(missing_cal) == 0:
+                print("Skipped step 1 and step2")
+            else:
+                print(f"skip_step1and2 requested, but {len(missing_cal)} _cal files are missing; running detector/image2 for missing files")
+
+        if (not skip_step1and2) or (skip_step1and2 and len([member['expname'] for member in members if not os.path.exists(member['expname'])]) > 0):
+            # re-calibrate uncal files -> cal files *without* suppressing first group
+            for member in members:
                 assert f'jw0{proposal_id}{field}' in member['expname']
-                print(f"DETECTOR PIPELINE on {member['expname']}")
+                cal_name = member['expname']
+                if skip_step1and2 and os.path.exists(cal_name):
+                    continue
+
+                print(f"DETECTOR PIPELINE on {cal_name}")
                 print("Detector1Pipeline step")
                 # from Hosek: expand_large_events -> false; turn off "snowball" detection
-                Detector1Pipeline.call(member['expname'].replace("_cal.fits",
-                                                                 "_uncal.fits"),
+                detector1_steps = {'ramp_fit': {'suppress_one_group': False},
+                                   'refpix': {'use_side_ref_pixels': True}}
+                if marshall_tuning:
+                    detector1_steps.update({'saturation': {'skip': True, 'n_pix_grow_sat': 0},
+                                            'firstframe': {'skip': True},
+                                            'rscd': {'skip': True}})
+                Detector1Pipeline.call(cal_name.replace("_cal.fits", "_uncal.fits"),
                                        save_results=True, output_dir=output_dir,
                                        save_calibrated_ramp=True,
-                                       steps={'ramp_fit': {'suppress_one_group':False},
-                                              "refpix": {"use_side_ref_pixels": True}})
+                                       steps=detector1_steps)
 
-                print(f"IMAGE2 PIPELINE on {member['expname']}")
-                Image2Pipeline.call(member['expname'].replace("_cal.fits",
-                                                              "_rate.fits"),
+                print(f"IMAGE2 PIPELINE on {cal_name}")
+                Image2Pipeline.call(cal_name.replace("_cal.fits", "_rate.fits"),
                                     save_results=True, output_dir=output_dir,
                                     #steps={'background': {'run': False}},
                                    )
-        else:
-            print("Skipped step 1 and step2")
 
     if True:
         print(f"Filter {filtername}: doing tweakreg.  ")
@@ -260,7 +355,6 @@ def main(filtername, Observations=None, regionname='brick',
 
         for member in asn_data['products'][0]['members']:
             print(f"Running  maybe alignment on {member}")
-            hdr = fits.getheader(member['expname'])
             fname = member['expname']
             assert fname.endswith('_cal.fits')
             member['expname'] = fname.replace("_cal.fits", "_align.fits")
@@ -270,44 +364,52 @@ def main(filtername, Observations=None, regionname='brick',
                           field=field, basepath=basepath,
                           regionname=regionname,
                           filtername=filtername,
-                          use_average=use_average)
+                          use_average=use_average,
+                          visit=fname[10:13])
 
         asn_file_each = asn_file
         with open(asn_file_each, 'w') as fh:
             json.dump(asn_data, fh)
 
-        abs_refcat = f'{basepath}/catalogs/twomass.fits'
-        if os.path.exists(abs_refcat):
-            # just use 2MASS b/c the MIRI stars are all super bright
+        abs_refcat = get_reference_astrometric_catalog_path(basepath, proposal_id, field, explicit_refcat=reference_catalog)
+        if abs_refcat is not None:
             reftbl = Table.read(abs_refcat)
-            # For non-F410M, try aligning to F410M instead of VVV?
-            # reftblversion = reftbl.meta['VERSION']
-            reftbl.meta['name'] = '2MASS Reference Astrometric Catalog'
+            reftbl.meta['name'] = 'Reference Astrometric Catalog'
 
             tweakreg_parameters['abs_searchrad'] = 0.4
             # try forcing searchrad to be tighter to avoid bad crossmatches
             # (the raw data are very well-aligned to begin with, though CARTA
             # can't display them b/c they are using SIP)
             tweakreg_parameters['searchrad'] = 0.05
-            print(f"Reference catalog is {abs_refcat} with version 2MASS")
+            # MIRI BRIGHTSKY fields can have very few matched stars per frame.
+            tweakreg_parameters['minobj'] = 2
+            tweakreg_parameters['abs_minobj'] = 2
+            print(f"Reference catalog is {abs_refcat}")
 
             tweakreg_parameters.update({'abs_refcat': abs_refcat,})
+        else:
+            print(f"No reference catalog found for proposal_id={proposal_id} field={field} in {basepath}; running without abs_refcat")
+
+        skymatch_params = {'save_results': True,
+                           'subtract': False,
+                           'skymethod': 'match',
+                           'match_down': False}
+        outlier_params = {'good_bits': "SATURATED, JUMP_DET"}
+        if marshall_tuning:
+            skymatch_params = {'save_results': True,
+                               'subtract': True,
+                               'skymethod': 'global',
+                               'match_down': True}
+            outlier_params = {'snr': "30.0 5.0",
+                              'good_bits': "SATURATED, JUMP_DET",
+                              'save_intermediate_results': True}
 
         print("Running tweakreg")
         calwebb_image3.Image3Pipeline.call(
             asn_file_each,
             steps={'tweakreg': tweakreg_parameters,
-                   # Skip skymatch: looks like it causes problems (but maybe not doing this is worse?)
-                   'skymatch': {'save_results': True,
-                                'subtract': False,
-                                'skymethod': 'match',
-                                'match_down': False},
-                   # MIRI ticket https://stsci.service-now.com/jwst?id=ticket&table=incident&sys_id=aa4172264715b510ec5b9448436d43ae recommends modifying snr & good_bits
-                   # https://jwst-pipeline.readthedocs.io/en/latest/jwst/outlier_detection/arguments.html
-                   'outlier_detection': {#'snr': "7.0, 5.0",
-                                         # https://jwst-pipeline.readthedocs.io/en/stable/jwst/references_general/references_general.html#data-quality-flags
-                                         'good_bits': "SATURATED, JUMP_DET",
-                                         },
+                   'skymatch': skymatch_params,
+                   'outlier_detection': outlier_params,
             },
             output_dir=output_dir,
             save_results=True)
@@ -324,7 +426,7 @@ def main(filtername, Observations=None, regionname='brick',
 
 
 def fix_alignment(fn, proposal_id=None, regionname='brick', field=None, basepath=None, filtername=None,
-                  use_average=True):
+                  use_average=True, visit='003'):
     if os.path.exists(fn):
         print(f"Running manual align for data ({proposal_id} + {field}): {fn}", flush=True)
     else:
@@ -350,9 +452,13 @@ def fix_alignment(fn, proposal_id=None, regionname='brick', field=None, basepath
         basepath = f'/orange/adamginsburg/jwst/{regionname}'
 
     print("TODO: calculate MIRI offsets and implement them")
-    # 2024 08 04: tried these, then tried flipping
-    rashift = -3.895*u.arcsec
-    decshift = 1.28*u.arcsec
+    # Default Brick/CloudC offset.
+    rashift = -3.895 * u.arcsec
+    decshift = 1.28 * u.arcsec
+    # Marshall W51 tuning: use a small global RA correction for MIRI.
+    if regionname == 'w51':
+        rashift = 0.2 * u.arcsec
+        decshift = 0 * u.arcsec
     print(f"Shift for {fn} is {rashift}, {decshift}")
     align_fits = fits.open(fn)
     if 'RAOFFSET' in align_fits[1].header:
@@ -427,12 +533,24 @@ if __name__ == "__main__":
     parser.add_option("-p", "--proposal_id", dest="proposal_id",
                       default='2221',
                       help="proposal id (string)", metavar="proposal_id")
+    parser.add_option("--reference_catalog", dest="reference_catalog",
+                      default=None,
+                      help="Path to explicit astrometric reference catalog for tweakreg (optional)", metavar="reference_catalog")
+    parser.add_option("--skip_download_for_existing", dest="skip_download_for_existing",
+                      default=False, action='store_true',
+                      help="Skip downloading _uncal files already present in output directory", metavar="skip_download_for_existing")
+    parser.add_option("--marshall_tuning", dest="marshall_tuning",
+                      default=False, action='store_true',
+                      help="Enable Marshall W51-inspired MIRI tuning (Detector1/skymatch/outlier settings)", metavar="marshall_tuning")
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
     fields = options.field.split(",")
     proposal_id = options.proposal_id
     skip_step1and2 = options.skip_step1and2
+    reference_catalog = options.reference_catalog
+    skip_download_for_existing = options.skip_download_for_existing
+    marshall_tuning = options.marshall_tuning
     print(options)
 
     with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
@@ -443,6 +561,7 @@ if __name__ == "__main__":
 
 
     field_to_reg_mapping = {'2221': {'002': 'brick', '001': 'cloudc'},
+                            '3958': {'001': 'sickle', '002': 'sickle', '003': 'sickle'},
                             '5365': {'001': 'sgrb2'},
                             '6151': {'001': 'w51_background', '002': 'w51'},
                             }[proposal_id]
@@ -454,6 +573,9 @@ if __name__ == "__main__":
                            regionname=field_to_reg_mapping[field],
                            proposal_id=proposal_id,
                            skip_step1and2=skip_step1and2,
+                           reference_catalog=reference_catalog,
+                           skip_download_for_existing=skip_download_for_existing,
+                           marshall_tuning=marshall_tuning,
                           )
 
 

@@ -6,6 +6,8 @@ That means that if an exception is raised, it should not be caught and made more
 
 Package versions should not be modified.  If new versions need to be installed, ask the user instead of installing them.
 
+Don't use virtual environments.  Instead, use the existing environment at /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python.  If you need to install new packages, ask the user to do so.
+
 ## Project Overview
 Analysis and reduction pipelines for JWST Cycle 1 projects 2221 (and 1182) observing the Galactic Center "Brick" molecular cloud and Cloud C in narrowband NIRCam filters (F182M, F187N, F212N, F405N, F410M, F466N) and MIRI F2550W. Focus is on detecting CO ice absorption and stellar populations through multi-wavelength photometry.
 
