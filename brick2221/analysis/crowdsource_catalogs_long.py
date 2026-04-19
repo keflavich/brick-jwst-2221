@@ -34,11 +34,6 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from jwst.resample import ResampleStep
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.psf import extract_stars, EPSFStars, EPSFBuilder
-# IntegratedGaussianPRF was renamed to CircularGaussianPRF in photutils 2.0
-try:
-    from photutils.psf import CircularGaussianPRF as IntegratedGaussianPRF
-except ImportError:
-    from photutils.psf import IntegratedGaussianPRF
 # EPSFModel was deprecated in photutils 2.0 in favour of ImagePSF
 try:
     from photutils.psf import ImagePSF as EPSFModel
@@ -460,20 +455,37 @@ def _augment_seed_catalog_with_detections(seed_catalog, detection_catalog, match
 
 def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, ww,
                                               match_radius_pix=1.0,
-                                              preferred_seed_skycoord_col=None):
+                                              preferred_seed_skycoord_col=None,
+                                              return_stats=False):
     seed_table = _resolve_seed_skycoords(_as_table(seed_catalog), ww=ww,
                                          preferred_skycoord_col=preferred_seed_skycoord_col)
     detection_table = _as_table(detection_catalog)
+    stats = {
+        'seed_input': len(seed_table),
+        'detection_input': len(detection_table),
+        'detection_finite_xy': 0,
+        'detection_added': 0,
+        'detection_rejected_match': 0,
+    }
 
     if len(seed_table) == 0:
+        stats['detection_added'] = len(detection_table)
+        if return_stats:
+            return detection_table, stats
         return detection_table
     if len(detection_table) == 0:
+        if return_stats:
+            return seed_table, stats
         return seed_table
 
     det_x, det_y = _best_available_xy(detection_table)
     det_finite = np.isfinite(det_x) & np.isfinite(det_y)
     if not np.any(det_finite):
+        if return_stats:
+            return seed_table, stats
         return seed_table
+
+    stats['detection_finite_xy'] = int(np.sum(det_finite))
 
     det_sky = ww.pixel_to_world(det_x[det_finite], det_y[det_finite])
     det_ra = np.asarray(det_sky.ra.deg, dtype=float)
@@ -492,6 +504,10 @@ def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, w
         combined = vstack([seed_table, detection_table], metadata_conflicts='silent')
         if 'is_saturated' not in combined.colnames:
             combined['is_saturated'] = np.zeros(len(combined), dtype=bool)
+        stats['detection_added'] = len(detection_table)
+        stats['detection_rejected_match'] = 0
+        if return_stats:
+            return combined, stats
         return combined
 
     seed_sky = SkyCoord(ra=seed_ra[valid_seed_idx] * u.deg,
@@ -505,9 +521,14 @@ def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, w
     match_radius = (match_radius_pix * pixscale).to(u.arcsec)
     keep = sep2d > match_radius
 
+    stats['detection_added'] = int(np.sum(keep))
+    stats['detection_rejected_match'] = int(len(keep) - np.sum(keep))
+
     combined = vstack([seed_table, detection_table[keep]], metadata_conflicts='silent')
     if 'is_saturated' not in combined.colnames:
         combined['is_saturated'] = np.zeros(len(combined), dtype=bool)
+    if return_stats:
+        return combined, stats
     return combined
 
 
@@ -611,6 +632,74 @@ def postprocess_residual_image(data, fwhm_pix, negative_threshold=0.0, satstar_t
         processed = interpolate_replace_nans(processed, kernel, convolve=convolve_fft)
 
     return processed
+
+
+def compute_local_noise_map(data, smooth_sigma_pix=3.0):
+    """
+    Build a local noise map from an image using the sequence:
+    1) Gaussian smooth
+    2) high-pass residual = original - smooth
+    3) local variance from smoothed residual**2
+    4) local noise = sqrt(local variance)
+    """
+    image = np.asarray(np.nan_to_num(data), dtype=float)
+    smoothed = ndimage.gaussian_filter(image, sigma=float(smooth_sigma_pix))
+    residual = image - smoothed
+    local_var = ndimage.gaussian_filter(residual ** 2, sigma=float(smooth_sigma_pix))
+    local_var = np.where(local_var < 0, 0, local_var)
+    noise_map = np.sqrt(local_var)
+    return noise_map
+
+
+def _sample_map_at_positions(image_map, xvals, yvals):
+    xpix = np.rint(np.asarray(xvals, dtype=float)).astype(int)
+    ypix = np.rint(np.asarray(yvals, dtype=float)).astype(int)
+
+    sampled = np.full(len(xpix), np.nan, dtype=float)
+    valid = ((xpix >= 0) & (ypix >= 0) &
+             (ypix < image_map.shape[0]) & (xpix < image_map.shape[1]))
+    sampled[valid] = image_map[ypix[valid], xpix[valid]]
+    return sampled
+
+
+def annotate_and_filter_by_local_snr(detection_table, noise_map, snr_threshold=5.0):
+    tbl = _as_table(detection_table)
+    if len(tbl) == 0:
+        if 'local_noise' not in tbl.colnames:
+            tbl['local_noise'] = np.array([], dtype=float)
+        if 'local_snr' not in tbl.colnames:
+            tbl['local_snr'] = np.array([], dtype=float)
+        return tbl, {'input_count': 0, 'kept_count': 0, 'dropped_count': 0}
+
+    xvals, yvals = _best_available_xy(tbl)
+    local_noise = _sample_map_at_positions(noise_map, xvals, yvals)
+
+    if 'peak' in tbl.colnames:
+        signal = np.asarray(tbl['peak'], dtype=float)
+    elif 'flux' in tbl.colnames:
+        signal = np.asarray(tbl['flux'], dtype=float)
+    elif 'flux_fit' in tbl.colnames:
+        signal = np.asarray(tbl['flux_fit'], dtype=float)
+    elif 'flux_init' in tbl.colnames:
+        signal = np.asarray(tbl['flux_init'], dtype=float)
+    else:
+        signal = np.full(len(tbl), np.nan, dtype=float)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        local_snr = np.abs(signal) / local_noise
+
+    tbl['local_noise'] = np.asarray(local_noise, dtype=float)
+    tbl['local_snr'] = np.asarray(local_snr, dtype=float)
+
+    keep = (np.isfinite(local_snr) & np.isfinite(local_noise) &
+            (local_noise > 0) & (local_snr >= float(snr_threshold)))
+    filtered = tbl[keep]
+    stats = {
+        'input_count': int(len(tbl)),
+        'kept_count': int(np.sum(keep)),
+        'dropped_count': int(len(tbl) - np.sum(keep)),
+    }
+    return filtered, stats
 
 
 def load_or_make_satstar_catalog(filename, path_prefix, use_merged_psf_for_merged=False, overwrite=False,
@@ -1129,6 +1218,18 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                       default=0.0,
                       type='float',
                       help='Pixels below this threshold are replaced with Gaussian infill before detection')
+    parser.add_option('--local-snr-threshold', dest='local_snr_threshold',
+                      default=5.0,
+                      type='float',
+                      help='Per-source local S/N threshold for retaining DAO detections')
+    parser.add_option('--daofind-roundlo', dest='daofind_roundlo',
+                      default=-1.0,
+                      type='float',
+                      help='DAOStarFinder roundness lower bound')
+    parser.add_option('--daofind-roundhi', dest='daofind_roundhi',
+                      default=1.0,
+                      type='float',
+                      help='DAOStarFinder roundness upper bound')
     parser.add_option('--skip-mosaic-each-exposure-residuals',
                       dest='skip_mosaic_each_exposure_residuals',
                       default=False,
@@ -1236,7 +1337,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                                seed_catalog=options.seed_catalog or None,
                                                iteration_label=options.iteration_label or None,
                                                postprocess_residuals=options.postprocess_residuals or bool(options.seed_catalog),
-                                               residual_negative_threshold=options.residual_negative_threshold)
+                                               residual_negative_threshold=options.residual_negative_threshold,
+                                               local_snr_threshold=options.local_snr_threshold,
+                                               daofind_roundlo=options.daofind_roundlo,
+                                               daofind_roundhi=options.daofind_roundhi)
 
                 if not options.skip_mosaic_each_exposure_residuals:
                     if os.getenv('SLURM_ARRAY_TASK_ID') is None:
@@ -1269,7 +1373,10 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                                    seed_catalog=options.seed_catalog or None,
                                    iteration_label=options.iteration_label or None,
                                    postprocess_residuals=options.postprocess_residuals or bool(options.seed_catalog),
-                                   residual_negative_threshold=options.residual_negative_threshold
+                                   residual_negative_threshold=options.residual_negative_threshold,
+                                   local_snr_threshold=options.local_snr_threshold,
+                                   daofind_roundlo=options.daofind_roundlo,
+                                   daofind_roundhi=options.daofind_roundhi
                                    )
 
 
@@ -1322,6 +1429,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                        bg_boxsizes=None,
                        use_webbpsf=False,
                        nsigma=5,
+                       local_snr_threshold=5.0,
+                       daofind_roundlo=-1.0,
+                       daofind_roundhi=1.0,
                        pupil='clear',
                        seed_catalog=None,
                        iteration_label=None,
@@ -1405,16 +1515,6 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     grouper = SourceGrouper(2 * fwhm_pix)
     mmm_bkg = MMMBackground()
 
-    filtered_errest = stats.sigma_clipped_stats(data, stdfunc='mad_std')
-    print(f'Error estimate for DAO from stats.: {filtered_errest}', flush=True)
-    filtered_errest = np.nanmedian(err)
-    print(f'Error estimate for DAO from median(err): {filtered_errest}', flush=True)
-
-    daofind_tuned = DAOStarFinder(threshold=nsigma * filtered_errest,
-                                  fwhm=fwhm_pix, roundhi=1.0, roundlo=-1.0,
-                                  sharplo=0.30, sharphi=1.40)
-    print("Finding stars with daofind_tuned", flush=True)
-
     # empirically determined in debugging session with Taehwa on 2025-12-09:
     # with just nan_to_num, setting pixels to zero, some stars got "erased"
     kernel = Gaussian2DKernel(x_stddev=fwhm_pix/2.355)
@@ -1439,6 +1539,51 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         if os.path.exists(inferred_seed_catalog):
             seed_catalog = inferred_seed_catalog
 
+    is_second_iteration = seed_catalog is not None
+    if is_second_iteration:
+        # Second-iteration tuned finder settings: lower local-SNR cut plus tighter
+        # roundness/sharpness to suppress diffuse-background false detections.
+        iter2_local_snr_threshold = 3.0
+        iter2_roundlo = -0.3
+        iter2_roundhi = 0.3
+        iter2_sharplo = 0.50
+        iter2_sharphi = 1.00
+
+        # Local-noise-map DAO thresholding for second-iteration residual search.
+        local_noise_map = compute_local_noise_map(nan_replaced_data, smooth_sigma_pix=3.0)
+        finite_noise = np.isfinite(local_noise_map) & (local_noise_map > 0)
+        if not np.any(finite_noise):
+            raise ValueError('Local noise map has no positive finite values')
+        daofind_threshold = float(np.nanmin(local_noise_map[finite_noise]))
+        daofind_tuned = DAOStarFinder(threshold=daofind_threshold,
+                                      fwhm=fwhm_pix, roundhi=iter2_roundhi, roundlo=iter2_roundlo,
+                                      sharplo=iter2_sharplo, sharphi=iter2_sharphi)
+        print(
+            f'DAO iter2 local-noise threshold={daofind_threshold}; '
+            f'local_snr_threshold={iter2_local_snr_threshold}; '
+            f'roundlo={iter2_roundlo}; roundhi={iter2_roundhi}; '
+            f'sharplo={iter2_sharplo}; sharphi={iter2_sharphi}',
+            flush=True,
+        )
+    else:
+        # Keep original first-pass starfinding behavior unchanged.
+        filtered_errest = stats.sigma_clipped_stats(data, stdfunc='mad_std')
+        print(f'Error estimate for DAO from stats.: {filtered_errest}', flush=True)
+        filtered_errest = np.nanmedian(err)
+        print(f'Error estimate for DAO from median(err): {filtered_errest}', flush=True)
+
+        daofind_threshold = nsigma * filtered_errest
+        daofind_tuned = DAOStarFinder(threshold=daofind_threshold,
+                                      fwhm=fwhm_pix, roundhi=daofind_roundhi, roundlo=daofind_roundlo,
+                                      sharplo=0.30, sharphi=1.40)
+        print(
+            f'DAO first-pass threshold={daofind_threshold}; '
+            f'roundlo={daofind_roundlo}; roundhi={daofind_roundhi}',
+            flush=True,
+        )
+
+    print("Finding stars with daofind_tuned", flush=True)
+
     satstar_table = None
     if options.each_exposure and seed_catalog is not None:
         outside_star_pixels = load_outside_fov_satstar_pixels(basepath, ww)
@@ -1454,7 +1599,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     seeded_init_params = None
     if seed_catalog is not None:
         preferred_seed_skycoord_col = f'skycoord_{filtername.lower()}'
+        merged_seed_table = _as_table(seed_catalog)
         seed_catalog = _combine_seed_and_satstars(seed_catalog, satstar_table)
+        seed_after_sat_table = _as_table(seed_catalog)
+        sat_seed_count = int(np.sum(np.asarray(seed_after_sat_table['is_saturated'], dtype=bool)))
+        nonsat_seed_count = int(len(seed_after_sat_table) - sat_seed_count)
         detection_image = nan_replaced_data
         if postprocess_residuals:
             detection_image = postprocess_residual_image(
@@ -1463,13 +1612,54 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 negative_threshold=residual_negative_threshold,
                 satstar_table=satstar_table,
             )
-        extra_detections = daofind_tuned(detection_image, mask=mask)
-        seed_catalog = _augment_seed_catalog_with_detections_sky(
+        if postprocess_residuals:
+            extra_noise_map = compute_local_noise_map(detection_image, smooth_sigma_pix=3.0)
+            finite_extra_noise = np.isfinite(extra_noise_map) & (extra_noise_map > 0)
+            if not np.any(finite_extra_noise):
+                raise ValueError('Postprocessed local noise map has no positive finite values')
+            extra_noise_floor = float(np.nanmin(extra_noise_map[finite_extra_noise]))
+            extra_finder = DAOStarFinder(threshold=extra_noise_floor,
+                                         fwhm=fwhm_pix, roundhi=iter2_roundhi, roundlo=iter2_roundlo,
+                                         sharplo=iter2_sharplo, sharphi=iter2_sharphi)
+            extra_detections = extra_finder(detection_image, mask=mask)
+            extra_noise_for_snr = extra_noise_map
+            print(f'Postprocessed DAO local-noise threshold: {extra_noise_floor}', flush=True)
+        else:
+            extra_detections = daofind_tuned(detection_image, mask=mask)
+            extra_noise_for_snr = local_noise_map
+
+        if extra_detections is None:
+            extra_detections = Table()
+        extra_detections, extra_snr_stats = annotate_and_filter_by_local_snr(
+            extra_detections,
+            extra_noise_for_snr,
+            snr_threshold=iter2_local_snr_threshold,
+        )
+        print(
+            'Extra DAO detections local-SNR filter: '
+            f'in={extra_snr_stats["input_count"]} '
+            f'kept={extra_snr_stats["kept_count"]} '
+            f'dropped={extra_snr_stats["dropped_count"]}',
+            flush=True,
+        )
+        seed_catalog, seed_aug_stats = _augment_seed_catalog_with_detections_sky(
             seed_catalog,
             extra_detections,
             ww=ww,
             match_radius_pix=max(1.0, 0.5 * fwhm_pix),
             preferred_seed_skycoord_col=preferred_seed_skycoord_col,
+            return_stats=True,
+        )
+        print(
+            'Seed composition: '
+            f'merged_seed_rows={len(merged_seed_table)} '
+            f'sat_seed_rows={sat_seed_count} '
+            f'nonsat_seed_rows={nonsat_seed_count} '
+            f'dao_detect_total={seed_aug_stats["detection_input"]} '
+            f'dao_detect_finite_xy={seed_aug_stats["detection_finite_xy"]} '
+            f'dao_added={seed_aug_stats["detection_added"]} '
+            f'dao_rejected_duplicates={seed_aug_stats["detection_rejected_match"]} '
+            f'seed_rows_final={len(_as_table(seed_catalog))}'
         )
         finstars = SeededFinder(seed_catalog, ww=ww,
                                 preferred_skycoord_col=preferred_seed_skycoord_col)(nan_replaced_data, mask=mask)
@@ -1481,6 +1671,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     else:
         finstars = daofind_tuned(nan_replaced_data,
                                  mask=mask)
+        if finstars is None:
+            finstars = Table()
         finding_label = 'daofind'
 
     print(f"Found {len(finstars)} with daofind_tuned", flush=True)
@@ -1665,7 +1857,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         basic_finder = None if seeded_init_params is not None else daofind_tuned
         phot_basic = PSFPhotometry(finder=basic_finder,
-                                   localbkg_estimator=LocalBackground(2, 5),
+                                   # 6,10 avoids the first sidelobe/airy ring
+                                   # it's not optimal b/c the background variation is significant over a bigger scale...
+                                   localbkg_estimator=LocalBackground(6, 10),
                                    grouper=grouper if options.group else None,
                                    psf_model=dao_psf_model,
                                    fitter=LevMarLSQFitter(),
@@ -1771,7 +1965,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 dao_psf_model = epsf
 
             phot_iter = IterativePSFPhotometry(finder=daofind_tuned,
-                                               localbkg_estimator=LocalBackground(2, 5),
+                                               localbkg_estimator=LocalBackground(6, 10),
                                                grouper=grouper if options.group else None,
                                                psf_model=dao_psf_model,
                                                fitter=LevMarLSQFitter(),

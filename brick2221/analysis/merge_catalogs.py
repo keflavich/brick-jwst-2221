@@ -9,7 +9,7 @@ import glob
 from photutils.background import MMMBackground, MADStdBackgroundRMS
 from photutils.aperture import CircularAperture, CircularAnnulus
 from photutils.detection import DAOStarFinder, IRAFStarFinder, find_peaks
-from photutils.psf import (IntegratedGaussianPRF, extract_stars, EPSFBuilder)
+from photutils.psf import (extract_stars, EPSFBuilder)
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy import stats
 from astropy.table import Table, Column, MaskedColumn
@@ -256,7 +256,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             basecrds = SkyCoord([basecrds, newcrds])
             print(f"Added {len(newcrds)} new sources in exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]")
             # f" ({mutual_matches.sum()} mutual matches ({(~mutual_matches).sum()} not), {(sep > max_offset).sum()} above {max_offset}, keeping {keep.sum()}), ", flush=True)
-        print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'dao' if dao else 'crowdsource'}]")
+        print(f"Iteration {ii}: There are a total of {len(basecrds)} sources in the base coordinate list [method={'daophot' if dao else 'crowdsource'}]")
 
     # do one loop of re-matching
     # We use only mutual best-matches for the realignment measurement to avoid spurious matches, e.g., if there are three stars in a line, we only want to match two if they are each other's best match
@@ -734,6 +734,9 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     if module == 'merged':
         modules = ['nrca', 'nrcb',]
         modules += [f'nrc{ab}{n}' for ab in 'ab' for n in range(1, 5)]
+    elif module in ('nrca', 'nrcb'):
+        # Exposure-level catalogs are often saved with detector-qualified module names.
+        modules = [module] + [f'{module}{n}' for n in range(1, 5)]
     else:
         modules = (module, )
 
