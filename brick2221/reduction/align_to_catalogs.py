@@ -55,6 +55,55 @@ def print(*args, **kwargs):
     log.info(f"{now}: {' '.join(map(str, args))}")
     return printfunc(f"{now}:", *args, **kwargs)
 
+
+def _get_catalog_selection_column(cat):
+    preferred_columns = (
+        'aper_total_vegamag',
+        'aper_total_abmag',
+        'aper70_vegamag',
+        'aper70_abmag',
+        'isophotal_vegamag',
+        'isophotal_abmag',
+    )
+
+    for column_name in preferred_columns:
+        if column_name in cat.colnames:
+            return column_name, 'magnitude'
+
+    if 'flux' in cat.colnames:
+        return 'flux', 'flux'
+
+    raise KeyError(
+        "Could not find a magnitude or flux column in catalog; looked for "
+        f"{preferred_columns}. Available columns include: {cat.colnames}"
+    )
+
+
+def _get_catalog_skycoord(cat):
+    if 'skycoord' in cat.colnames:
+        return cat['skycoord']
+    if 'sky_centroid' in cat.colnames:
+        return cat['sky_centroid']
+    if 'RA' in cat.colnames and 'DEC' in cat.colnames:
+        return SkyCoord(cat['RA'], cat['DEC'], frame='fk5')
+    if 'ra' in cat.colnames and 'dec' in cat.colnames:
+        return SkyCoord(cat['ra'], cat['dec'], frame='fk5')
+    return None
+
+
+def _get_catalog_pixel_coordinates(cat, ww):
+    if 'xcentroid' in cat.colnames and 'ycentroid' in cat.colnames:
+        return cat['xcentroid'], cat['ycentroid']
+
+    skycoord = _get_catalog_skycoord(cat)
+    if skycoord is not None:
+        return ww.world_to_pixel(skycoord)
+
+    raise KeyError(
+        "Could not find pixel or sky-coordinate columns in catalog; available columns include: "
+        f"{cat.colnames}"
+    )
+
 def main(field='001',
          basepath = '/orange/adamginsburg/jwst/brick/',
          proposal_id='2221',
@@ -160,7 +209,16 @@ def realign_to_vvv(
     vvvdr4_crds, vvvdr4 = retrieve_vvv(basepath=basepath, filtername=filtername, module=module, fov_regname=fov_regname, fieldnumber=fieldnumber)
 
     if ksmag_limit:
-        ksmag_sel = vvvdr4['Ksmag3'] > ksmag_limit
+        ksmag_priority = (
+            'Ksmag3', 'Ksmag', 'KsMag3', 'KsMag',
+            'Ks2ap3', 'Ks1ap3', 'Ks2ap1', 'Ks1ap1',
+        )
+        ksmag_col = next((col for col in ksmag_priority if col in vvvdr4.colnames), None)
+        if ksmag_col is None:
+            raise KeyError(f"Could not find a Ks magnitude column in VVV table; available columns include: {vvvdr4.colnames}")
+
+        ksmag = np.array(vvvdr4[ksmag_col], dtype='float')
+        ksmag_sel = np.isfinite(ksmag) & (ksmag > ksmag_limit)
         log.info(f"Kept {ksmag_sel.sum()} out of {len(vvvdr4)} VVV stars using ksmag_limit>{ksmag_limit}")
         vvvdr4_crds = vvvdr4_crds[ksmag_sel]
 
@@ -202,27 +260,38 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     #sel = (flux > 7e-8*500*u.Jy) & (flux < 4000*7e-8*u.Jy)
 
     # Manual checking in CARTA: didn't look like any good matches at mag>15
-    mag = cat['aper_total_vegamag']
-    sel = mag < mag_limit
-    log.info(f"For {filtername} {module} {fieldnumber} catalog {catfile}, found {sel.sum()} of {sel.size} sources meeting criteria mag<{mag_limit}")
+    selection_column, selection_kind = _get_catalog_selection_column(cat)
+    selection_values = np.asarray(cat[selection_column])
+    finite = np.isfinite(selection_values)
+    if selection_kind == 'magnitude':
+        sel = finite & (selection_values < mag_limit)
+        selection_summary = f"{selection_column}<{mag_limit}"
+    else:
+        sel = finite & (selection_values > 0)
+        selection_summary = f"{selection_column}>0"
+
+    log.info(
+        f"For {filtername} {module} {fieldnumber} catalog {catfile}, "
+        f"using {selection_column} and found {sel.sum()} of {sel.size} sources "
+        f"meeting criteria {selection_summary}"
+    )
 
     if sel.sum() == 0:
-        print(f"min mag: {np.nanmin(mag)}, max mag: {np.nanmax(mag)}")
+        print(f"min {selection_column}: {np.nanmin(selection_values)}, max {selection_column}: {np.nanmax(selection_values)}")
         raise ValueError("No sources passed basic selection criteria")
 
-    # don't trust the sky coords, recompute them from the current WCS (otherwise we can double-update)
-    # skycrds_cat_orig = cat['sky_centroid']
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         ww = WCS(fits.getheader(imfile, ext=('SCI', 1)))
-        skycrds_cat_orig = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+        xpix, ypix = _get_catalog_pixel_coordinates(cat, ww)
+        skycrds_cat_orig = ww.pixel_to_world(xpix, ypix)
         ww.wcs.crval = ww.wcs.crval - [raoffset.to(u.deg).value, decoffset.to(u.deg).value] # visualize this adjustment separately from next, find out which step is wrong
 
     med_dra = 100*u.arcsec
     med_ddec = 100*u.arcsec
     iteration = 0
     while np.abs(med_dra) > threshold or np.abs(med_ddec) > threshold:
-        skycrds_cat = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+        skycrds_cat = ww.pixel_to_world(xpix, ypix)
 
         idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat[sel], max_offset)
         dra = (skycrds_cat[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
@@ -255,7 +324,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         ww =  WCS(hdulist['SCI'].header)
-    skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+    skycrds_cat_new = ww.pixel_to_world(xpix, ypix)
 
     idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
     dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)
@@ -283,7 +352,7 @@ def realign_to_catalog(reference_coordinates, filtername='f212n',
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             ww =  WCS(hdulist['SCI'].header)
-        skycrds_cat_new = ww.pixel_to_world(cat['xcentroid'], cat['ycentroid'])
+        skycrds_cat_new = ww.pixel_to_world(xpix, ypix)
 
         idx, sidx, sep, sep3d = reference_coordinates.search_around_sky(skycrds_cat_new[sel], max_offset)
         dra = (skycrds_cat_new[sel][idx].ra - reference_coordinates[sidx].ra).to(u.arcsec)

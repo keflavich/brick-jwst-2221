@@ -169,6 +169,16 @@ def get_existing_reference_astrometric_catalog_path(basepath, proposal_id, field
     return None
 
 
+def _module_group(module):
+    if module == 'merged':
+        return 'merged'
+    if module.startswith('nrca'):
+        return 'nrca'
+    if module.startswith('nrcb'):
+        return 'nrcb'
+    return module
+
+
 def get_allowed_modules(proposal_id, field, requested_modules, filtername=None):
     allowed_modules = None
     
@@ -182,7 +192,8 @@ def get_allowed_modules(proposal_id, field, requested_modules, filtername=None):
     if allowed_modules is None:
         return requested_modules
 
-    filtered_modules = [module for module in requested_modules if module in allowed_modules]
+    requested_groups = {_module_group(module) for module in requested_modules}
+    filtered_modules = [module for module in allowed_modules if _module_group(module) in requested_groups]
     if len(filtered_modules) == 0:
         raise ValueError(
             f"No requested modules are allowed for proposal_id={proposal_id} field={field} "
@@ -263,7 +274,8 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         if proposal_id == '1939':
             assert field == '001'
 
-    os.environ["CRDS_PATH"] = f"{basepath}/crds/"
+    if "CRDS_PATH" not in os.environ:
+        os.environ["CRDS_PATH"] = f"{basepath}/crds/"
     os.environ["CRDS_SERVER_URL"] = "https://jwst-crds.stsci.edu"
     mpl.rcParams['savefig.dpi'] = 80
     mpl.rcParams['figure.dpi'] = 80
@@ -316,7 +328,12 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
 
     products_fits = Observations.filter_products(data_products_by_obs, extension="fits")
     print("products_fits length:", len(products_fits))
-    uncal_mask = np.array([uri.endswith('_uncal.fits') and f'jw0{proposal_id}{field}' in uri for uri in products_fits['dataURI']])
+    uncal_mask = np.array([
+        uri.endswith('_uncal.fits')
+        and f'jw0{proposal_id}{field}' in uri
+        and ('_nrc' in uri)
+        for uri in products_fits['dataURI']
+    ])
     uncal_mask &= products_fits['productType'] == 'SCIENCE'
     print("uncal length:", (uncal_mask.sum()))
 
@@ -391,6 +408,9 @@ def main(filtername, module, Observations=None, regionname='brick', do_destreak=
         if not skip_step1and2:
             # re-calibrate all uncal files -> cal files *without* suppressing first group
             for member in asn_data['products'][0]['members']:
+                if '_nrc' not in member['expname']:
+                    print(f"Skipping non-NIRCam member {member['expname']}")
+                    continue
                 # example filename: jw02221002001_02201_00002_nrcalong_cal.fits
                 assert f'jw0{proposal_id}{field}' in member['expname']
                 print(f"DETECTOR PIPELINE on {member['expname']}")
