@@ -1084,14 +1084,25 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
     group_ = '_group' if group else ''
     iter_ = _iteration_token(iteration_label)
 
-    residual_glob = (
-        f'{pipeline_dir}/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-'
-        f'{module}_visit*_vgroup*_exp*{desat_}{bgsub_}{epsf_}{blur_}{group_}'
-        f'{iter_}_daophot_{residual_kind}_residual.fits'
-    )
-    residual_files = sorted(glob.glob(residual_glob))
+    if proposal_id == '3958' and field == '007' and filtername in ('F187N', 'F210M') and module == 'nrcb':
+        module_patterns = [f'nrcb{number}' for number in range(1, 5)]
+    else:
+        module_patterns = [module]
+
+    residual_files = []
+    for module_pattern in module_patterns:
+        residual_glob = (
+            f'{pipeline_dir}/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-'
+            f'{module_pattern}_visit*_vgroup*_exp*{desat_}{bgsub_}{epsf_}{blur_}{group_}'
+            f'{iter_}_daophot_{residual_kind}_residual.fits'
+        )
+        residual_files.extend(glob.glob(residual_glob))
+    residual_files = sorted(set(residual_files))
     if len(residual_files) == 0:
-        raise ValueError(f'No per-exposure residuals found matching {residual_glob}')
+        raise ValueError(
+            f'No per-exposure residuals found for module={module} '
+            f'patterns={module_patterns} filter={filtername} residual_kind={residual_kind}'
+        )
 
     product_name = (
         f'jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}'
@@ -1279,11 +1290,19 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     break
     
     if allowed_modules is not None:
-        filtered_modules = [module for module in modules if module in allowed_modules]
+        expanded_modules = []
+        for module in modules:
+            if proposal_id == '3958' and field == '007' and module in ('nrca', 'nrcb'):
+                if any(filt in ('F187N', 'F210M') for filt in filternames):
+                    expanded_modules.extend([f'{module}{number}' for number in range(1, 5)])
+                    continue
+            expanded_modules.append(module)
+
+        filtered_modules = [module for module in expanded_modules if module in allowed_modules]
         if len(filtered_modules) == 0:
             raise ValueError(
                 f"No requested modules are allowed for proposal_id={proposal_id} field={field} "
-                f"Requested modules={modules}, allowed modules={allowed_modules}"
+                f"Requested modules={modules}, expanded_modules={expanded_modules}, allowed modules={allowed_modules}"
             )
         if tuple(filtered_modules) != tuple(modules):
             print(
@@ -1567,10 +1586,12 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         )
     else:
         # Keep original first-pass starfinding behavior unchanged.
-        filtered_errest = stats.sigma_clipped_stats(data, stdfunc='mad_std')
-        print(f'Error estimate for DAO from stats.: {filtered_errest}', flush=True)
         filtered_errest = np.nanmedian(err)
         print(f'Error estimate for DAO from median(err): {filtered_errest}', flush=True)
+        # sigma_clipped stats get _much_ lower uncertainty for frames dominated by extended emission (maybe?).  At least, Sickle F470N had 3x too high error
+        mean, med, std = stats.sigma_clipped_stats(data, stdfunc='mad_std')
+        print(f'Error estimate for DAO from stats.: std={std}', flush=True)
+        filtered_errest = min([filtered_errest, std])
 
         daofind_threshold = nsigma * filtered_errest
         daofind_tuned = DAOStarFinder(threshold=daofind_threshold,
