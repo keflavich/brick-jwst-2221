@@ -966,8 +966,9 @@ if __name__ == "__main__":
         for filtername in filternames:
             modules_for_field = get_allowed_modules(proposal_id, field, modules, filtername=filtername)
             for module in modules_for_field:
-                print(f"Main Loop: {proposal_id} + {filtername} + {module} + {field}={field_to_reg_mapping[field]}")
-                results = main(filtername=filtername, module=module, Observations=Observations, field=field,
+                module_family = _module_group(module)
+                print(f"Main Loop: {proposal_id} + {filtername} + {module} (family={module_family}) + {field}={field_to_reg_mapping[field]}")
+                results = main(filtername=filtername, module=module_family, Observations=Observations, field=field,
                                regionname=field_to_reg_mapping[field],
                                proposal_id=proposal_id,
                                skip_step1and2=skip_step1and2,
