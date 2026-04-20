@@ -29,6 +29,9 @@ submit_catalog_and_residual_mosaic() {
     array_jobid=$(sbatch --parsable --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-${target} --output=${logdir}/webb-cat-${filter}-${module}-eachexp-${target}_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao} ${extra_args}")
 
     if [[ "${dao}" == *"--daophot"* ]]; then
+        local iter2_jobid
+        iter2_jobid=$(sbatch --parsable --dependency=afterok:${array_jobid} --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-${target}-iter2 --output=${logdir}/webb-cat-${filter}-${module}-eachexp-${target}-iter2_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao} ${extra_args} --iteration-label=iter2 --postprocess-residuals")
+
         local field
         if [[ "${proposal_id}" == "2221" && "${target}" == "brick" ]]; then
             field="001"
@@ -41,7 +44,8 @@ submit_catalog_and_residual_mosaic() {
             return
         fi
 
-        sbatch --dependency=afterok:${array_jobid} --job-name=webb-mosaic-${filter}-${module}-${target} --output=${logdir}/webb-mosaic-${filter}-${module}-${target}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear') for kind in ('basic', 'iterative')]\""
+        sbatch --dependency=afterok:${array_jobid} --job-name=webb-mosaic-${filter}-${module}-${target} --output=${logdir}/webb-mosaic-${filter}-${module}-${target}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear', iteration_label=None) for kind in ('basic', 'iterative')]\""
+        sbatch --dependency=afterok:${iter2_jobid} --job-name=webb-mosaic-${filter}-${module}-${target}-iter2 --output=${logdir}/webb-mosaic-${filter}-${module}-${target}-iter2_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear', iteration_label='iter2') for kind in ('basic', 'iterative')]\""
     fi
 }
 

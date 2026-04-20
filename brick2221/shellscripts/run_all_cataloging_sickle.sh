@@ -232,7 +232,7 @@ for filter in "${filters[@]}"; do
             bgsub_deps_iter2=()
             for modnum in 1 2 3 4; do
                 module=nrcb${modnum}
-                for dao in "--daophot --skip-crowdsource" " "; do
+                for dao in "--daophot --skip-crowdsource"; do
                     for bgsub in " " "--bgsub"; do
                         cat_args="${dao}${bgsub:+ }${bgsub}"
                         submit_catalog_job "${filter}" "${module}" "${cat_args}" "${short_mem}"
@@ -283,7 +283,7 @@ for filter in "${filters[@]}"; do
             bgsub_deps=()
             plain_deps_iter2=()
             bgsub_deps_iter2=()
-            for dao in "--daophot --skip-crowdsource" " "; do
+            for dao in "--daophot --skip-crowdsource"; do
                 for bgsub in " " "--bgsub"; do
                     cat_args="${dao}${bgsub:+ }${bgsub}"
                     submit_catalog_job "${filter}" "${module}" "${cat_args}" "${long_mem}"

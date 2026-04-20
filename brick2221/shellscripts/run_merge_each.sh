@@ -22,17 +22,20 @@ submit_residual_mosaic_backstop() {
 	fi
 
 	sbatch --job-name=webb-mosaic-backstop-${filter}-${module}-${target} --output=${logdir}/webb-mosaic-backstop-${filter}-${module}-${target}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import glob, os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; pipeline_dir=f'{os.environ['BASEPATH']}/{os.environ['FILTER']}/pipeline';
-for kind in ('basic', 'iterative'):
-	pattern=(f'{pipeline_dir}/jw0{os.environ['PROPOSAL_ID']}-o{os.environ['FIELD']}_t001_nircam_clear-{os.environ['FILTER'].lower()}-{os.environ['MODULE']}_visit*_vgroup*_exp*_daophot_{kind}_residual.fits')
-	files=sorted(glob.glob(pattern))
-	out=(f'{pipeline_dir}/jw0{os.environ['PROPOSAL_ID']}-o{os.environ['FIELD']}_t001_nircam_clear-{os.environ['FILTER'].lower()}-{os.environ['MODULE']}_daophot_{kind}_residual_i2d.fits')
-	if files and (not os.path.exists(out)):
-		print(f'Residual backstop: mosaicking {kind} for {os.environ[\'FILTER\']} {os.environ[\'MODULE\']} target field {os.environ[\'FIELD\']}')
-		c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear')
-	elif files:
-		print(f'Residual backstop: output already exists for {kind}: {out}')
-	else:
-		print(f'Residual backstop: no per-exposure residual inputs for {kind} matching {pattern}')\""
+for iteration_label in (None, 'iter2'):
+	iter_suffix = '' if iteration_label is None else f'_{iteration_label}'
+	iter_name = 'iter0' if iteration_label is None else iteration_label
+	for kind in ('basic', 'iterative'):
+		pattern=(f'{pipeline_dir}/jw0{os.environ['PROPOSAL_ID']}-o{os.environ['FIELD']}_t001_nircam_clear-{os.environ['FILTER'].lower()}-{os.environ['MODULE']}_visit*_vgroup*_exp*{iter_suffix}_daophot_{kind}_residual.fits')
+		files=sorted(glob.glob(pattern))
+		out=(f'{pipeline_dir}/jw0{os.environ['PROPOSAL_ID']}-o{os.environ['FIELD']}_t001_nircam_clear-{os.environ['FILTER'].lower()}-{os.environ['MODULE']}{iter_suffix}_daophot_{kind}_residual_i2d.fits')
+		if files and (not os.path.exists(out)):
+			print(f'Residual backstop: mosaicking {kind} {iter_name} for {os.environ[\'FILTER\']} {os.environ[\'MODULE\']} target field {os.environ[\'FIELD\']}')
+			c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear', iteration_label=iteration_label)
+		elif files:
+			print(f'Residual backstop: output already exists for {kind} {iter_name}: {out}')
+		else:
+			print(f'Residual backstop: no per-exposure residual inputs for {kind} {iter_name} matching {pattern}')\""
 }
 
 for filter in F410M F405N F466N; do
