@@ -1941,9 +1941,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         print("About to do BASIC photometry....")
         if seeded_init_params is not None:
-            result = phot_basic(nan_replaced_data, mask=mask, init_params=seeded_init_params)
+            result = phot_basic(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, np.inf, err))
         else:
-            result = phot_basic(nan_replaced_data, mask=mask)
+            result = phot_basic(nan_replaced_data, mask=mask, error=np.where(bad, np.inf, err))
         print(f"Done with BASIC photometry. len(result)={len(result)}  dt={time.time() - t0}")
 
         result = save_photutils_results(result, ww, filename,
@@ -2049,9 +2049,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
             print("About to do ITERATIVE photometry....")
             if seeded_init_params is not None:
-                result2 = phot_iter(nan_replaced_data, mask=mask, init_params=seeded_init_params)
+                result2 = phot_iter(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, np.inf, err))
             else:
-                result2 = phot_iter(nan_replaced_data, mask=mask)
+                result2 = phot_iter(nan_replaced_data, mask=mask, error=np.where(bad, np.inf, err))
             print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
             result2 = save_photutils_results(result2, ww, filename,
