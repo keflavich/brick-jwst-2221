@@ -1090,6 +1090,38 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
         module_patterns = [module]
 
     residual_files = []
+    iter_regex = re.compile(r'_iter[^_]*_daophot_')
+    iter_marker = f'{iter_}_daophot_' if iter_ else None
+    flag_tokens = {
+        '_unsatstar': desat,
+        '_bgsub': bgsub,
+        '_epsf': epsf,
+        '_blur': blur,
+        '_group': group,
+    }
+
+    def _matches_expected_tokens(residual_path):
+        name = os.path.basename(residual_path)
+
+        # Enforce exact flag matching: no accidental mixing of bgsub/non-bgsub,
+        # desaturated/non-desaturated, etc.
+        for token, enabled in flag_tokens.items():
+            has_token = token in name
+            if enabled and not has_token:
+                return False
+            if (not enabled) and has_token:
+                return False
+
+        # Enforce exact iteration matching: unlabeled mosaics must exclude iter* files.
+        if iter_marker is None:
+            if iter_regex.search(name):
+                return False
+        else:
+            if iter_marker not in name:
+                return False
+
+        return True
+
     for module_pattern in module_patterns:
         residual_glob = (
             f'{pipeline_dir}/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-'
@@ -1097,7 +1129,7 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
             f'{iter_}_daophot_{residual_kind}_residual.fits'
         )
         residual_files.extend(glob.glob(residual_glob))
-    residual_files = sorted(set(residual_files))
+    residual_files = sorted(set(fn for fn in residual_files if _matches_expected_tokens(fn)))
     if len(residual_files) == 0:
         raise ValueError(
             f'No per-exposure residuals found for module={module} '
