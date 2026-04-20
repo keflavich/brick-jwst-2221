@@ -564,6 +564,14 @@ class SeededFinder:
         xvals = xvals[finite]
         yvals = yvals[finite]
 
+        ny, nx = data.shape
+        in_field = (xvals >= 0) & (yvals >= 0) & (xvals < nx) & (yvals < ny)
+        if np.any(~in_field):
+            print(f"SeededFinder dropping {np.sum(~in_field)} out-of-field sources (nx={nx}, ny={ny})", flush=True)
+        seeds = seeds[in_field]
+        xvals = xvals[in_field]
+        yvals = yvals[in_field]
+
         if 'flux' not in seeds.colnames:
             if 'flux_fit' in seeds.colnames:
                 seeds['flux'] = np.asarray(seeds['flux_fit'], dtype=float)
