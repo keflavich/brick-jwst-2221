@@ -1587,7 +1587,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     # empirically determined in debugging session with Taehwa on 2025-12-09:
     # with just nan_to_num, setting pixels to zero, some stars got "erased"
     kernel = Gaussian2DKernel(x_stddev=fwhm_pix/2.355)
-    mask = np.isnan(data)
+    mask = np.isnan(data) | bad
     if 'DQ' in im1:
         dqarr = im1['DQ'].data
         is_saturated = (dqarr & dqflags.pixel['SATURATED']) != 0
@@ -1738,6 +1738,33 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         seeded_init_params['x_init'] = np.asarray(finstars['x_init'], dtype=float)
         seeded_init_params['y_init'] = np.asarray(finstars['y_init'], dtype=float)
         seeded_init_params['flux_init'] = np.asarray(finstars['flux_init'], dtype=float)
+
+        # Deduplicate seeds: remove entries within 0.5 FWHM of a brighter seed.
+        # Merged catalogs can contain sub-pixel duplicate entries from multiple
+        # per-exposure fits landing at slightly different positions for the same
+        # star.  Two seeds at the same position each receive the full star flux,
+        # doubling the model and producing large negative residuals.
+        min_sep_pix = 0.5 * fwhm_pix
+        n_before = len(seeded_init_params)
+        if n_before > 1:
+            xy = np.column_stack([seeded_init_params['x_init'], seeded_init_params['y_init']])
+            flux_arr = np.asarray(seeded_init_params['flux_init'], dtype=float)
+            sort_order = np.argsort(flux_arr)[::-1]  # brightest first
+            keep = np.ones(n_before, dtype=bool)
+            kd = cKDTree(xy)
+            for i in sort_order:
+                if not keep[i]:
+                    continue
+                neighbors = kd.query_ball_point(xy[i], min_sep_pix)
+                for j in neighbors:
+                    if j != i and keep[j]:
+                        keep[j] = False
+            seeded_init_params = seeded_init_params[keep]
+            n_removed = n_before - np.sum(keep)
+            if n_removed > 0:
+                print(f"Deduplication removed {n_removed} duplicate seeds within {min_sep_pix:.2f} pix of a brighter seed "
+                      f"({n_before} -> {len(seeded_init_params)})", flush=True)
+
         finding_label = 'seeded'
     else:
         finstars = daofind_tuned(nan_replaced_data,
@@ -1941,9 +1968,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
         print("About to do BASIC photometry....")
         if seeded_init_params is not None:
-            result = phot_basic(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, np.inf, err))
+            result = phot_basic(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, 1e10, err))
         else:
-            result = phot_basic(nan_replaced_data, mask=mask, error=np.where(bad, np.inf, err))
+            result = phot_basic(nan_replaced_data, mask=mask, error=np.where(bad, 1e10, err))
         print(f"Done with BASIC photometry. len(result)={len(result)}  dt={time.time() - t0}")
 
         result = save_photutils_results(result, ww, filename,
@@ -2049,9 +2076,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
             print("About to do ITERATIVE photometry....")
             if seeded_init_params is not None:
-                result2 = phot_iter(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, np.inf, err))
+                result2 = phot_iter(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, 1e10, err))
             else:
-                result2 = phot_iter(nan_replaced_data, mask=mask, error=np.where(bad, np.inf, err))
+                result2 = phot_iter(nan_replaced_data, mask=mask, error=np.where(bad, 1e10, err))
             print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
 
             result2 = save_photutils_results(result2, ww, filename,
