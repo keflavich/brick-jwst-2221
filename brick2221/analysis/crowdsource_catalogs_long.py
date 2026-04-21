@@ -47,6 +47,45 @@ from photutils.background import MMMBackground, MADStdBackgroundRMS, MedianBackg
 import warnings
 from astropy.utils.exceptions import AstropyWarning, AstropyDeprecationWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
+
+
+# ---------------------------------------------------------------------------
+# Monkey-patch around astropy.nddata.utils.overlap_slices bug (hit via
+# photutils.make_model_image when photutils passes small_array_shape as an
+# ndarray and an out-of-frame source yields e_max == 0).
+#
+# At line ~138 of astropy/nddata/utils.py:
+#   if e_max < 0 or (e_max == 0 and small_array_shape != (0, 0)):
+# When small_array_shape is an ndarray, `ndarray != (0, 0)` returns an array
+# and the `or` branch raises:
+#   ValueError: The truth value of an array with more than one element
+#   is ambiguous. Use a.any() or a.all()
+#
+# This is triggered by IterativePSFPhotometry when a fit converges to a
+# source centered at e.g. y = -7.63 with sub_shape=(15, 15): then
+# e_max = int(-15.13) + 15 = 0 and the comparison explodes.
+#
+# We wrap the function so that small_array_shape is coerced to a tuple of
+# ints before the comparison, matching the function's own semantics.
+# ---------------------------------------------------------------------------
+import astropy.nddata.utils as _astropy_nddata_utils
+_original_overlap_slices = _astropy_nddata_utils.overlap_slices
+
+
+def _overlap_slices_tuple_shape(large_array_shape, small_array_shape, position,
+                                mode='partial', **kwargs):
+    small_array_shape = tuple(int(x) for x in small_array_shape)
+    return _original_overlap_slices(large_array_shape, small_array_shape,
+                                    position, mode=mode, **kwargs)
+
+
+_astropy_nddata_utils.overlap_slices = _overlap_slices_tuple_shape
+# photutils imports overlap_slices at module import time in several places;
+# update those module-level bindings too so the patched version is used.
+import photutils.utils.cutouts as _photutils_cutouts
+_photutils_cutouts.overlap_slices = _overlap_slices_tuple_shape
+import photutils.datasets.images as _photutils_datasets_images
+_photutils_datasets_images.overlap_slices = _overlap_slices_tuple_shape
 warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 
 import crowdsource
@@ -812,15 +851,26 @@ def annotate_and_filter_by_local_snr(detection_table, noise_map, snr_threshold=5
 
 
 def load_or_make_satstar_catalog(filename, path_prefix, use_merged_psf_for_merged=False, overwrite=False,
-                                 outside_star_pixels=None, outside_star_fit_box=512):
-    satstar_filename = filename.replace('.fits', '_satstar_catalog.fits')
+                                 outside_star_pixels=None, outside_star_fit_box=512,
+                                 file_suffix=''):
+    """
+    ``file_suffix`` is inserted into the satstar output filenames before
+    the ``_satstar_catalog`` / ``_satstar_model`` / ``_satstar_residual``
+    tag, so that concurrent runs which differ by post-processing options
+    (e.g. ``--bgsub`` and ``--iteration-label=iter2`` vs their non-bgsub
+    counterparts) write to distinct files and do not race on the shared
+    name when astropy's ``writeto(overwrite=True)`` tries to remove an
+    existing file.
+    """
+    satstar_filename = filename.replace('.fits', f'{file_suffix}_satstar_catalog.fits')
     if os.path.exists(satstar_filename) and not overwrite:
         return Table.read(satstar_filename)
 
     remove_saturated_stars(filename, overwrite=overwrite, path_prefix=path_prefix,
                            use_merged_psf_for_merged=use_merged_psf_for_merged,
                            outside_star_pixels=outside_star_pixels,
-                           outside_star_fit_box=outside_star_fit_box)
+                           outside_star_fit_box=outside_star_fit_box,
+                           file_suffix=file_suffix)
     if os.path.exists(satstar_filename):
         return Table.read(satstar_filename)
     return None
@@ -1759,6 +1809,15 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     satstar_table = None
     if options.each_exposure and seed_catalog is not None:
         outside_star_pixels = load_outside_fov_satstar_pixels(basepath, ww)
+        # Namespace the satstar outputs by bgsub/iteration_label so that
+        # the non-bgsub and bgsub iter2 array jobs (which can run concurrently
+        # on the same frame) don't race each other on a shared filename.
+        # The prior shared name (`<frame>_satstar_residual.fits`) caused
+        # FileNotFoundError from astropy's writeto(overwrite=True) when a
+        # sibling job deleted the file between the existence check and
+        # the os.remove call.
+        iter_tag = _iteration_token(iteration_label)
+        satstar_file_suffix = f'{bgsub}{iter_tag}'
         satstar_table = load_or_make_satstar_catalog(
             filename,
             path_prefix=f'{basepath}/psfs',
@@ -1766,6 +1825,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             overwrite=bool(outside_star_pixels),
             outside_star_pixels=outside_star_pixels,
             outside_star_fit_box=512,
+            file_suffix=satstar_file_suffix,
         )
 
     seeded_init_params = None
@@ -2225,6 +2285,56 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             else:
                 result2 = phot_iter(nan_replaced_data, mask=mask, error=np.where(bad, 1e10, err))
             print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
+
+            # Apply the same post-fit deduplication to the iterative results.
+            # IterativePSFPhotometry can produce drift-together duplicates across
+            # iterations (a source detected in the residual of iter N matches the
+            # same star fit in iter N-1).  Left in place, these duplicates
+            # (i) double the flux in the rendered model image, and
+            # (ii) trigger a photutils bug in make_model_image where the
+            #      composite model parameters become array-valued and overlap_slices
+            #      raises ValueError("The truth value of an array ... is ambiguous").
+            min_sep_pix = 0.5 * fwhm_pix
+            xfit_arr = np.asarray(result2['x_fit'], dtype=float)
+            yfit_arr = np.asarray(result2['y_fit'], dtype=float)
+            flux_arr = np.asarray(result2['flux_fit'], dtype=float)
+            qfit_arr = (np.asarray(result2['qfit'], dtype=float)
+                        if 'qfit' in result2.colnames else None)
+            iter_keep, iter_n_disagree = _dedup_close_sources(
+                xy=np.column_stack([xfit_arr, yfit_arr]),
+                flux=flux_arr,
+                min_sep_pix=min_sep_pix,
+                quality=qfit_arr,
+            )
+            iter_n_removed = int(len(iter_keep) - np.sum(iter_keep))
+            if iter_n_removed > 0:
+                iter_tiebreak = "qfit" if qfit_arr is not None else "brightest"
+                print(f"Post-fit deduplication (iterative): dropping {iter_n_removed} "
+                      f"drift-together fits within {min_sep_pix:.2f} pix "
+                      f"({len(result2)} -> {int(np.sum(iter_keep))}); "
+                      f"{iter_n_disagree} clusters had disagreeing fitted fluxes "
+                      f"(resolved by {iter_tiebreak})", flush=True)
+                phot_iter.results = phot_iter.results[iter_keep]
+                # IterativePSFPhotometry has no init_params attribute of its
+                # own, but its internal PSFPhotometry (self._psfphot) does.
+                inner_phot = getattr(phot_iter, '_psfphot', None)
+                if (inner_phot is not None
+                        and inner_phot.init_params is not None
+                        and len(inner_phot.init_params) == len(iter_keep)):
+                    inner_phot.init_params = inner_phot.init_params[iter_keep]
+                phot_iter.__dict__.pop('_model_image_params', None)
+                result2 = phot_iter.results
+
+            # photutils.datasets.images.make_model_image uses a per-row
+            # 'model_shape' column in the params table when present; if that
+            # column has been populated with array-valued entries during the
+            # iterative fit it triggers the ndarray-vs-tuple comparison inside
+            # astropy.nddata.utils.overlap_slices.  Drop that column so the
+            # caller's psf_shape=(21, 21) argument governs stamp size for all
+            # sources uniformly.
+            if 'model_shape' in phot_iter.results.colnames:
+                phot_iter.results.remove_column('model_shape')
+                phot_iter.__dict__.pop('_model_image_params', None)
 
             result2 = save_photutils_results(result2, ww, filename,
                                              im1=im1, detector=detector,

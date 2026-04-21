@@ -973,9 +973,13 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
     filternames = [filn for obsid in obs_filters[target] for filn in obs_filters[target][obsid]]
     print(f"Merging daophot {daophot_type}, {detector}, {module}, {desat}, {bgsub}, {epsf_}, {blur_}. filters {filternames}")
 
+    # Use _project_for_target_filter rather than the global filter_to_project
+    # so a filter shared across targets (e.g. f187n in both brick/2221 and
+    # sgrb2/5365) resolves to the project matching this run's ``target``.
     imgfns = [x
               for filn in filternames
-              for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw0{filter_to_project[filn.lower()]}-o{project_obsnum[target][filter_to_project[filn.lower()]]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
+              for _proj in (_project_for_target_filter(target, filn),)
+              for x in glob.glob(f"{basepath}/{filn.upper()}/pipeline/jw0{_proj}-o{project_obsnum[target][_proj]}_t001_nircam*{filn.lower()}*{module}_i2d.fits")
               if f'{module}_' in x or f'{module}1_' in x
              ]
 
@@ -1084,10 +1088,31 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
                    basepath=basepath)
 
 
+def _project_for_target_filter(target, filtername):
+    """Return the project_id under which ``target`` observes ``filtername``.
+
+    ``filter_to_project`` is a global dict that collapses filter->project
+    across all targets, so for a filter observed by multiple targets (e.g.
+    f187n appears under both brick/2221 and sgrb2/5365) it picks whichever
+    target was iterated last and breaks lookups for the other targets.
+    This helper resolves the correct project for the target in hand.
+    """
+    target_filters = obs_filters[target]
+    filt_l = filtername.lower()
+    for proj, filts in target_filters.items():
+        if filt_l in filts:
+            return proj
+    raise KeyError(
+        f'filter {filtername!r} not observed by target {target!r}; '
+        f'known target/filter map: {target_filters}'
+    )
+
+
 def load_satstar_catalog(filtername, target='brick',
                          basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
+    proj = _project_for_target_filter(target, filtername)
     primary = (f'{basepath}/{filtername.upper()}/pipeline/'
-               f'jw0{filter_to_project[filtername.lower()]}-o{project_obsnum[target][filter_to_project[filtername.lower()]]}'
+               f'jw0{proj}-o{project_obsnum[target][proj]}'
                f'_t001_nircam_clear-{filtername}-merged_i2d_satstar_catalog.fits')
     if os.path.exists(primary):
         print(f"Using saturated star catalog {primary}")
@@ -1116,17 +1141,30 @@ def flag_near_saturated(cat, filtername, radius=None, target='brick',
     cat_coords = cat['skycoord']
 
     if radius is None:
-        radius = {'f466n': 0.55*u.arcsec,
-                  'f480m': 0.55*u.arcsec,
-                  'f212n': 0.55*u.arcsec,
-                  'f187n': 0.55*u.arcsec,
-                  'f405n': 0.55*u.arcsec,
+        # 0.55" flagging radius for every NIRCam filter in the project map;
+        # keep the filter list in sync with obs_filters so shared code paths
+        # (sickle/sgrb2/etc.) don't KeyError on filters that aren't listed.
+        radius = {# short-wave (< ~2.5 um)
+                  'f115w': 0.55*u.arcsec,
+                  'f150w': 0.55*u.arcsec,
+                  'f162m': 0.55*u.arcsec,
                   'f182m': 0.55*u.arcsec,
+                  'f187n': 0.55*u.arcsec,
+                  'f200w': 0.55*u.arcsec,
+                  'f210m': 0.55*u.arcsec,
+                  'f212n': 0.55*u.arcsec,
+                  # long-wave (> ~2.5 um)
+                  'f300m': 0.55*u.arcsec,
+                  'f323n': 0.55*u.arcsec,
+                  'f335m': 0.55*u.arcsec,
+                  'f356w': 0.55*u.arcsec,
+                  'f360m': 0.55*u.arcsec,
+                  'f405n': 0.55*u.arcsec,
                   'f410m': 0.55*u.arcsec,
                   'f444w': 0.55*u.arcsec,
-                  'f356w': 0.55*u.arcsec,
-                  'f200w': 0.55*u.arcsec,
-                  'f115w': 0.55*u.arcsec,
+                  'f466n': 0.55*u.arcsec,
+                  'f470n': 0.55*u.arcsec,
+                  'f480m': 0.55*u.arcsec,
                   }[filtername]
 
     satfinite = np.isfinite(satstar_coords.ra.deg) & np.isfinite(satstar_coords.dec.deg)
@@ -1169,17 +1207,27 @@ def replace_saturated(cat, filtername, radius=None, target='brick',
     jfilts.add_index('filterID')
 
     if radius is None:
-        radius = {'f466n': 0.1*u.arcsec,
-                  'f480m': 0.1*u.arcsec,
-                  'f212n': 0.05*u.arcsec,
-                  'f187n': 0.05*u.arcsec,
-                  'f405n': 0.1*u.arcsec,
+        radius = {# short-wave (< ~2.5 um)
+                  'f115w': 0.05*u.arcsec,
+                  'f150w': 0.05*u.arcsec,
+                  'f162m': 0.05*u.arcsec,
                   'f182m': 0.05*u.arcsec,
+                  'f187n': 0.05*u.arcsec,
+                  'f200w': 0.05*u.arcsec,
+                  'f210m': 0.05*u.arcsec,
+                  'f212n': 0.05*u.arcsec,
+                  # long-wave (> ~2.5 um)
+                  'f300m': 0.1*u.arcsec,
+                  'f323n': 0.1*u.arcsec,
+                  'f335m': 0.1*u.arcsec,
+                  'f356w': 0.1*u.arcsec,
+                  'f360m': 0.1*u.arcsec,
+                  'f405n': 0.1*u.arcsec,
                   'f410m': 0.1*u.arcsec,
                   'f444w': 0.1*u.arcsec,
-                  'f356w': 0.1*u.arcsec,
-                  'f200w': 0.05*u.arcsec,
-                  'f115w': 0.05*u.arcsec,
+                  'f466n': 0.1*u.arcsec,
+                  'f470n': 0.1*u.arcsec,
+                  'f480m': 0.1*u.arcsec,
                   }[filtername]
 
     fwhm_tbl = Table.read(f'{basepath}/reduction/fwhm_table.ecsv')

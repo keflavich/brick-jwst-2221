@@ -580,7 +580,16 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         builtins.satstar_resid = data - full_model_image
         return base_tab
 
-def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True, **kwargs):
+def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True,
+                           file_suffix='', **kwargs):
+    """
+    ``file_suffix`` is inserted into the output filenames *before* the
+    ``_satstar_{catalog,model,residual}`` suffix so that concurrent runs
+    that differ only by post-processing options (e.g. ``--bgsub``,
+    ``--iteration-label=iter2``) write to distinct files and do not race
+    on ``os.remove`` during ``overwrite=True``.  Pass an empty string
+    (default) to preserve the pre-existing filename scheme.
+    """
     print(f"Removing saturated stars from {filename}", flush=True)
     fh = fits.open(filename)
     data = fh['SCI'].data
@@ -599,9 +608,9 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', overwrite=True, *
         satstar_table.meta.update(header)
         print("Finished get_saturated_stars", flush=True)
 
-        satstar_catalog_filename = filename.replace(".fits", '_satstar_catalog.fits')
-        satstar_model_filename = filename.replace(".fits", '_satstar_model.fits')
-        satstar_residual_filename = filename.replace(".fits", '_satstar_residual.fits')
+        satstar_catalog_filename = filename.replace(".fits", f'{file_suffix}_satstar_catalog.fits')
+        satstar_model_filename = filename.replace(".fits", f'{file_suffix}_satstar_model.fits')
+        satstar_residual_filename = filename.replace(".fits", f'{file_suffix}_satstar_residual.fits')
 
         satstar_table.write(satstar_catalog_filename, overwrite=overwrite)
         print(f"Saved saturated star catalog to {satstar_catalog_filename}", flush=True)
