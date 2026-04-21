@@ -532,6 +532,107 @@ def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, w
     return combined
 
 
+def _dedup_close_sources(xy, flux, min_sep_pix, quality=None,
+                         flux_agreement_frac=0.10):
+    """
+    Greedy spatial deduplication of sources closer than ``min_sep_pix``.
+
+    For each cluster of entries within ``min_sep_pix`` of each other, keep one
+    representative:
+      * If the fluxes of the cluster agree within ``flux_agreement_frac``
+        (i.e. (fmax - fmin) / fmax <= flux_agreement_frac), the entries are
+        treated as the same source and the brightest is kept.
+      * Otherwise the fluxes disagree, which usually means the fits converged
+        to genuinely different solutions (contamination, split binary, bad
+        init). In that case:
+            - if ``quality`` is provided (smaller = better, e.g. qfit), keep
+              the entry with the best (smallest) quality;
+            - if no quality is provided, fall back to the brightest.
+
+    Parameters
+    ----------
+    xy : array, shape (N, 2)
+        Positions (in pixels) to cluster on.
+    flux : array, shape (N,)
+        Flux estimate for each entry.  Must be finite for any entry to be
+        considered; non-finite entries are kept as-is (not clustered).
+    min_sep_pix : float
+        Minimum allowed separation between kept entries, in pixels.
+    quality : array, shape (N,), optional
+        Per-entry quality score where smaller is better (e.g. photutils qfit).
+        Used only for breaking ties when cluster fluxes disagree.
+    flux_agreement_frac : float, optional
+        Relative flux tolerance below which cluster members are treated as
+        duplicates of the same source.
+
+    Returns
+    -------
+    keep : ndarray of bool, shape (N,)
+        True for entries to retain.
+    n_disagree : int
+        Number of clusters where fluxes disagreed beyond ``flux_agreement_frac``
+        (i.e. cases where duplicate removal may have dropped a distinct
+        neighbour rather than a pure duplicate).
+    """
+    n = xy.shape[0]
+    keep = np.ones(n, dtype=bool)
+    if n < 2:
+        return keep, 0
+
+    # Only cluster entries with finite positions AND finite flux; leave
+    # anything else untouched (they will neither be removed nor remove
+    # others).  cKDTree requires finite inputs.
+    finite_xy   = np.all(np.isfinite(xy), axis=1)
+    finite_flux = np.isfinite(flux)
+    eligible    = finite_xy & finite_flux
+    if np.sum(eligible) < 2:
+        return keep, 0
+    elig_idx = np.where(eligible)[0]
+    xy_e     = xy[elig_idx]
+    flux_e   = flux[elig_idx]
+
+    # Sort eligible entries by descending flux so the brightest seeds clusters.
+    local_sort_order = np.argsort(flux_e)[::-1]
+
+    kd = cKDTree(xy_e)
+    n_disagree = 0
+    for li in local_sort_order:
+        i = elig_idx[li]
+        if not keep[i]:
+            continue
+        local_neighbours = kd.query_ball_point(xy_e[li], min_sep_pix)
+        neighbours = [elig_idx[lj] for lj in local_neighbours
+                      if lj != li and keep[elig_idx[lj]]]
+        if not neighbours:
+            continue
+
+        # Collect the full cluster (seed + neighbours).
+        cluster = [i] + neighbours
+        cluster_flux = np.asarray([flux[k] for k in cluster], dtype=float)
+        fmin = float(cluster_flux.min())
+        fmax = float(cluster_flux.max())
+        if fmax <= 0 or (fmax - fmin) / fmax <= flux_agreement_frac:
+            # Fluxes agree: treat as same source, keep brightest (= seed i).
+            winner = i
+        else:
+            # Fluxes disagree: fits converged together but to different
+            # solutions.  Prefer best-quality entry if we have quality info.
+            n_disagree += 1
+            if quality is not None:
+                cluster_q = np.asarray([quality[k] for k in cluster], dtype=float)
+                # Smaller quality is better; non-finite treated as worst.
+                cluster_q = np.where(np.isfinite(cluster_q), cluster_q, np.inf)
+                winner = cluster[int(np.argmin(cluster_q))]
+            else:
+                winner = i  # brightest
+
+        for k in cluster:
+            if k != winner:
+                keep[k] = False
+
+    return keep, n_disagree
+
+
 class SeededFinder:
     def __init__(self, seed_table, ww=None, preferred_skycoord_col=None):
         self.seed_table = _as_table(seed_table)
@@ -1743,27 +1844,28 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         # Merged catalogs can contain sub-pixel duplicate entries from multiple
         # per-exposure fits landing at slightly different positions for the same
         # star.  Two seeds at the same position each receive the full star flux,
-        # doubling the model and producing large negative residuals.
+        # doubling the model and producing large negative residuals.  No
+        # quality metric exists at the seed stage, so the brightest init flux
+        # wins any flux-disagreement tie.
         min_sep_pix = 0.5 * fwhm_pix
         n_before = len(seeded_init_params)
         if n_before > 1:
-            xy = np.column_stack([seeded_init_params['x_init'], seeded_init_params['y_init']])
-            flux_arr = np.asarray(seeded_init_params['flux_init'], dtype=float)
-            sort_order = np.argsort(flux_arr)[::-1]  # brightest first
-            keep = np.ones(n_before, dtype=bool)
-            kd = cKDTree(xy)
-            for i in sort_order:
-                if not keep[i]:
-                    continue
-                neighbors = kd.query_ball_point(xy[i], min_sep_pix)
-                for j in neighbors:
-                    if j != i and keep[j]:
-                        keep[j] = False
-            seeded_init_params = seeded_init_params[keep]
-            n_removed = n_before - np.sum(keep)
+            keep, n_disagree = _dedup_close_sources(
+                xy=np.column_stack([
+                    np.asarray(seeded_init_params['x_init'], dtype=float),
+                    np.asarray(seeded_init_params['y_init'], dtype=float),
+                ]),
+                flux=np.asarray(seeded_init_params['flux_init'], dtype=float),
+                min_sep_pix=min_sep_pix,
+                quality=None,
+            )
+            n_removed = int(n_before - np.sum(keep))
             if n_removed > 0:
-                print(f"Deduplication removed {n_removed} duplicate seeds within {min_sep_pix:.2f} pix of a brighter seed "
-                      f"({n_before} -> {len(seeded_init_params)})", flush=True)
+                seeded_init_params = seeded_init_params[keep]
+                print(f"Pre-fit deduplication removed {n_removed} seeds within "
+                      f"{min_sep_pix:.2f} pix ({n_before} -> {len(seeded_init_params)}); "
+                      f"{n_disagree} clusters had disagreeing init fluxes",
+                      flush=True)
 
         finding_label = 'seeded'
     else:
@@ -1972,6 +2074,49 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         else:
             result = phot_basic(nan_replaced_data, mask=mask, error=np.where(bad, 1e10, err))
         print(f"Done with BASIC photometry. len(result)={len(result)}  dt={time.time() - t0}")
+
+        # Post-fit deduplication: the unseeded DAO finder can detect multiple
+        # local maxima near a single bright star; each is fit independently
+        # without a grouper, and they can converge to the same (x_fit, y_fit).
+        # Summing those PSFs in make_model_image() produces 2x-4x overfits.
+        # When a cluster of fits converges to the same position, the same
+        # physical source should yield matching fluxes; if fluxes disagree
+        # the fits reached different minima and we keep the one with the
+        # best qfit (smallest chi-squared/pixel).  Filter the phot_basic
+        # object's own state so the saved catalog and the rendered model
+        # image are both built from the deduplicated set.
+        min_sep_pix = 0.5 * fwhm_pix
+        xfit_arr = np.asarray(result['x_fit'], dtype=float)
+        yfit_arr = np.asarray(result['y_fit'], dtype=float)
+        flux_arr = np.asarray(result['flux_fit'], dtype=float)
+        qfit_arr = (np.asarray(result['qfit'], dtype=float)
+                    if 'qfit' in result.colnames else None)
+        keep_full, n_disagree = _dedup_close_sources(
+            xy=np.column_stack([xfit_arr, yfit_arr]),
+            flux=flux_arr,
+            min_sep_pix=min_sep_pix,
+            quality=qfit_arr,
+        )
+        n_removed = int(len(keep_full) - np.sum(keep_full))
+        if n_removed > 0:
+            tiebreak = "qfit" if qfit_arr is not None else "brightest"
+            print(f"Post-fit deduplication: dropping {n_removed} drift-together "
+                  f"fits within {min_sep_pix:.2f} pix "
+                  f"({len(result)} -> {int(np.sum(keep_full))}); "
+                  f"{n_disagree} clusters had disagreeing fitted fluxes "
+                  f"(resolved by {tiebreak})", flush=True)
+            # Filter the PSFPhotometry object's own state so the saved catalog
+            # AND the model image (via make_model_image) are both built from
+            # the deduplicated set.
+            phot_basic.results = phot_basic.results[keep_full]
+            if (phot_basic.init_params is not None
+                    and len(phot_basic.init_params) == len(keep_full)):
+                phot_basic.init_params = phot_basic.init_params[keep_full]
+            # Invalidate the @lazyproperty cache so _model_image_params
+            # regenerates from the filtered results on next access.
+            phot_basic.__dict__.pop('_model_image_params', None)
+            # Keep the local `result` name in sync with the filtered table.
+            result = phot_basic.results
 
         result = save_photutils_results(result, ww, filename,
                                         im1=im1, detector=detector,
