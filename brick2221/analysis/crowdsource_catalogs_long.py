@@ -88,6 +88,47 @@ import photutils.datasets.images as _photutils_datasets_images
 _photutils_datasets_images.overlap_slices = _overlap_slices_tuple_shape
 warnings.simplefilter('ignore', category=AstropyDeprecationWarning)
 
+
+# ---------------------------------------------------------------------------
+# Photutils 2.x <-> 3.x compatibility shims.
+#
+# In photutils 3.0 several keyword arguments were renamed:
+#   * PSFPhotometry / IterativePSFPhotometry: ``localbkg_estimator`` ->
+#     ``local_bkg_estimator``
+#   * make_model_image / make_residual_image: ``include_localbkg`` ->
+#     ``include_local_bkg``
+# Both old names are retained as deprecation-warning aliases until 4.0,
+# but the deprecation warnings flood the per-frame logs.  These small
+# wrappers detect the installed version once and dispatch to the right
+# kwarg, so the same source works on 2.3.0 and 3.0+.
+# ---------------------------------------------------------------------------
+import photutils as _photutils
+from packaging.version import Version as _PUVersion
+_PHOTUTILS_GE_3 = _PUVersion(_photutils.__version__.split('+')[0]) >= _PUVersion('3.0.0.dev')
+_LOCAL_BKG_KW = 'local_bkg_estimator' if _PHOTUTILS_GE_3 else 'localbkg_estimator'
+_INCLUDE_LOCAL_BKG_KW = 'include_local_bkg' if _PHOTUTILS_GE_3 else 'include_localbkg'
+
+
+def _make_psfphotometry(*, localbkg_estimator, **kwargs):
+    """Construct a PSFPhotometry using whichever local-bkg kwarg the
+    installed photutils accepts."""
+    return PSFPhotometry(**{_LOCAL_BKG_KW: localbkg_estimator}, **kwargs)
+
+
+def _make_iterative_psfphotometry(*, localbkg_estimator, **kwargs):
+    """Construct an IterativePSFPhotometry using whichever local-bkg
+    kwarg the installed photutils accepts."""
+    return IterativePSFPhotometry(**{_LOCAL_BKG_KW: localbkg_estimator},
+                                  **kwargs)
+
+
+def _make_model_image(phot_obj, shape, *, psf_shape=None, include_local_bkg=False):
+    """Call ``phot_obj.make_model_image`` with the version-appropriate
+    include-local-bkg kwarg."""
+    return phot_obj.make_model_image(
+        shape, psf_shape=psf_shape,
+        **{_INCLUDE_LOCAL_BKG_KW: include_local_bkg})
+
 import crowdsource
 from crowdsource import crowdsource_base
 from crowdsource.crowdsource_base import fit_im, psfmod
@@ -318,6 +359,9 @@ def _get_source_xy(tbl):
         return np.asarray(tbl['x_fit']), np.asarray(tbl['y_fit'])
     if 'xcentroid' in tbl.colnames and 'ycentroid' in tbl.colnames:
         return np.asarray(tbl['xcentroid']), np.asarray(tbl['ycentroid'])
+    # photutils >=3.0 emits ``x_centroid``/``y_centroid``
+    if 'x_centroid' in tbl.colnames and 'y_centroid' in tbl.colnames:
+        return np.asarray(tbl['x_centroid']), np.asarray(tbl['y_centroid'])
     if 'x_init' in tbl.colnames and 'y_init' in tbl.colnames:
         return np.asarray(tbl['x_init']), np.asarray(tbl['y_init'])
     if 'x' in tbl.colnames and 'y' in tbl.colnames:
@@ -333,8 +377,11 @@ def _column_to_float_array(tbl, colname):
 
 
 def _best_available_xy(tbl):
+    # photutils >=3.0 emits ``x_centroid``/``y_centroid`` from DAOStarFinder;
+    # 2.x emits ``xcentroid``/``ycentroid``.  Accept both.
     candidates = [
         ('xcentroid', 'ycentroid'),
+        ('x_centroid', 'y_centroid'),
         ('x_fit', 'y_fit'),
         ('x_init', 'y_init'),
         ('x', 'y'),
@@ -361,7 +408,9 @@ def _best_available_xy(tbl):
 def _has_any_xy_columns(tbl):
     return any(
         xname in tbl.colnames and yname in tbl.colnames
-        for xname, yname in (('xcentroid', 'ycentroid'), ('x_fit', 'y_fit'),
+        for xname, yname in (('xcentroid', 'ycentroid'),
+                             ('x_centroid', 'y_centroid'),
+                             ('x_fit', 'y_fit'),
                              ('x_init', 'y_init'), ('x', 'y'))
     )
 
@@ -1043,6 +1092,9 @@ def save_photutils_results(result, ww, filename,
         result['skycoord_centroid'] = coords
     elif 'xcentroid' in result.colnames:
         coords = ww.pixel_to_world(result['xcentroid'], result['ycentroid'])
+    elif 'x_centroid' in result.colnames:
+        # photutils >=3.0 emits x_centroid / y_centroid (with underscore)
+        coords = ww.pixel_to_world(result['x_centroid'], result['y_centroid'])
         result['skycoord_centroid'] = coords
     elif 'x_init' in result.colnames:
         coords = ww.pixel_to_world(result['x_init'], result['y_init'])
@@ -2091,8 +2143,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     print(f"Found {len(finstars)} with daofind_tuned", flush=True)
     # for diagnostic plotting convenience
-    finstars['x'] = finstars['xcentroid']
-    finstars['y'] = finstars['ycentroid']
+    # photutils >=3.0 emits x_centroid/y_centroid; 2.x emits xcentroid/ycentroid.
+    if 'xcentroid' in finstars.colnames:
+        finstars['x'] = finstars['xcentroid']
+        finstars['y'] = finstars['ycentroid']
+    elif 'x_centroid' in finstars.colnames:
+        finstars['x'] = finstars['x_centroid']
+        finstars['y'] = finstars['y_centroid']
     finstars['skycoord'] = ww.pixel_to_world(finstars['x'], finstars['y'])
 
     result = save_photutils_results(finstars, ww, filename,
@@ -2270,7 +2327,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print("Starting basic PSF photometry", flush=True)
 
         basic_finder = None if seeded_init_params is not None else daofind_tuned
-        phot_basic = PSFPhotometry(finder=basic_finder,
+        phot_basic = _make_psfphotometry(
+                                   finder=basic_finder,
                                    # 6,10 avoids the first sidelobe/airy ring
                                    # it's not optimal b/c the background variation is significant over a bigger scale...
                                    localbkg_estimator=LocalBackground(6, 10),
@@ -2365,7 +2423,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
-        modsky = phot_basic.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
+        modsky = _make_model_image(phot_basic, data.shape, psf_shape=(21, 21), include_local_bkg=False)
         residual = data - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
         save_residual_datamodel(
@@ -2433,7 +2491,8 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                            bbox_inches='tight')
                 dao_psf_model = epsf
 
-            phot_iter = IterativePSFPhotometry(finder=daofind_tuned,
+            phot_iter = _make_iterative_psfphotometry(
+                                               finder=daofind_tuned,
                                                localbkg_estimator=LocalBackground(6, 10),
                                                grouper=grouper if options.group else None,
                                                psf_model=dao_psf_model,
@@ -2536,7 +2595,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             stars['y'] = stars['y_fit']
 
             print("Creating iterative residual")
-            modsky = phot_iter.make_model_image(data.shape, psf_shape=(21, 21), include_localbkg=False)
+            modsky = _make_model_image(phot_iter, data.shape, psf_shape=(21, 21), include_local_bkg=False)
             residual = data - modsky
             print("finished iterative residual")
             save_residual_datamodel(
