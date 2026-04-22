@@ -1974,6 +1974,11 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     print("Finding stars with daofind_tuned", flush=True)
 
     satstar_table = None
+    # Holds the (NaN-replaced) satstar model image after it has been
+    # subtracted from ``nan_replaced_data``.  Re-applied to the residual
+    # written to disk so the saved per-frame residual matches what the
+    # fitter actually saw (i.e. data minus satstar wings minus phot model).
+    satstar_model_subtracted = None
     if options.each_exposure and seed_catalog is not None:
         outside_star_pixels = load_outside_fov_satstar_pixels(basepath, ww)
         # Namespace the satstar outputs by bgsub/iteration_label so that
@@ -2026,6 +2031,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                     n_pos = int(np.sum(finite_model > 0))
                     total = float(np.nansum(finite_model))
                     nan_replaced_data = nan_replaced_data - finite_model
+                    satstar_model_subtracted = finite_model
                     print(f"Subtracted satstar_model ({satstar_model_path}) from "
                           f"nan_replaced_data: {n_pos} positive pixels, "
                           f"sum={total:.3e} counts", flush=True)
@@ -2424,7 +2430,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
         modsky = _make_model_image(phot_basic, data.shape, psf_shape=(21, 21), include_local_bkg=False)
-        residual = data - modsky
+        # The fitter saw ``data - satstar_model`` (when a satstar model
+        # exists), so the saved residual must subtract the satstar model
+        # too -- otherwise the bright-star wings reappear and dominate
+        # the residual mosaic.  See pipeline-plumbing block above.
+        data_for_residual = (data if satstar_model_subtracted is None
+                             else data - satstar_model_subtracted)
+        residual = data_for_residual - modsky
         print("Done creating BASIC residual image, using 21x21 patches")
         save_residual_datamodel(
             filename,
@@ -2437,18 +2449,18 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             modsky,
         )
         print("Saved BASIC residual image, now making diagnostics.")
-        catalog_zoom_diagnostic(data, modsky, nullslice, stars)
+        catalog_zoom_diagnostic(data_for_residual, modsky, nullslice, stars)
         pl.suptitle(f"daophot basic Catalog Diagnostics zoomed {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_daophot_basic.png',
                 bbox_inches='tight')
 
-        catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+        catalog_zoom_diagnostic(data_for_residual, modsky, zoomcut, stars)
         pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
         pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_zoom_daophot_basic.png',
                 bbox_inches='tight')
 
         for name, zoomcut in zoomcut_list.items():
-            catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+            catalog_zoom_diagnostic(data_for_residual, modsky, zoomcut, stars)
             pl.suptitle(f"daophot basic Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group} zoom {name}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}__catalog_diagnostics_zoom_daophot_basic{name.replace(" ","_")}.png',
                     bbox_inches='tight')
@@ -2596,7 +2608,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
             print("Creating iterative residual")
             modsky = _make_model_image(phot_iter, data.shape, psf_shape=(21, 21), include_local_bkg=False)
-            residual = data - modsky
+            data_for_residual = (data if satstar_model_subtracted is None
+                                 else data - satstar_model_subtracted)
+            residual = data_for_residual - modsky
             print("finished iterative residual")
             save_residual_datamodel(
                 filename,
@@ -2609,18 +2623,18 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 modsky,
             )
             print("Saved iterative residual")
-            catalog_zoom_diagnostic(data, modsky, nullslice, stars)
+            catalog_zoom_diagnostic(data_for_residual, modsky, nullslice, stars)
             pl.suptitle(f"daophot iterative Catalog Diagnostics zoomed {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_daophot_iterative.png',
                     bbox_inches='tight')
 
-            catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+            catalog_zoom_diagnostic(data_for_residual, modsky, zoomcut, stars)
             pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}")
             pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_catalog_diagnostics_zoom_daophot_iterative.png',
                     bbox_inches='tight')
 
             for name, zoomcut in zoomcut_list.items():
-                catalog_zoom_diagnostic(data, modsky, zoomcut, stars)
+                catalog_zoom_diagnostic(data_for_residual, modsky, zoomcut, stars)
                 pl.suptitle(f"daophot iterative Catalog Diagnostics {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group} zoom {name}")
                 pl.savefig(f'{basepath}/{filtername}/pipeline/jw0{proposal_id}-o{field}_t001_nircam_{pupil}-{filtername.lower()}-{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}__catalog_diagnostics_zoom_daophot_iterative{name.replace(" ","_")}.png',
                         bbox_inches='tight')
