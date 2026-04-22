@@ -571,6 +571,121 @@ def _augment_seed_catalog_with_detections_sky(seed_catalog, detection_catalog, w
     return combined
 
 
+def _filter_near_saturation(phot_obj, dq, *, max_sat_dist_pix,
+                            label, max_log_rows=50):
+    """Drop fits from ``phot_obj.results`` whose center is within
+    ``max_sat_dist_pix`` pixels of any SATURATED-DQ pixel and keep the
+    PSFPhotometry object's state consistent.
+
+    Rationale: regular ``phot_basic``/``phot_iter`` fits placed on a
+    saturated pixel are unreliable -- the central data value is "stuck"
+    while the unsaturated wings drive the fit toward enormous fluxes,
+    producing model-image holes of order -10 000 counts.  The dedicated
+    ``satstar`` catalog handles those stars separately and lives in a
+    different table, so this filter does not touch it.
+
+    A no-op when ``dq`` is None or has no SATURATED pixels.
+    """
+    if dq is None:
+        return 0
+    sat_mask = (dq & dqflags.pixel['SATURATED']).astype(bool)
+    n_sat = int(sat_mask.sum())
+    if n_sat == 0:
+        return 0
+    # distance_transform_edt: distance to nearest True in the input mask.
+    # We want distance to nearest saturated pixel, so feed ~sat_mask.
+    sat_dist_map = ndimage.distance_transform_edt(~sat_mask)
+
+    res = phot_obj.results
+    if res is None or len(res) == 0:
+        return 0
+
+    x = np.asarray(res['x_fit'], dtype=float)
+    y = np.asarray(res['y_fit'], dtype=float)
+    flux_arr = np.asarray(res['flux_fit'], dtype=float)
+    ny, nx = sat_mask.shape
+    ix = np.rint(x).astype(int)
+    iy = np.rint(y).astype(int)
+    in_frame = (np.isfinite(x) & np.isfinite(y)
+                & (ix >= 0) & (ix < nx)
+                & (iy >= 0) & (iy < ny))
+
+    sat_dist = np.full(len(res), np.inf, dtype=float)
+    if np.any(in_frame):
+        sat_dist[in_frame] = sat_dist_map[iy[in_frame], ix[in_frame]]
+
+    drop = sat_dist <= float(max_sat_dist_pix)
+    n_drop = int(np.sum(drop))
+    if n_drop == 0:
+        return 0
+
+    print(f"Saturation-proximity filter ({label}): dropping {n_drop} fits "
+          f"within {max_sat_dist_pix:.1f} pix of a SATURATED-DQ pixel "
+          f"({len(res)} -> {len(res) - n_drop}); "
+          f"sat_pixels_in_frame={n_sat}", flush=True)
+
+    # Log a sample of dropped rows for forensics.
+    drop_idx = np.where(drop)[0]
+    log_idx = drop_idx[np.argsort(sat_dist[drop_idx])][:max_log_rows]
+    if len(log_idx) > 0:
+        id_col = res['id'] if 'id' in res.colnames else np.arange(len(res))
+        print(f"  dropped fits ({label}, up to {max_log_rows} closest to sat):", flush=True)
+        print(f"    {'id':>6} {'x_fit':>9} {'y_fit':>9} {'flux_fit':>12} {'sat_dist':>9}",
+              flush=True)
+        for i in log_idx:
+            sid = id_col[i]
+            print(f"    {int(sid):>6d} {x[i]:>9.2f} {y[i]:>9.2f} "
+                  f"{flux_arr[i]:>12.2f} {sat_dist[i]:>9.2f}", flush=True)
+        if len(drop_idx) > len(log_idx):
+            print(f"    ... ({len(drop_idx) - len(log_idx)} more not shown)",
+                  flush=True)
+
+    keep = ~drop
+    phot_obj.results = phot_obj.results[keep]
+    inner_phot = getattr(phot_obj, '_psfphot', None)
+    if (inner_phot is not None
+            and inner_phot.init_params is not None
+            and len(inner_phot.init_params) == len(keep)):
+        inner_phot.init_params = inner_phot.init_params[keep]
+    if (hasattr(phot_obj, 'init_params')
+            and phot_obj.init_params is not None
+            and len(phot_obj.init_params) == len(keep)):
+        phot_obj.init_params = phot_obj.init_params[keep]
+
+    # IterativePSFPhotometry rebuilds its _model_image_params from the
+    # per-iteration deepcopied snapshots in ``fit_results``, not from
+    # ``self.results`` -- so updating ``self.results`` alone leaves the
+    # rendered model image unchanged.  Filter each per-iteration snapshot
+    # by the same sat-distance rule so make_model_image() agrees with
+    # the saved catalog.
+    fit_results = getattr(phot_obj, 'fit_results', None)
+    if fit_results:
+        for fr in fit_results:
+            sub = getattr(fr, 'results', None)
+            if sub is None or len(sub) == 0:
+                continue
+            sx = np.asarray(sub['x_fit'], dtype=float)
+            sy = np.asarray(sub['y_fit'], dtype=float)
+            s_ix = np.rint(sx).astype(int)
+            s_iy = np.rint(sy).astype(int)
+            s_in = (np.isfinite(sx) & np.isfinite(sy)
+                    & (s_ix >= 0) & (s_ix < nx)
+                    & (s_iy >= 0) & (s_iy < ny))
+            s_dist = np.full(len(sub), np.inf, dtype=float)
+            if np.any(s_in):
+                s_dist[s_in] = sat_dist_map[s_iy[s_in], s_ix[s_in]]
+            sub_keep = s_dist > float(max_sat_dist_pix)
+            if sub_keep.sum() < len(sub):
+                fr.results = sub[sub_keep]
+                if (fr.init_params is not None
+                        and len(fr.init_params) == len(sub_keep)):
+                    fr.init_params = fr.init_params[sub_keep]
+                fr.__dict__.pop('_model_image_params', None)
+
+    phot_obj.__dict__.pop('_model_image_params', None)
+    return n_drop
+
+
 def _dedup_close_sources(xy, flux, min_sep_pix, quality=None,
                          flux_agreement_frac=0.10):
     """
@@ -1828,6 +1943,45 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             file_suffix=satstar_file_suffix,
         )
 
+        # Pipeline-plumbing fix (2026-04-21):
+        # The satstar finder fits the bright/saturated stars and writes a
+        # satstar_model.fits, but historically `phot_basic`/`phot_iter` ran on
+        # ``nan_replaced_data`` (i.e. bgsub-only -- the satstar model was NOT
+        # subtracted).  That left the wings of saturated stars fully visible
+        # to the regular fitter, which then placed inflated fits at the
+        # "stuck-low" central pixel and produced ~-15000-count holes in the
+        # final residual image.  Subtract the satstar model here so the
+        # downstream photometry sees the satstar-cleaned data.
+        #
+        # Filenames mirror those produced by remove_saturated_stars()
+        # (saturated_star_finding.py) and load_or_make_satstar_catalog().
+        satstar_model_path = filename.replace(
+            '.fits', f'{satstar_file_suffix}_satstar_model.fits')
+        if os.path.exists(satstar_model_path):
+            try:
+                satstar_model_image = fits.getdata(satstar_model_path).astype(float)
+            except (OSError, ValueError) as exc:
+                print(f"Could not read satstar_model {satstar_model_path}: {exc}; "
+                      f"skipping satstar subtraction", flush=True)
+            else:
+                if satstar_model_image.shape != nan_replaced_data.shape:
+                    print(f"satstar_model shape {satstar_model_image.shape} does not "
+                          f"match data shape {nan_replaced_data.shape}; skipping "
+                          f"satstar subtraction", flush=True)
+                else:
+                    finite_model = np.where(np.isfinite(satstar_model_image),
+                                            satstar_model_image, 0.0)
+                    n_pos = int(np.sum(finite_model > 0))
+                    total = float(np.nansum(finite_model))
+                    nan_replaced_data = nan_replaced_data - finite_model
+                    print(f"Subtracted satstar_model ({satstar_model_path}) from "
+                          f"nan_replaced_data: {n_pos} positive pixels, "
+                          f"sum={total:.3e} counts", flush=True)
+        else:
+            print(f"No satstar_model file at {satstar_model_path}; "
+                  f"phot_basic/phot_iter will see the satstar wings unmodified",
+                  flush=True)
+
     seeded_init_params = None
     if seed_catalog is not None:
         preferred_seed_skycoord_col = f'skycoord_{filtername.lower()}'
@@ -2178,6 +2332,18 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             # Keep the local `result` name in sync with the filtered table.
             result = phot_basic.results
 
+        # Saturation-proximity filter: regular phot_basic fits placed on
+        # or right next to a saturated DQ pixel are unreliable (the central
+        # data value is "stuck" while the wings drive the flux up), so drop
+        # them before the catalog and the model image are written.  The
+        # dedicated satstar catalog lives in a separate file and is not
+        # touched.
+        _dqarr_for_satfilter = im1['DQ'].data if 'DQ' in im1 else None
+        _filter_near_saturation(phot_basic, _dqarr_for_satfilter,
+                                max_sat_dist_pix=5.0,
+                                label='basic')
+        result = phot_basic.results
+
         result = save_photutils_results(result, ww, filename,
                                         im1=im1, detector=detector,
                                         basepath=basepath,
@@ -2335,6 +2501,18 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             if 'model_shape' in phot_iter.results.colnames:
                 phot_iter.results.remove_column('model_shape')
                 phot_iter.__dict__.pop('_model_image_params', None)
+
+            # Saturation-proximity filter for the iterative path -- same
+            # rationale as the basic path: drop fits placed within
+            # max_sat_dist_pix of any saturated DQ pixel.  Iterative
+            # photometry is more aggressive and produces more of these
+            # spurious near-saturation fits than basic, so the filter has
+            # bigger impact here.
+            _dqarr_for_satfilter_iter = im1['DQ'].data if 'DQ' in im1 else None
+            _filter_near_saturation(phot_iter, _dqarr_for_satfilter_iter,
+                                    max_sat_dist_pix=5.0,
+                                    label='iterative')
+            result2 = phot_iter.results
 
             result2 = save_photutils_results(result2, ww, filename,
                                              im1=im1, detector=detector,
