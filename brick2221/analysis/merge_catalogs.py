@@ -806,24 +806,17 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
             print('tb.meta:', tb.meta)
             raise ValueError(f"Table file {fn} is not correctly formatted; it is missing FILENAME metadata")
 
-    # Two changes vs the historical defaults:
-    #
-    # - ``realign=True`` removes the per-frame bulk RA/Dec offset before
-    #   dedup so that "the same star observed in 24 exposures" doesn't
-    #   shift coherently between exposures past the dedup threshold.
-    # - ``min_offset=0.25"`` (was 0.10").  The per-source astrometric
-    #   jitter on bright stars is ~0.05-0.15"; a 0.10" threshold is
-    #   below typical scatter and lets duplicates accumulate.  0.25" is
-    #   above the per-source jitter and below the typical inter-source
-    #   spacing in even crowded fields like Brick (median nearest-neighbor
-    #   ~0.5-1" in true sky positions); minor over-merge risk for
-    #   sub-0.25" close pairs.
-    # Together: F200W cross-exposure merge dropped from 4.4M rows
-    # (un-realigned, 0.10" threshold) -- this fix targets ~200k.
-    merged_exposure_table = combine_singleframe(tables, offsets_table=offsets_table,
-                                                realign=True,
-                                                min_offset=0.25 * u.arcsec,
-                                                max_offset=0.25 * u.arcsec)
+    # Note (2026-04-23): an earlier "dedup bug" diagnosis (realign=True +
+    # min_offset=0.25") was based on analysing the FIRST 200k rows of the
+    # F200W brick catalog which are exposure-adjacent and therefore
+    # artificially correlated.  A random 500k-row sample found only
+    # ~0.1% definite duplicates (ratio>0.95 AND nmatch_sum>24 pigeonhole);
+    # median flux ratio of near-neighbour pairs was 0.38, indicating
+    # most "near-neighbours" are genuinely distinct close-pair sources in
+    # a dense field.  min_offset=0.25" would actively mis-merge ~36% of
+    # real neighbours (separations 0.10-0.15").  Keeping the historical
+    # defaults.
+    merged_exposure_table = combine_singleframe(tables, offsets_table=offsets_table)
 
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}_allcols.fits"
     print(f"Writing {outfn} with length {len(merged_exposure_table)}")
@@ -1012,13 +1005,20 @@ def merge_daophot(module='nrca', detector='', daophot_type='basic', desat=False,
              ]
 
     if indivexp:
+        # Map daophot_type -> per-filter merge filename token written by
+        # merge_individual_frames(): basic uses ``dao``, iterative uses
+        # ``daoiterative`` (this matches the suffix-vs-method dict in
+        # main()).  The pattern was hardcoded to ``_dao_{daophot_type}``
+        # which only matched basic; the daoiterative filename is
+        # ``_daoiterative_iterative.fits`` so the glob always returned
+        # zero matches and the cross-filter daoiterative merge never ran.
+        method_name = 'dao' if daophot_type == 'basic' else 'daoiterative'
         catfns = [x
                   for filn in filternames
-                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{blur_}_dao_{daophot_type}.fits")
+                  for x in glob.glob(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{blur_}_{method_name}_{daophot_type}.fits")
                   ]
         if len(catfns) == 0:
-            filn = 'f405n'
-            raise ValueError(f"{basepath}/catalogs/{filn.lower()}*{module}*indivexp_merged{desat}{bgsub}{blur_}_dao_{daophot_type}.fits had no matches")
+            raise ValueError(f"{basepath}/catalogs/<filt>*{module}*indivexp_merged{desat}{bgsub}{blur_}_{method_name}_{daophot_type}.fits had no matches across filters {filternames}")
         if len(catfns) != len(imgfns):
             print("WARNING: Different length of imgfns & catfns!")
             print("imgfns:", imgfns)
