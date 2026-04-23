@@ -1141,7 +1141,15 @@ def save_photutils_results(result, ww, filename,
         result.meta['BKGMETH'] = 'bkg2d_sampled' if background_map is not None else 'none'
 
     iter_ = _iteration_token(iteration_label)
-    tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{detector}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_{basic_or_iterative}.fits"
+    # Historical bug: this used to be `{module}{detector}` with no
+    # separator, which produced doubled tokens like ``nrcbnrcb`` /
+    # ``nrcanrca`` whenever ``module == detector`` (which is always
+    # the case for the eachexp call paths) and broke the
+    # ``merge_catalogs.py`` glob that expects just ``{module}``.
+    # The original iter1 convention used only ``{module}`` and that's
+    # what every other filename slot in this file (and the seed-catalog
+    # inference at line ~1931) still uses.  Restored.
+    tblfilename = f"{basepath}/{filtername}/{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}{iter_}_daophot_{basic_or_iterative}.fits"
 
     long_keys = [k for k in result.meta if len(k) > 8]
     for k in long_keys:
@@ -1918,19 +1926,47 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     nan_replaced_data = interpolate_replace_nans(data_, kernel, convolve=convolve_fft)
 
-    if seed_catalog is None and iteration_label not in (None, ''):
+    # Infer a per-exposure ``_daophot_basic.fits`` seed for iter2, but *not*
+    # for iter3 -- iter3 must use the cross-band union seed catalog that
+    # the caller passes in explicitly.  Silently falling back to the basic
+    # per-frame catalog would defeat the purpose of iter3 entirely.
+    is_iter3 = (iteration_label is not None
+                and str(iteration_label).lower() == 'iter3')
+    if (seed_catalog is None and iteration_label not in (None, '')
+            and not is_iter3):
         inferred_seed_catalog = (
             f'{basepath}/{filtername}/'
             f'{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}{epsf_}{blur_}{group}_daophot_basic.fits'
         )
         if os.path.exists(inferred_seed_catalog):
             seed_catalog = inferred_seed_catalog
+    if is_iter3 and seed_catalog is None:
+        raise ValueError(
+            "iteration_label='iter3' requires an explicit seed_catalog "
+            "pointing at the cross-band union seed file "
+            "(build_union_seed_catalog.py output); no fallback is allowed."
+        )
 
     is_second_iteration = seed_catalog is not None
+    # iter3 position bound: ±1 SW NIRCam pixel (0.031"), expressed in the
+    # current frame's pixel units.  On LW this is ~0.5 pix, on SW it is
+    # 1 pix.  Kept None for iter1/iter2 so their behavior is unchanged.
+    iter3_xy_bounds_pix = None
+    if is_iter3:
+        pixscale_arcsec = float(pixscale.to(u.arcsec).value)
+        sw_pix_arcsec = 0.031
+        iter3_xy_bounds_pix = float(sw_pix_arcsec / pixscale_arcsec)
+        print(f"iter3: pixscale={pixscale_arcsec:.4f}\"/pix -> "
+              f"xy_bounds=±{iter3_xy_bounds_pix:.3f} pix per source",
+              flush=True)
     if is_second_iteration:
-        # Second-iteration tuned finder settings: lower local-SNR cut plus tighter
+        # iter2 / iter3 tuned finder settings: lower local-SNR cut plus tighter
         # roundness/sharpness to suppress diffuse-background false detections.
-        iter2_local_snr_threshold = 3.0
+        # iter3 is seed-dominated (the union catalog already knows where the
+        # sources are), so its post-seed DAOStarFinder augmentation threshold
+        # is raised to reduce the flood of low-SNR "discoveries" that add
+        # little beyond what the union catalog provides.
+        iter2_local_snr_threshold = 6.0 if is_iter3 else 3.0
         iter2_roundlo = -0.3
         iter2_roundhi = 0.3
         iter2_sharplo = 0.50
@@ -1979,7 +2015,17 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     # written to disk so the saved per-frame residual matches what the
     # fitter actually saw (i.e. data minus satstar wings minus phot model).
     satstar_model_subtracted = None
-    if options.each_exposure and seed_catalog is not None:
+    # Run the satstar finder + model-subtract for *every* each-exposure
+    # pass, including iter1 (no seed_catalog).  The previous gate
+    # ``and seed_catalog is not None`` left iter1 mosaics with bright
+    # un-subtracted saturated stars because the satstar block was the
+    # only path that produced and subtracted the satstar model.  iter1
+    # is the most traceable iteration and the natural place to assess
+    # satstar finder quality, so it should also benefit from this
+    # plumbing.  The downstream seeded-photometry block at line ~2080
+    # is gated separately on ``seed_catalog is not None`` and is
+    # unaffected by this change.
+    if options.each_exposure:
         outside_star_pixels = load_outside_fov_satstar_pixels(basepath, ww)
         # Namespace the satstar outputs by bgsub/iteration_label so that
         # the non-bgsub and bgsub iter2 array jobs (which can run concurrently
@@ -2333,6 +2379,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         print("Starting basic PSF photometry", flush=True)
 
         basic_finder = None if seeded_init_params is not None else daofind_tuned
+        _phot_basic_extra = {}
+        if iter3_xy_bounds_pix is not None:
+            _phot_basic_extra['xy_bounds'] = (iter3_xy_bounds_pix,
+                                              iter3_xy_bounds_pix)
         phot_basic = _make_psfphotometry(
                                    finder=basic_finder,
                                    # 6,10 avoids the first sidelobe/airy ring
@@ -2344,6 +2394,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                    fit_shape=(5, 5),
                                    aperture_radius=2*fwhm_pix,
                                    progress_bar=True,
+                                   **_phot_basic_extra,
                                   )
 
         print("About to do BASIC photometry....")
@@ -2503,6 +2554,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                            bbox_inches='tight')
                 dao_psf_model = epsf
 
+            _phot_iter_extra = {}
+            if iter3_xy_bounds_pix is not None:
+                _phot_iter_extra['xy_bounds'] = (iter3_xy_bounds_pix,
+                                                 iter3_xy_bounds_pix)
             phot_iter = _make_iterative_psfphotometry(
                                                finder=daofind_tuned,
                                                localbkg_estimator=LocalBackground(6, 10),
@@ -2514,6 +2569,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                                sub_shape=(15, 15),
                                                aperture_radius=2*fwhm_pix,
                                                progress_bar=True,
+                                               **_phot_iter_extra,
                                               )
 
             print("About to do ITERATIVE photometry....")

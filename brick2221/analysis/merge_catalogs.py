@@ -743,12 +743,23 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
                                         max_visitid=10,
                                         method='crowdsource',
                                         offsets_table=None,
+                                        iteration_label=None,
                                         basepath='/blue/adamginsburg/adamginsburg/jwst/brick/'):
 
     desat = "_unsatstar" if desat else ""
     bgsub = '_bgsub' if bgsub else ''
     fitpsf = '_fitpsf' if fitpsf else ''
     blur_ = "_blur" if blur else ""
+    # iter_token is inserted *between* the {blur_} block and the
+    # {method_suffix} so the per-frame filename
+    # ``..._{blur_}{iter_token}_{method_suffix}{suffix}.fits``
+    # matches what crowdsource_catalogs_long.py writes for iter2/iter3.
+    if iteration_label in (None, ''):
+        iter_token = ''
+    elif str(iteration_label).startswith('_'):
+        iter_token = str(iteration_label)
+    else:
+        iter_token = f'_{iteration_label}'
     if module == 'merged':
         modules = ['nrca', 'nrcb',]
         modules += [f'nrc{ab}{n}' for ab in 'ab' for n in range(1, 5)]
@@ -777,7 +788,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
               for visitid in range(1, max_visitid+1)
               for exposure in exposure_numbers
               for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_vgroup*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}"
+                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_vgroup*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}{iter_token}"
                                  f"_{method_suffix}{suffix}.fits")
               ]
     tblfns = sorted(set(tblfns))
@@ -795,7 +806,24 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
             print('tb.meta:', tb.meta)
             raise ValueError(f"Table file {fn} is not correctly formatted; it is missing FILENAME metadata")
 
-    merged_exposure_table = combine_singleframe(tables, offsets_table=offsets_table)
+    # Two changes vs the historical defaults:
+    #
+    # - ``realign=True`` removes the per-frame bulk RA/Dec offset before
+    #   dedup so that "the same star observed in 24 exposures" doesn't
+    #   shift coherently between exposures past the dedup threshold.
+    # - ``min_offset=0.25"`` (was 0.10").  The per-source astrometric
+    #   jitter on bright stars is ~0.05-0.15"; a 0.10" threshold is
+    #   below typical scatter and lets duplicates accumulate.  0.25" is
+    #   above the per-source jitter and below the typical inter-source
+    #   spacing in even crowded fields like Brick (median nearest-neighbor
+    #   ~0.5-1" in true sky positions); minor over-merge risk for
+    #   sub-0.25" close pairs.
+    # Together: F200W cross-exposure merge dropped from 4.4M rows
+    # (un-realigned, 0.10" threshold) -- this fix targets ~200k.
+    merged_exposure_table = combine_singleframe(tables, offsets_table=offsets_table,
+                                                realign=True,
+                                                min_offset=0.25 * u.arcsec,
+                                                max_offset=0.25 * u.arcsec)
 
     outfn = f"{basepath}/catalogs/{filtername.lower()}_{module}_indivexp_merged{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}_allcols.fits"
     print(f"Writing {outfn} with length {len(merged_exposure_table)}")
@@ -1428,6 +1456,9 @@ def main():
                       action='store_true')
     parser.add_option('--max-expnum', dest='max_expnum', default=24, type='int')
     parser.add_option('--indiv-merge-methods', dest='indiv_merge_methods', default='dao,crowdsource,daoiterative')
+    parser.add_option('--iteration-label', dest='iteration_label', default=None,
+                      help='Filter per-frame inputs to those tagged with this iteration label '
+                           '(e.g. "iter2" or "iter3").  Default merges the iter1 catalogs.')
     (options, args) = parser.parse_args()
 
     modules = options.modules.split(",")
@@ -1496,6 +1527,7 @@ def main():
                                                                         exposure_numbers=np.arange(1, options.max_expnum + 1),
                                                                         offsets_table=offsets_tables[progid],
                                                                         method=method,
+                                                                        iteration_label=options.iteration_label,
                                                                         basepath=basepath)
                                             except ValueError as ex:
                                                 if blur and not options.strict_require_blur:
