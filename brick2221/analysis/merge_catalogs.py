@@ -343,81 +343,152 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     assert flux_error_colname in tbls[0].colnames
     assert flux_error_colname in column_names
 
-    # this segment, from arrays = down to the end, uses a lot of memory
+    # -- Memory-streaming refactor (2026-04-23) -------------------------------
+    # The previous version allocated all per-column 2-D arrays of shape
+    # (n_src, n_tbl) up front -- ~94 GB for the F200W brick merge, which
+    # OOM'd even at 512 GB due to squaring temporaries later on.  The
+    # refactor below runs in two phases:
+    #
+    #   Phase 1 -- allocate just ra/dec/flux/flux_err to compute the
+    #              mask (sigma-clip on flux and position), weights, the
+    #              position averages, and the flux/flux_err reductions.
+    #              Saves per-tbl ``match_inds`` and ``keep`` so Phase 2
+    #              doesn't repeat the expensive ``match_to_catalog_sky``.
+    #              Peak Phase 1 memory for F200W brick ~= 4 x 4.4M x 192
+    #              x 8 bytes = 27 GB.
+    #   Phase 2 -- stream each remaining column one at a time: allocate
+    #              one 2-D array, fill from saved match indices, compute
+    #              ``_avg`` + ``std_*_avg``, free.  Peak ~7 GB per column.
+    #
+    # Output columns preserved: the 1-D ``_avg`` / ``std_*_avg`` columns
+    # for every key in ``column_names``, plus ``skycoord_avg``, ``nmatch``,
+    # ``nmatch_good``, ``std_ra``, ``std_dec``, and
+    # ``f'{flux_error_colname}_prop'``.  The 2-D per-exposure arrays are
+    # NOT kept in the returned table (they were the memory culprit and
+    # downstream code doesn't consume them; the _allcols variant written
+    # by the caller now contains only these per-source columns).
+    # ------------------------------------------------------------------------
 
-    arrays = {key: np.zeros([len(basecrds), len(tbls)], dtype='float') * np.nan
-              for key in column_names if key in tbls[0].colnames 
-              or key in ('skycoord', 'ra', 'dec')}
-    arrays['detector'] = np.empty([len(basecrds), len(tbls)], dtype='U6')
-    arrays['visit'] = np.empty([len(basecrds), len(tbls)], dtype=int)
-    arrays['exposure'] = np.empty([len(basecrds), len(tbls)], dtype=int)
+    n_src = len(basecrds)
+    n_tbl = len(tbls)
 
-    for ii, tbl in enumerate(tqdm(tbls, desc='Table Loop (stack)')):
+    # Save per-tbl match results for Phase 2 reuse.
+    # match_inds is a length-n_tbl_rows int array (index into basecrds for
+    # each row in this tbl).  Kept as int32 to save RAM.
+    saved_match_inds = [None] * n_tbl
+    saved_keep = [None] * n_tbl
+
+    # Phase 1: ra/dec/flux/flux_err stack
+    print(f"Phase 1: stacking ra/dec/flux/flux_err for {n_src} sources x {n_tbl} tables", flush=True)
+    arr_ra = np.full((n_src, n_tbl), np.nan, dtype='float64')
+    arr_dec = np.full((n_src, n_tbl), np.nan, dtype='float64')
+    arr_flux = np.full((n_src, n_tbl), np.nan, dtype='float64')
+    arr_fluxerr = np.full((n_src, n_tbl), np.nan, dtype='float64')
+
+    for ii, tbl in enumerate(tqdm(tbls, desc='Phase 1 (ra/dec/flux stack)')):
         crds = tbl[skycoord_colname]
-
-        # match_inds & mutual_matches have the shape of basecrds, i.e., they are set by the crossmatching above
         match_inds, sep, _ = crds.match_to_catalog_sky(basecrds, nthneighbor=1)
-        reverse_match_inds, reverse_sep, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
+        reverse_match_inds, _, _ = basecrds.match_to_catalog_sky(crds, nthneighbor=1)
         mutual_matches = (reverse_match_inds[match_inds] == np.arange(len(match_inds)))
+        keep = (sep < max_offset) & mutual_matches
 
-        # only add sources to a row in basecrd if it is the closest star to that row
-        keep = (sep < max_offset) & (mutual_matches)
+        # Cast match_inds to int32 to halve memory (n_src < 2^31 in
+        # practice) and keep keep as bool.
+        saved_match_inds[ii] = match_inds.astype(np.int32, copy=False)
+        saved_keep[ii] = keep
 
-        for key in arrays:
-            if key not in ('skycoord', skycoord_colname, 'ra', 'dec', 'detector', 'visit', 'exposure'):
-                if key in tbl.colnames:
-                    arrays[key][match_inds[keep], ii] = tbl[key][keep]
-        arrays['ra'][match_inds[keep], ii] = tbl[skycoord_colname].ra[keep]
-        arrays['dec'][match_inds[keep], ii] = tbl[skycoord_colname].dec[keep]
-        arrays['detector'][match_inds[keep], ii] = tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''
-        arrays['visit'][match_inds[keep], ii] = tbl.meta['VISIT'] if 'VISIT' in tbl.meta else -1
-        arrays['exposure'][match_inds[keep], ii] = tryint(tbl.meta['EXPOSURE'][-5:]) if 'EXPOSURE' in tbl.meta else ''
-        print(f"{ii}: Added {keep.sum()} of {len(keep)} sources from exposure {tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={len(basecrds)}]", flush=True)
+        mi_keep = match_inds[keep]
+        arr_ra[mi_keep, ii] = crds.ra.deg[keep]
+        arr_dec[mi_keep, ii] = crds.dec.deg[keep]
+        arr_flux[mi_keep, ii] = tbl[flux_colname][keep]
+        arr_fluxerr[mi_keep, ii] = tbl[flux_error_colname][keep]
+        print(f"P1 {ii}: Added {keep.sum()} of {len(keep)} sources from exposure "
+              f"{tbl.meta['exposure']} {tbl.meta['MODULE'] if 'MODULE' in tbl.meta else ''} [total={n_src}]",
+              flush=True)
 
-    print("Compiling arrays into table", flush=True)
-    print(f"Table lengths are {[len(tbl) for tbl in tbls]}", flush=True)
-    print(f"Column names are {arrays.keys()} and should be {column_names} (plus detector, visit, exposure)", flush=True)
-    arrays['skycoord'] = SkyCoord(ra=arrays['ra'], dec=arrays['dec'], frame='icrs', unit=(u.deg, u.deg))
-    del arrays['ra']
-    del arrays['dec']
+    print("Phase 1 stack done; computing mask / weights / position averages", flush=True)
+    nmatch = np.isfinite(arr_flux).sum(axis=1).astype(np.int32)
 
-    newtbl = Table(arrays)
-    newtbl.meta = tbls[0].meta
-    newtbl.meta['offsets'] = {tbl.meta['exposure']: (tbl.meta['ra_offset'], tbl.meta['dec_offset']) for tbl in tbls}
-
-    newtbl['nmatch'] = np.isfinite(newtbl[flux_colname]).sum(axis=1)
-
-    # note: mad_std must be in quotes b/c it's using _fast_sigma_clip
-    clip_flux = sigma_clip(newtbl[flux_colname], stdfunc='mad_std', axis=1)
-    clip_ra = sigma_clip(newtbl['skycoord'].ra.deg, stdfunc='mad_std', axis=1)
-    clip_dec = sigma_clip(newtbl['skycoord'].dec.deg, stdfunc='mad_std', axis=1)
+    # Sigma-clip flux and positions to identify per-source outliers.
+    clip_flux = sigma_clip(arr_flux, stdfunc='mad_std', axis=1)
+    clip_ra = sigma_clip(arr_ra, stdfunc='mad_std', axis=1)
+    clip_dec = sigma_clip(arr_dec, stdfunc='mad_std', axis=1)
     to_mask = clip_flux.mask | clip_ra.mask | clip_dec.mask
+    keepmask = ~to_mask
+    nmatch_good = keepmask.sum(axis=1).astype(np.int32)
 
-    newtbl['mask'] = to_mask
-    newtbl['nmatch_good'] = (~to_mask).sum(axis=1)
+    # free clip objects (they reference the big arrays)
+    del clip_flux, clip_ra, clip_dec
 
-    keepmask = ~newtbl['mask']
-    weights = 1 / newtbl[flux_error_colname]**2 * keepmask
-    avgpos = SkyCoord(nanaverage(newtbl['skycoord'].ra.value, axis=1, weights=weights),
-                      nanaverage(newtbl['skycoord'].dec.value, axis=1, weights=weights),
-                      unit=(u.deg, u.deg),
-                      frame='icrs')
+    # weights: inverse-variance flux weighting, zeroed where masked
+    weights = (1.0 / (arr_fluxerr**2)) * keepmask
+
+    # position averages
+    avg_ra = nanaverage(arr_ra, axis=1, weights=weights)
+    avg_dec = nanaverage(arr_dec, axis=1, weights=weights)
+    std_ra = nanaverage((arr_ra - avg_ra[:, None])**2, weights=weights, axis=1)**0.5
+    std_dec = nanaverage((arr_dec - avg_dec[:, None])**2, weights=weights, axis=1)**0.5
+    avgpos = SkyCoord(avg_ra, avg_dec, unit=(u.deg, u.deg), frame='icrs')
+
+    # free ra/dec arrays -- no longer needed
+    del arr_ra, arr_dec
+
+    # flux and flux_err reductions
+    flux_avg = nanaverage(arr_flux, weights=weights, axis=1)
+    std_flux_avg = nanaverage((arr_flux - flux_avg[:, None])**2, weights=weights, axis=1)**0.5
+    flux_err_avg = nanaverage(arr_fluxerr, weights=weights, axis=1)
+    std_flux_err_avg = nanaverage((arr_fluxerr - flux_err_avg[:, None])**2, weights=weights, axis=1)**0.5
+    flux_err_prop = (np.nansum(arr_fluxerr**2 * weights, axis=1)
+                     / np.nansum(weights, axis=1))**0.5
+
+    # free phase-1 big arrays (keep weights / keepmask -- needed in Phase 2)
+    del arr_flux, arr_fluxerr
+
+    # Build newtbl with per-source columns
+    newtbl = Table()
+    newtbl.meta = dict(tbls[0].meta)
+    newtbl.meta['offsets'] = {tbl.meta['exposure']: (tbl.meta['ra_offset'], tbl.meta['dec_offset'])
+                              for tbl in tbls}
     newtbl['skycoord_avg'] = avgpos
-    newtbl['std_ra'] = nanaverage((newtbl['skycoord'].ra - avgpos.ra[:, None])**2, weights=weights, axis=1)**0.5
-    newtbl['std_dec'] = nanaverage((newtbl['skycoord'].dec - avgpos.dec[:, None])**2, weights=weights, axis=1)**0.5
-
-    print("Propagating flux error")
-    newtbl[f'{flux_error_colname}_prop'] = (np.nansum(newtbl[flux_error_colname]**2 * weights, axis=1) / np.nansum(weights, axis=1))**0.5
+    newtbl['std_ra'] = std_ra
+    newtbl['std_dec'] = std_dec
+    newtbl['nmatch'] = nmatch
+    newtbl['nmatch_good'] = nmatch_good
+    newtbl[f'{flux_colname}_avg'] = flux_avg
+    newtbl[f'std_{flux_colname}_avg'] = std_flux_avg
+    newtbl[f'{flux_error_colname}_avg'] = flux_err_avg
+    newtbl[f'std_{flux_error_colname}_avg'] = std_flux_err_avg
+    newtbl[f'{flux_error_colname}_prop'] = flux_err_prop
     newtbl.meta[f'{flux_error_colname}_prop'] = 'propagated uncertainty on flux = 1/sum(weights)'
 
+    # Phase 2: stream the remaining columns one at a time.
+    # ra/dec are skipped because their summaries are already in newtbl
+    # (skycoord_avg, std_ra, std_dec).  flux and flux_err are already done.
+    already_done = {flux_colname, flux_error_colname, 'ra', 'dec',
+                    'skycoord', skycoord_colname}
+    print("Phase 2: streaming remaining columns one at a time", flush=True)
     for key in column_names:
-        if key in newtbl.colnames:
-            print(f"Propagating {key}")
-            newtbl[f'{key}_avg'] = nanaverage(newtbl[f'{key}'], weights=weights, axis=1)
-            newtbl[f'std_{key}_avg'] = nanaverage((newtbl[f'{key}'] - newtbl[f'{key}_avg'][:, None])**2, weights=weights, axis=1)**0.5
-        else:
-            print(f"Skipping {key}")
+        if key in already_done:
+            continue
+        if key not in tbls[0].colnames:
+            print(f"  Skipping {key} (not in tbls[0])", flush=True)
+            continue
+        print(f"  Phase 2: streaming column {key}", flush=True)
+        arr = np.full((n_src, n_tbl), np.nan, dtype='float64')
+        for ii, tbl in enumerate(tbls):
+            if key not in tbl.colnames:
+                continue
+            keep = saved_keep[ii]
+            mi = saved_match_inds[ii]
+            arr[mi[keep], ii] = tbl[key][keep]
+        key_avg = nanaverage(arr, weights=weights, axis=1)
+        std_key = nanaverage((arr - key_avg[:, None])**2, weights=weights, axis=1)**0.5
+        newtbl[f'{key}_avg'] = key_avg
+        newtbl[f'std_{key}_avg'] = std_key
+        del arr
 
+    # weights, keepmask, saved_match_inds, saved_keep kept until function
+    # return; Python will free them after caller drops newtbl reference.
     return newtbl
 
 
