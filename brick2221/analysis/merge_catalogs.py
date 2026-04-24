@@ -378,12 +378,16 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
     saved_match_inds = [None] * n_tbl
     saved_keep = [None] * n_tbl
 
-    # Phase 1: ra/dec/flux/flux_err stack
+    # Phase 1: ra/dec/flux/flux_err stack.
+    # ra/dec stay float64: at ~270 deg, float32 has ~0.1" quantum which
+    # destroys astrometric precision (we need ~5 mas).  flux and
+    # flux_err are fine in float32 (values span 10-1e6, flux ratios and
+    # sigma-clip masks are tolerant to 1e-7 relative precision).
     print(f"Phase 1: stacking ra/dec/flux/flux_err for {n_src} sources x {n_tbl} tables", flush=True)
     arr_ra = np.full((n_src, n_tbl), np.nan, dtype='float64')
     arr_dec = np.full((n_src, n_tbl), np.nan, dtype='float64')
-    arr_flux = np.full((n_src, n_tbl), np.nan, dtype='float64')
-    arr_fluxerr = np.full((n_src, n_tbl), np.nan, dtype='float64')
+    arr_flux = np.full((n_src, n_tbl), np.nan, dtype='float32')
+    arr_fluxerr = np.full((n_src, n_tbl), np.nan, dtype='float32')
 
     for ii, tbl in enumerate(tqdm(tbls, desc='Phase 1 (ra/dec/flux stack)')):
         crds = tbl[skycoord_colname]
@@ -474,7 +478,7 @@ def combine_singleframe(tbls, max_offset=0.10 * u.arcsec, realign=False, nanaver
             print(f"  Skipping {key} (not in tbls[0])", flush=True)
             continue
         print(f"  Phase 2: streaming column {key}", flush=True)
-        arr = np.full((n_src, n_tbl), np.nan, dtype='float64')
+        arr = np.full((n_src, n_tbl), np.nan, dtype='float32')
         for ii, tbl in enumerate(tbls):
             if key not in tbl.colnames:
                 continue
