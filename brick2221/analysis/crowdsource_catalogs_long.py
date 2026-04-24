@@ -2234,12 +2234,16 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     #err = mask.cutout(im1[2].data)
     region_list = [y for x in glob.glob('regions_/*zoom*.reg') for y in
                    regions.Regions.read(x)]
-    zoomcut_list = {reg.meta['text']: reg.to_pixel(ww).to_mask().get_overlap_slices(data.shape)[0]
-                    for reg in region_list}
-    zoomcut_list = {nm:slc for nm,slc in zoomcut_list.items()
-                    if slc is not None and
-                    slc[0].start > 0 and slc[1].start > 0
-                    and slc[0].stop < data.shape[0] and slc[1].stop < data.shape[1]}
+    zoomcut_list = {}
+    for _reg in region_list:
+        try:
+            _slc = _reg.to_pixel(ww).to_mask().get_overlap_slices(data.shape)[0]
+        except Exception:
+            _slc = None
+        if (_slc is not None
+                and _slc[0].start > 0 and _slc[1].start > 0
+                and _slc[0].stop < data.shape[0] and _slc[1].stop < data.shape[1]):
+            zoomcut_list[_reg.meta['text']] = _slc
 
     zoomcut = slice(128, 256), slice(128, 256)
     modsky = data*0 # no model for daofind
@@ -2417,7 +2421,15 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         # best qfit (smallest chi-squared/pixel).  Filter the phot_basic
         # object's own state so the saved catalog and the rendered model
         # image are both built from the deduplicated set.
-        min_sep_pix = 0.5 * fwhm_pix
+        # 2026-04-24: threshold loosened from 0.5 * fwhm_pix to
+        # 1.5 * fwhm_pix.  The tighter threshold left seeded-duplicate
+        # fits at 2.5-3.2 LW pix apart uncaught, which drove
+        # progressively deeper negative residuals in iter2 (p0.1=-96)
+        # and iter3 (p0.1=-172).  1.5*FWHM catches drift-together /
+        # duplicate-seed pairs out to ~7 LW pix (~0.44"); anything real
+        # that this over-merges should reappear in the iterative pass's
+        # DAOStarFinder residual step.
+        min_sep_pix = 1.5 * fwhm_pix
         xfit_arr = np.asarray(result['x_fit'], dtype=float)
         yfit_arr = np.asarray(result['y_fit'], dtype=float)
         flux_arr = np.asarray(result['flux_fit'], dtype=float)
@@ -2590,7 +2602,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             # (ii) trigger a photutils bug in make_model_image where the
             #      composite model parameters become array-valued and overlap_slices
             #      raises ValueError("The truth value of an array ... is ambiguous").
-            min_sep_pix = 0.5 * fwhm_pix
+            # 2026-04-24: threshold loosened to 1.5 * fwhm_pix, same
+            # rationale as in phot_basic above.
+            min_sep_pix = 1.5 * fwhm_pix
             xfit_arr = np.asarray(result2['x_fit'], dtype=float)
             yfit_arr = np.asarray(result2['y_fit'], dtype=float)
             flux_arr = np.asarray(result2['flux_fit'], dtype=float)
