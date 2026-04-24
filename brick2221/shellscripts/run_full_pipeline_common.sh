@@ -30,6 +30,7 @@ DEFAULT_CRDS_PATH=/orange/adamginsburg/jwst/crds
 
 MODULES=${MODULES:-merged}
 ARRAY_RANGE=${ARRAY_RANGE:-0-23}
+BUNDLE_SIZE=${BUNDLE_SIZE:-4}
 
 set_target_defaults() {
     local name="$1"
@@ -174,13 +175,22 @@ submit_target_flow() {
     local -a catalog_jobids=()
     local filter
     for filter in "${filters[@]}"; do
+        # Bundle BUNDLE_SIZE exposures per task to cut queued tasks; the
+        # original ARRAY_RANGE covered one exposure per task.
+        local range_hi
+        if [[ "${ARRAY_RANGE}" =~ ^0-([0-9]+)$ ]]; then
+            local total=$(( ${BASH_REMATCH[1]} + 1 ))
+            range_hi=$(( (total + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
+        else
+            range_hi=$(( 24 / BUNDLE_SIZE - 1 ))
+        fi
         cat_jobid=$(sbatch --parsable --dependency=afterok:${second_pass_dep} \
-            --array="${ARRAY_RANGE}" \
+            --array="0-${range_hi}" \
             --job-name="webb-cat-${name}-${filter}-eachexp" \
             --output="${logdir}/webb-cat-${name}-${filter}-eachexp_%j-%A_%a.log" \
             --account=astronomy-dept --qos=astronomy-dept-b \
             --ntasks=2 --nodes=1 --mem=32gb --time=96:00:00 \
-            --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource")
+            --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done")
         catalog_jobids+=("${cat_jobid}")
         echo "Submitted catalog array ${cat_jobid} for ${name} ${filter}"
     done

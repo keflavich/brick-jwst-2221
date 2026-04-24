@@ -65,6 +65,18 @@ target=sickle
 field=007
 dao_catalog_jobids=()
 local_catalog_jobs=0
+BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+
+compute_array_range() {
+    local filter="$1" module="$2" dao_args="$3" iter_label="$4"
+    local iter_arg=""
+    if [[ -n "${iter_label}" ]]; then iter_arg="--iteration-label=${iter_label}"; fi
+    "${python_exec}" "${script}" \
+        --filternames="${filter}" --modules="${module}" --each-exposure \
+        --proposal_id="${proposal_id}" --target="${target}" --each-suffix="${each_suffix}" \
+        ${dao_args} ${iter_arg} --bundle-size="${BUNDLE_SIZE}" --list-missing-tasks 2>/dev/null \
+        | awk -F: '/^__MISSING_TASKS__:/{sub(/^__MISSING_TASKS__:/,""); print; found=1} END{if(!found) print ""}'
+}
 
 submit_local_catalog_array() {
     local filter="$1"
@@ -149,44 +161,70 @@ submit_catalog_job() {
         return
     fi
 
+    # Determine iteration label from dao args (iter2 is identified by
+    # --iteration-label=iter2; otherwise iter1/plain).
+    local iter_label_for_range=""
+    if [[ "${dao}" == *"--iteration-label=iter2"* ]]; then
+        iter_label_for_range="iter2"
+    fi
+    # Strip the iteration-label flag for range computation (we already passed
+    # it via iter_label_for_range).
+    local dao_for_range="${dao//--iteration-label=iter2/}"
+    dao_for_range="${dao_for_range//--postprocess-residuals/}"
+    local range
+    range=$(compute_array_range "${filter}" "${module}" "${dao_for_range}" "${iter_label_for_range}")
+    if [[ -z "${range}" ]]; then
+        echo "No outstanding tasks for ${filter} ${module} ${dao}; skipping." >&2
+        submitted_array_jobid=""
+        return
+    fi
+
     local -a dep_args=()
     if [[ -n "${dependency_jobid}" ]]; then
         dep_args+=(--dependency="afterok:${dependency_jobid}")
     fi
 
-    submitted_array_jobid=$(sbatch --parsable "${dep_args[@]}" --array=0-23 --job-name=webb-cat-sickle-${filter}-${module}-eachexp --output=${logdir}/webb-cat-sickle-${filter}-${module}-eachexp_%j-%A_%a.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${dao}")
-    echo "Submitted array job ${submitted_array_jobid} for ${filter} ${module} with args: ${dao}"
+    submitted_array_jobid=$(sbatch --parsable "${dep_args[@]}" --array="${range}" --job-name=webb-cat-sickle-${filter}-${module}-eachexp --output=${logdir}/webb-cat-sickle-${filter}-${module}-eachexp_%j-%A_%a.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${dao} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
+    echo "Submitted array job ${submitted_array_jobid} (range=${range}) for ${filter} ${module} with args: ${dao}"
 }
 
 submit_mosaic_job() {
+    # One finalize-only job covers both iter=None and iter=iter2.  Kept the
+    # bgsub flag and iteration_label args for call-site compatibility but only
+    # the first iter2 invocation per (filter, module, bgsub) actually submits:
+    # subsequent calls are no-ops (detected via the ITER_LABEL sentinel).
     local filter="$1"
     local module="$2"
     local bgsub_flag="$3"
     local dep_ids="$4"
     local iteration_label="${5:-}"
 
-    local bgsub_py="False"
-    local bgsub_tag=""
-    if [[ "${bgsub_flag}" == "--bgsub" ]]; then
-        bgsub_py="True"
-        bgsub_tag="-bgsub"
+    # Only submit on the iter2 call; the plain/iter=None call is folded in.
+    if [[ -n "${iteration_label}" && "${iteration_label}" != "iter2" ]]; then
+        return
     fi
-
-    local iter_tag=""
-    local iter_py="None"
-    if [[ -n "${iteration_label}" ]]; then
-        iter_tag="-${iteration_label}"
-        iter_py="'${iteration_label}'"
-    fi
-
-    if [[ "${run_mode}" == "local" ]]; then
-        FILTER="${filter}" MODULE="${module}" BASEPATH="${basepath}" ANALYSIS_DIR="${analysis_dir}" "${python_exec}" -c "import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=${bgsub_py}, epsf=False, blur=False, group=False, pupil='clear', iteration_label=${iter_py}) for kind in ('basic', 'iterative')]"
-        echo "Completed local residual mosaics for ${filter} ${module} ${bgsub_flag} ${iteration_label}"
+    if [[ -z "${iteration_label}" ]]; then
+        # The plain-iter call is now folded into the iter2 submission; skip.
         return
     fi
 
-    sbatch --dependency=afterok:${dep_ids} --job-name=webb-mosaic-sickle-${filter}-${module}${bgsub_tag}${iter_tag} --output=${logdir}/webb-mosaic-sickle-${filter}-${module}${bgsub_tag}${iter_tag}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exec} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=${bgsub_py}, epsf=False, blur=False, group=False, pupil='clear', iteration_label=${iter_py}) for kind in ('basic', 'iterative')]\""
-    echo "Submitted residual mosaic job for ${filter} ${module} ${bgsub_flag} ${iteration_label}"
+    local bgsub_arg=""
+    local bgsub_tag=""
+    if [[ "${bgsub_flag}" == "--bgsub" ]]; then
+        bgsub_arg="--bgsub"
+        bgsub_tag="-bgsub"
+    fi
+
+    if [[ "${run_mode}" == "local" ]]; then
+        "${python_exec}" "${script}" --filternames="${filter}" --modules="${module}" --each-exposure --proposal_id="${proposal_id}" --target="${target}" --each-suffix="${each_suffix}" --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=,iter2
+        echo "Completed local residual mosaics for ${filter} ${module} ${bgsub_flag} (both iter labels)"
+        return
+    fi
+
+    local dep_arg=""
+    [[ -n "${dep_ids}" ]] && dep_arg="--dependency=afterok:${dep_ids}"
+    sbatch ${dep_arg} --job-name=webb-mosaic-sickle-${filter}-${module}${bgsub_tag} --output=${logdir}/webb-mosaic-sickle-${filter}-${module}${bgsub_tag}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=,iter2"
+    echo "Submitted folded residual mosaic job for ${filter} ${module} ${bgsub_flag} (both iter labels)"
 }
 
 submit_catalog_and_residual_mosaic() {

@@ -511,6 +511,73 @@ def _iteration_token(iteration_label):
     return f'_{token}'
 
 
+def _predict_output_tokens(options, visit_id=None, vgroup_id=None,
+                           exposure_id=None, iteration_label=None):
+    """Reproduce the per-exposure tokens used when writing catalog outputs.
+
+    Kept in sync with save_photutils_results / save_crowdsource_results /
+    do_photometry_step so --skip-if-done and --list-missing-tasks can check
+    whether the expected output already exists without running photometry.
+    """
+    visitid_ = f'_visit{int(visit_id):03d}' if visit_id not in (None, '') else ''
+    vgroupid_, _ = normalize_vgroup_id(vgroup_id)
+    if exposure_id in (None, ''):
+        exposure_ = ''
+    else:
+        exposure_ = f'_exp{int(exposure_id):05d}'
+    desat = '_unsatstar' if options.desaturated else ''
+    bgsub = '_bgsub' if options.bgsub else ''
+    epsf_ = '_epsf' if options.epsf else ''
+    blur_ = '_blur' if options.blur else ''
+    group_ = '_group' if options.group else ''
+    if iteration_label is None:
+        iter_label = options.iteration_label or None
+    else:
+        iter_label = iteration_label if iteration_label != '' else None
+    iter_ = _iteration_token(iter_label)
+    return visitid_, vgroupid_, exposure_, desat, bgsub, epsf_, blur_, group_, iter_
+
+
+def _predict_tblfilename(basepath, filtername, module, options,
+                         visit_id, vgroup_id, exposure_id,
+                         iteration_label=None, method='daophot',
+                         basic_or_iterative='iterative'):
+    (visitid_, vgroupid_, exposure_, desat, bgsub,
+     epsf_, blur_, group_, iter_) = _predict_output_tokens(
+        options, visit_id, vgroup_id, exposure_id, iteration_label)
+    if method == 'daophot':
+        return (f'{basepath}/{filtername}/'
+                f'{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}'
+                f'{desat}{bgsub}{epsf_}{blur_}{group_}{iter_}'
+                f'_daophot_{basic_or_iterative}.fits')
+    return (f'{basepath}/{filtername}/'
+            f'{filtername.lower()}_{module}{visitid_}{vgroupid_}{exposure_}'
+            f'{desat}{bgsub}{blur_}{iter_}'
+            f'_crowdsource_unweighted.fits')
+
+
+def _expected_output_exists(basepath, filtername, module, options,
+                            visit_id, vgroup_id, exposure_id,
+                            iteration_label=None):
+    """Main output sentinel for --skip-if-done / --list-missing-tasks.
+
+    daophot-iterative is the final step when --daophot is set (or basic when
+    --basic-only); crowdsource_unweighted is the final step otherwise.
+    """
+    if options.daophot:
+        method = 'daophot'
+        basic_or_iterative = 'basic' if options.basic_only else 'iterative'
+    else:
+        method = 'crowdsource'
+        basic_or_iterative = 'unweighted'
+    path = _predict_tblfilename(basepath, filtername, module, options,
+                                visit_id, vgroup_id, exposure_id,
+                                iteration_label=iteration_label,
+                                method=method,
+                                basic_or_iterative=basic_or_iterative)
+    return os.path.exists(path)
+
+
 def _as_table(data):
     if isinstance(data, Table):
         return Table(data, copy=True)
@@ -1615,6 +1682,21 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                       default=False,
                       action='store_true',
                       help='After --each-exposure, resample all per-exposure residuals into a residual_i2d product by default; this parameter skips that step. Residual kinds are auto-determined based on enabled photometry types.')
+    parser.add_option('--bundle-size', dest='bundle_size',
+                      default=1, type='int',
+                      help='Number of consecutive per-exposure iterations each SLURM array task handles (default 1 = one exposure per task).')
+    parser.add_option('--skip-if-done', dest='skip_if_done',
+                      default=False, action='store_true',
+                      help='In --each-exposure mode, skip any exposure whose main output catalog already exists.')
+    parser.add_option('--finalize-only', dest='finalize_only',
+                      default=False, action='store_true',
+                      help='Skip photometry and only run mosaic_each_exposure_residuals for the filter/module/iteration labels requested.')
+    parser.add_option('--iteration-labels', dest='iteration_labels',
+                      default='',
+                      help='Comma-separated iteration labels for --finalize-only (empty entry = None). Example: ",iter2" runs both None and iter2.')
+    parser.add_option('--list-missing-tasks', dest='list_missing_tasks',
+                      default=False, action='store_true',
+                      help='Enumerate --each-exposure work and print a comma-separated SLURM --array spec of only the bundled task indices that still need to run. Writes only the spec to stdout; logs go to stderr.')
     (options, args) = parser.parse_args()
 
     filternames = options.filternames.split(",")
@@ -1697,8 +1779,85 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
 
     pl.close('all')
 
+    if options.finalize_only:
+        if options.iteration_labels != '':
+            iteration_labels = [tok if tok != '' else None
+                                for tok in options.iteration_labels.split(',')]
+        else:
+            iteration_labels = [options.iteration_label or None]
+        mosaic_residual_kinds = []
+        if options.daophot:
+            mosaic_residual_kinds = ['basic'] if options.basic_only else ['basic', 'iterative']
+        print(f"--finalize-only: running mosaics for labels={iteration_labels} kinds={mosaic_residual_kinds}",
+              file=sys.stderr)
+        for module in modules:
+            for filtername in filternames:
+                for lbl in iteration_labels:
+                    for kind in mosaic_residual_kinds:
+                        mosaic_each_exposure_residuals(basepath=basepath,
+                                                      filtername=filtername,
+                                                      proposal_id=proposal_id,
+                                                      field=field,
+                                                      module=module,
+                                                      residual_kind=kind,
+                                                      desat=options.desaturated,
+                                                      bgsub=options.bgsub,
+                                                      epsf=options.epsf,
+                                                      blur=options.blur,
+                                                      group=options.group,
+                                                      pupil='clear',
+                                                      iteration_label=lbl)
+        return
+
+    if options.list_missing_tasks:
+        bundle = max(1, options.bundle_size)
+        # Silence log chatter so only the final array spec reaches stdout.
+        _real_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            index = -1
+            missing_tasks = set()
+            max_task = -1
+            for module in modules:
+                for filtername in filternames:
+                    if not options.each_exposure:
+                        continue
+                    for visitid in range(1, nvisits[proposal_id][target] + 1):
+                        visitid = f'{visitid:03d}'
+                        try:
+                            filenames = get_filenames(basepath, filtername, proposal_id,
+                                                      field, visitid=visitid,
+                                                      each_suffix=options.each_suffix,
+                                                      module=module, pupil='clear')
+                        except Exception as ex:
+                            print(f"list-missing-tasks: no files for {filtername} {module} visit {visitid}: {ex}")
+                            continue
+                        for filename in sorted(filenames):
+                            index += 1
+                            task_idx = index // bundle
+                            if task_idx > max_task:
+                                max_task = task_idx
+                            exposure_id = filename.split("_")[2]
+                            visit_id = filename.split("_")[0][-3:]
+                            vgroup_id = filename.split("_")[1]
+                            if not _expected_output_exists(
+                                    basepath, filtername, module, options,
+                                    visit_id, vgroup_id, exposure_id,
+                                    iteration_label=options.iteration_label or None):
+                                missing_tasks.add(task_idx)
+        finally:
+            sys.stdout = _real_stdout
+        # Emit a sentinel-prefixed line so callers can grep it out of stdout
+        # regardless of any module-import chatter that landed in stdout before
+        # main() rerouted it.
+        spec = ','.join(str(i) for i in sorted(missing_tasks))
+        sys.stdout.write(f'__MISSING_TASKS__:{spec}\n')
+        sys.stdout.flush()
+        return
+
     print(f"options: {options}")
 
+    bundle_size = max(1, options.bundle_size)
     # need to have incrementing _before_ test
     index = -1
 
@@ -1715,17 +1874,31 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     if len(filenames) > 0:
                         print(f"Looping over filenames {filenames} for filter={filtername} proposal={proposal_id} field={field} visitid={visitid}")
                         # jw02221001001_07101_00024_nrcblong_destreak_o001_crf.fits
-                        for filename in filenames:
+                        for filename in sorted(filenames):
 
                             index += 1
-                            # enable array jobs
-                            if os.getenv('SLURM_ARRAY_TASK_ID') is not None and int(os.getenv('SLURM_ARRAY_TASK_ID')) != index:
-                                print(f'Task={os.getenv("SLURM_ARRAY_TASK_ID")} does not match index {index}')
-                                continue
+                            # enable array jobs with bundle-size K: task j
+                            # handles indices [j*K, j*K + K)
+                            task_env = os.getenv('SLURM_ARRAY_TASK_ID')
+                            if task_env is not None:
+                                task_idx = int(task_env)
+                                lo = task_idx * bundle_size
+                                hi = lo + bundle_size
+                                if index < lo or index >= hi:
+                                    print(f'Task={task_env} (bundle {bundle_size}, range [{lo},{hi})) skipping index {index}')
+                                    continue
 
                             exposure_id = filename.split("_")[2]
                             visit_id = filename.split("_")[0][-3:]
                             vgroup_id = filename.split("_")[1]
+                            if options.skip_if_done and _expected_output_exists(
+                                    basepath, filtername, module, options,
+                                    visit_id, vgroup_id, exposure_id,
+                                    iteration_label=options.iteration_label or None):
+                                print(f'skip-if-done: expected output exists for '
+                                      f'{filtername} {module} visit={visit_id} '
+                                      f'vgroup={vgroup_id} exp={exposure_id}; skipping.')
+                                continue
                             do_photometry_step(options, filtername, module, detector,
                                                field, basepath, filename, proposal_id,
                                                crowdsource_default_kwargs, exposurenumber=int(exposure_id),
