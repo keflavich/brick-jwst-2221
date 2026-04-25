@@ -838,6 +838,7 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     if module == 'merged':
         modules = ['nrca', 'nrcb',]
         modules += [f'nrc{ab}{n}' for ab in 'ab' for n in range(1, 5)]
+        modules += ['nrcalong', 'nrcblong']  # sgrb2 LW modules
     elif module in ('nrca', 'nrcb'):
         # Exposure-level catalogs are often saved with detector-qualified module names.
         modules = [module] + [f'{module}{n}' for n in range(1, 5)]

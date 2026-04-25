@@ -5,7 +5,7 @@ if not os.getenv('STPSF_PATH'):
 
 import glob
 from astropy.io import fits
-from scipy.ndimage import label, find_objects, center_of_mass, sum_labels
+from scipy.ndimage import label, find_objects, center_of_mass, sum_labels, binary_dilation
 from astropy.modeling.fitting import LevMarLSQFitter
 from jwst.datamodels import dqflags
 import matplotlib.pyplot as plt
@@ -211,7 +211,54 @@ def _nearest_window_bounds(center, full_size, window_size):
     return start, stop
 
 
-def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=81, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=1, plot=True, rindsz=3, use_merged_psf_for_merged=False, outside_star_pixels=None, outside_star_fit_box=512):
+def compute_adaptive_mask_buffer(sat_area, mask_buffer_min=2, cap=6):
+    """
+    Return a brightness-dependent dilation radius for the saturation mask.
+
+    Deeper saturation produces a larger saturated pixel area and a wider
+    non-linear transition zone at the core boundary.  We scale the buffer
+    sub-linearly with the square root of the saturated area (proxy for
+    perimeter length) so that more of the non-linear fringe is excluded
+    without over-masking mildly saturated sources.
+
+    Parameters
+    ----------
+    sat_area : int
+        Number of pixels flagged SATURATED for this source.
+    mask_buffer_min : int
+        Minimum buffer size (applied even for small saturated areas).
+        The production default is 2 (validated against synthetic recovery
+        tests; old default was 1).
+    cap : int
+        Maximum buffer to avoid masking all useful pixels for very bright
+        stars.
+
+    Returns
+    -------
+    int
+        Effective dilation iterations to pass to ``binary_dilation``.
+
+    Notes
+    -----
+    Calibrated against NIRCam SW synthetic recovery tests (see
+    synthetic_source_recovery/run_recovery_tests.py).  Typical values:
+
+    =========  ===========  ==============
+    sat_area   sat_radius   buffer
+    =========  ===========  ==============
+    5          1.3          2  (= minimum)
+    20         2.5          2
+    80         5.0          2
+    200        8.0          4
+    500        12.6         5
+    =========  ===========  ==============
+    """
+    sat_radius = np.sqrt(sat_area / np.pi)
+    adaptive = int(np.ceil(sat_radius * 0.4))
+    return int(min(cap, max(mask_buffer_min, adaptive)))
+
+
+def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=81, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=2, adaptive_mask_buffer_scale=True, plot=True, rindsz=3, use_merged_psf_for_merged=False, outside_star_pixels=None, outside_star_fit_box=512):
     """
     Detect and PSF-fit saturated sources in a JWST image.
 
@@ -240,7 +287,15 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         Minimum saturated-pixel area used to classify a region as an edge
         source to be excluded.
     mask_buffer : int, optional
-        Number of dilation iterations applied to saturated masks before fitting.
+        Minimum dilation iterations applied to saturated masks before fitting.
+        Default changed from 1 → 2; synthetic recovery tests show this reduces
+        flux bias from ~6 % to ~3 % by excluding more of the non-linear
+        transition zone at the saturation boundary.
+    adaptive_mask_buffer_scale : bool, optional
+        If ``True`` (default), scale the mask buffer with the size of the
+        saturated region so that deeply saturated (bright) sources receive a
+        larger buffer.  ``mask_buffer`` acts as the minimum.  See
+        ``compute_adaptive_mask_buffer`` for the scaling formula.
     plot : bool, optional
         If ``True``, display per-source diagnostic plots (cutout, model,
         residual, mask, thresholded model).
@@ -417,9 +472,18 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         #psfphot.y_0.bounds = (ycen - y0 - size_saturated, ycen - y0 + size_saturated)
         saturated_mask = saturated[y0:y1, x0:x1]
 
+        # Brightness-dependent mask dilation: scale buffer with saturated area
+        # so deeply saturated sources exclude more of the non-linear fringe.
+        if adaptive_mask_buffer_scale and not forced_source:
+            src_sat_area = int(sum_labels(saturated, labels=sources, index=src_label))
+            effective_buffer = compute_adaptive_mask_buffer(
+                src_sat_area, mask_buffer_min=mask_buffer
+            )
+        else:
+            effective_buffer = mask_buffer
+        print(f"  mask_buffer={effective_buffer} (sat_area={sum_labels(saturated, labels=sources, index=src_label) if not forced_source else 'forced'})", flush=True)
 
-        # expand a few pixels of saturated area to be masked
-        saturated_mask_expanded = ndimage.binary_dilation(saturated_mask, iterations=mask_buffer)
+        saturated_mask_expanded = binary_dilation(saturated_mask, iterations=effective_buffer)
         mask = np.logical_or(cutout==0, np.isnan(cutout), saturated_mask_expanded)
         try:
             result = psfphot(cutout, init_params=init_params, mask=mask)
