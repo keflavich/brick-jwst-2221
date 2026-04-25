@@ -839,6 +839,10 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
         modules = ['nrca', 'nrcb',]
         modules += [f'nrc{ab}{n}' for ab in 'ab' for n in range(1, 5)]
         modules += ['nrcalong', 'nrcblong']  # sgrb2 LW modules
+        # iter3 LW per-frame outputs are written with module='merged'
+        # in the filename (the script passes --modules=merged); include
+        # the literal 'merged' token so the merge glob picks them up.
+        modules += ['merged']
     elif module in ('nrca', 'nrcb'):
         # Exposure-level catalogs are often saved with detector-qualified module names.
         modules = [module] + [f'{module}{n}' for n in range(1, 5)]
@@ -1670,6 +1674,8 @@ def main():
                                     print(f'daophot basic {module} desat={desat} bgsub={bgsub} epsf={epsf} blur={blur} fitpsf={fitpsf} target={target}', flush=True)
                                     if blur and not options.strict_require_blur:
                                         print("Skipping missing blur files")
+                                    elif isinstance(ex, ValueError) and 'had no matches' in str(ex):
+                                        print(f"Skipping missing daophot basic catalogs (only daoiterative was run): {ex}", flush=True)
                                     else:
                                         print(f"Exception when running merge_daophot: {ex}, {type(ex)}, {str(ex)}", flush=True)
                                         exc_tb = sys.exc_info()[2]
