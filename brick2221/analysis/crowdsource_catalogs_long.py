@@ -1636,6 +1636,14 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
                     default=False,
                     action='store_true',
                     help="perform global background-subtraction first?", metavar="bgsub")
+    parser.add_option("--use-iter3-residual-bg", dest="use_iter3_residual_bg",
+                    default=False,
+                    action='store_true',
+                    help=("Subtract the iter3 residual smoothed-background image "
+                          "(<frame>_iter3_daophot_iterative_residual_smoothed_bg.fits) "
+                          "from the data before fitting.  Use with --iteration-label=iter2residbg "
+                          "or =iter3residbg.  Built by make_iter3_residual_bgmaps.py."),
+                    metavar="use_iter3_residual_bg")
     parser.add_option("--epsf", dest="epsf",
                     default=False,
                     action='store_true',
@@ -2084,6 +2092,40 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         data[zeros] = 0
 
         fits.PrimaryHDU(data=data, header=im1['SCI'].header).writeto(filename.replace(".fits", "_bgsub.fits"), overwrite=True)
+
+    if getattr(options, 'use_iter3_residual_bg', False):
+        # 2026-04-25: alternative background subtraction that uses the
+        # iter3 photometry residual (3x3-median-smoothed) as the
+        # background estimate.  Built by make_iter3_residual_bgmaps.py
+        # and consumed by the iter2-residbg / iter3-residbg cascade.
+        # Filename pattern matches the sibling per-frame iter3 residual
+        # with ``_smoothed_bg`` appended (see SMOOTHED_BG_SUFFIX in
+        # make_iter3_residual_bgmaps.py).
+        residbg_path = filename.replace(
+            '.fits', '_iter3_daophot_iterative_residual_smoothed_bg.fits')
+        if not os.path.exists(residbg_path):
+            raise ValueError(
+                f"--use-iter3-residual-bg requires {residbg_path} to exist; "
+                f"run `python make_iter3_residual_bgmaps.py --target=<target>` "
+                f"after iter3 photometry+residuals are complete."
+            )
+        with fits.open(residbg_path) as bgh:
+            if 'SCI' in [h.name for h in bgh]:
+                bg_data = bgh['SCI'].data.astype(float)
+            else:
+                bg_data = bgh[0].data.astype(float)
+        if bg_data.shape != data.shape:
+            raise ValueError(
+                f"residual-bg shape {bg_data.shape} != data shape {data.shape} "
+                f"(file: {residbg_path})"
+            )
+        bg_finite = np.where(np.isfinite(bg_data), bg_data, 0.0)
+        zeros = data == 0
+        data = data - bg_finite
+        data[zeros] = 0
+        background_map = bg_finite
+        print(f"Subtracted iter3-residual-smoothed bg ({residbg_path}) from data: "
+              f"sum={float(np.nansum(bg_finite)):.3e} counts", flush=True)
 
     # try to limit memory use before we start photometry
     data = data.astype('float32')
