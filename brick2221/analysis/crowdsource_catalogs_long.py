@@ -1398,6 +1398,18 @@ def get_psf_model(filtername, proposal_id, field,
                     continue
 
         if use_grid:
+            # 2026-04-24: stpsf's to_griddedpsfmodel sometimes returns
+            # a list of grids when module='merged' is used for the LW
+            # detectors (one grid per detector), not a single
+            # GriddedPSFModel.  The downstream code (e.g.
+            # ``dao_psf_model.flux.min = 0``) treats the return as a
+            # single grid and crashes with
+            # ``AttributeError: 'list' object has no attribute 'flux'``.
+            # The use_grid=False branch already handles this; mirror it
+            # here so both LW (cloudc + brick + sgrb2 etc) iter3 runs
+            # don't fail on PSF setup.
+            if isinstance(grid, list):
+                grid = grid[0]
             return grid, WrappedPSFModel(grid, stampsz=stampsz)
         else:
             # there's no way to use a grid across all detectors.
@@ -1956,12 +1968,28 @@ def get_filenames(basepath, filtername, proposal_id, field, each_suffix, module,
     # jw01182004002_02101_00012_nrcalong_destreak_o004_crf.fits
     # jw02221001001_07101_00012_nrcalong_destreak_o001_crf.fits
     # jw02221001001_05101_00022_nrcb3_destreak_o001_crf.fits
-    glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}{field}{visitid}*{module}*{each_suffix}.fits'
-    fglob = glob.glob(glstr)
-    if len(fglob) == 0:
-        raise ValueError(f"No matches found to {glstr}")
+    # 2026-04-24: when module='merged' (used by the LW per-frame
+    # photometry runs to indicate "both NIRCam long-wavelength
+    # detectors"), the per-frame data files actually carry the
+    # detector-specific tokens 'nrcalong' / 'nrcblong' in their names.
+    # The earlier ``*{module}*`` glob with module='merged' returned 0
+    # files for any LW filter because those files don't have the
+    # literal substring 'merged'.  Expand the search so module='merged'
+    # matches both detector tokens.
+    if module == 'merged':
+        glob_modules = ['nrcalong', 'nrcblong']
     else:
-        return fglob
+        glob_modules = [module]
+    fglob = []
+    glstr_list = []
+    for gm in glob_modules:
+        glstr = f'{basepath}/{filtername}/pipeline/jw0{proposal_id}{field}{visitid}*{gm}*{each_suffix}.fits'
+        glstr_list.append(glstr)
+        fglob.extend(glob.glob(glstr))
+    if len(fglob) == 0:
+        raise ValueError(f"No matches found to any of {glstr_list}")
+    else:
+        return sorted(set(fglob))
 
 
 def get_filename(basepath, filtername, proposal_id, field, module, options, pupil='clear'):
