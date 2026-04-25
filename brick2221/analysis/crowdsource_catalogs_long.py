@@ -1,5 +1,7 @@
 print("Starting crowdsource_catalogs_long", flush=True)
 import sys
+import tracemalloc
+import resource
 import glob
 import time
 import json
@@ -1331,7 +1333,8 @@ def get_psf_model(filtername, proposal_id, field,
                   target='brick',
                   stampsz=19,
                   oversample=1,
-                  basepath='/blue/adamginsburg/adamginsburg/jwst/'):
+                  basepath='/blue/adamginsburg/adamginsburg/jwst/',
+                  psf_cache_dir=None):
     """
     Return two types of PSF model, the first for DAOPhot and the second for Crowdsource
     """
@@ -1379,13 +1382,16 @@ def get_psf_model(filtername, proposal_id, field,
                     else:
                         nrc.detector = f'{module.upper()}1' #TODO: figure out a way to use all 4?
                     # default oversampling is 4
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True,
+                                       fov_pixels=101, outdir=psf_cache_dir or '.')
                 elif 'nrc' in module:
                     # Allow nrca1, nrca2, ...
                     nrc.detector = module.upper()
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True)
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True,
+                                       fov_pixels=101, outdir=psf_cache_dir or '.')
                 else:
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True)
+                    grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True,
+                                       fov_pixels=101, outdir=psf_cache_dir or '.')
                 has_downloaded = True
             except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
                 print(f"Failed to build PSF: {ex}", flush=True)
@@ -2048,6 +2054,21 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     nsigma is the threshold to multiply the error estimate by to get the detection threshold
     """
     print(f"Starting {field} filter {filtername} module {module} detector {detector} {exposurenumber}", flush=True)
+
+    if not tracemalloc.is_tracing():
+        tracemalloc.start(25)
+
+    def _mem_report(label):
+        snap = tracemalloc.take_snapshot()
+        top = snap.statistics('lineno')
+        peak_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        try:
+            curr_kb = int(open('/proc/self/status').read().split('VmRSS:')[1].split()[0])
+        except Exception:
+            curr_kb = 0
+        print(f"=MEM= {label}: curr={curr_kb/1e6:.2f}GB peak={peak_kb/1e6:.2f}GB", flush=True)
+        for s in top[:8]:
+            print(f"  {s.size/1e9:.3f}GB {s.traceback[0]}", flush=True)
     fwhm_tbl = Table.read(FWHM_TABLE)
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -2131,6 +2152,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     data = data.astype('float32')
 
     # Load PSF model
+    _mem_report("before PSF load")
     grid, psf_model = get_psf_model(filtername, proposal_id, field,
                                     module=module,
                                     use_webbpsf=use_webbpsf,
@@ -2139,8 +2161,10 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                     blur=options.blur,
                                     target=options.target,
                                     obsdate=obsdate,
-                                    basepath='/blue/adamginsburg/adamginsburg/jwst/')
+                                    basepath='/blue/adamginsburg/adamginsburg/jwst/',
+                                    psf_cache_dir=os.path.join(basepath, 'psfs'))
     dao_psf_model = grid
+    _mem_report("after PSF load")
 
     # bound the flux to be >= 0 (no negative peak fitting)
     dao_psf_model.flux.min = 0
@@ -2397,6 +2421,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             f'dao_rejected_duplicates={seed_aug_stats["detection_rejected_match"]} '
             f'seed_rows_final={len(_as_table(seed_catalog))}'
         )
+        _mem_report("before SeededFinder")
         finstars = SeededFinder(seed_catalog, ww=ww,
                                 preferred_skycoord_col=preferred_seed_skycoord_col)(nan_replaced_data, mask=mask)
         seeded_init_params = Table()
@@ -2627,6 +2652,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     if options.daophot:
         t0 = time.time()
         print("Starting basic PSF photometry", flush=True)
+        _mem_report("before phot_basic setup")
 
         basic_finder = None if seeded_init_params is not None else daofind_tuned
         _phot_basic_extra = {}
@@ -2648,11 +2674,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                   )
 
         print("About to do BASIC photometry....")
+        _mem_report("before phot_basic call")
         if seeded_init_params is not None:
             result = phot_basic(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, 1e10, err))
         else:
             result = phot_basic(nan_replaced_data, mask=mask, error=np.where(bad, 1e10, err))
         print(f"Done with BASIC photometry. len(result)={len(result)}  dt={time.time() - t0}")
+        _mem_report("after phot_basic")
 
         # Post-fit deduplication: the unseeded DAO finder can detect multiple
         # local maxima near a single bright star; each is fit independently
@@ -2738,7 +2766,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         stars['x'] = stars['x_fit']
         stars['y'] = stars['y_fit']
         print("Creating BASIC residual image, using 21x21 patches")
+        _mem_report("before basic model image")
         modsky = _make_model_image(phot_basic, data.shape, psf_shape=(21, 21), include_local_bkg=False)
+        _mem_report("after basic model image")
         # The fitter saw ``data - satstar_model`` (when a satstar model
         # exists), so the saved residual must subtract the satstar model
         # too -- otherwise the bright-star wings reappear and dominate
@@ -2831,11 +2861,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                               )
 
             print("About to do ITERATIVE photometry....")
+            _mem_report("before phot_iter call")
             if seeded_init_params is not None:
                 result2 = phot_iter(nan_replaced_data, mask=mask, init_params=seeded_init_params, error=np.where(bad, 1e10, err))
             else:
                 result2 = phot_iter(nan_replaced_data, mask=mask, error=np.where(bad, 1e10, err))
             print(f"Done with ITERATIVE photometry. len(result2)={len(result2)}  dt={time.time() - t0}")
+            _mem_report("after phot_iter")
 
             # Apply the same post-fit deduplication to the iterative results.
             # IterativePSFPhotometry can produce drift-together duplicates across
@@ -2923,7 +2955,9 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             stars['y'] = stars['y_fit']
 
             print("Creating iterative residual")
+            _mem_report("before iter model image")
             modsky = _make_model_image(phot_iter, data.shape, psf_shape=(21, 21), include_local_bkg=False)
+            _mem_report("after iter model image")
             data_for_residual = (data if satstar_model_subtracted is None
                                  else data - satstar_model_subtracted)
             residual = data_for_residual - modsky
