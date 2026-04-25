@@ -1354,54 +1354,79 @@ def get_psf_model(filtername, proposal_id, field,
 
     # TODO: factor this out into its own downloading function and make it work with NIRCAM and MIRI both
     if use_webbpsf:
-        with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
-            api_token = fh.read().strip()
-        from astroquery.mast import Mast
+        # PSF cache check: if a pre-built fovp101 samp2 file exists, load it directly
+        # and skip the expensive MAST download + Poppy PSF generation (~17-20 min, ~300 GB peak).
+        # Naming convention mirrors WebbPSF: nircam_{detector}_{filter}_fovp101_samp2_npsf16.fits
+        _psf_oversample = 2
+        _psf_outdir = psf_cache_dir or '.'
+        if module in ('nrca', 'nrcb'):
+            if 'F4' in filtername.upper() or 'F3' in filtername.upper():
+                _cache_detector = f'{module.upper()}5'
+            else:
+                _cache_detector = f'{module.upper()}1'
+        elif 'nrc' in module:
+            _cache_detector = module.upper()
+        else:
+            _cache_detector = None  # all_detectors path — handled below
 
-        for ii in range(10):
-            try:
-                Mast.login(api_token.strip())
-                break
-            except (requests.exceptions.ReadTimeout, urllib3.exceptions.ReadTimeoutError, TimeoutError) as ex:
-                print(f"Attempt {ii} to log in to MAST: {ex}")
-                time.sleep(5)
-        os.environ['MAST_API_TOKEN'] = api_token.strip()
+        grid = None
+        if _cache_detector is not None:
+            _psf_fn = os.path.join(_psf_outdir,
+                f'nircam_{_cache_detector.lower()}_{filtername.lower()}'
+                f'_fovp101_samp{_psf_oversample}_npsf16.fits')
+            if os.path.exists(_psf_fn):
+                print(f"Loading cached PSF grid (skipping MAST/Poppy): {_psf_fn}", flush=True)
+                grid = to_griddedpsfmodel(_psf_fn)
+                if isinstance(grid, list):
+                    grid = grid[0]
 
-        has_downloaded = False
-        ntries = 0
-        while not has_downloaded:
-            ntries += 1
-            try:
-                print("Attempting to download WebbPSF data", flush=True)
-                nrc = webbpsf.NIRCam()
-                nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
-                nrc.filter = filtername
-                if module in ('nrca', 'nrcb'):
-                    if 'F4' in filtername.upper() or 'F3' in filtername.upper():
-                        nrc.detector = f'{module.upper()}5' # I think NRCA5 must be the "long" detector?
+        if grid is None:
+            with open(os.path.expanduser('~/.mast_api_token'), 'r') as fh:
+                api_token = fh.read().strip()
+            from astroquery.mast import Mast
+
+            for ii in range(10):
+                try:
+                    Mast.login(api_token.strip())
+                    break
+                except (requests.exceptions.ReadTimeout, urllib3.exceptions.ReadTimeoutError, TimeoutError) as ex:
+                    print(f"Attempt {ii} to log in to MAST: {ex}")
+                    time.sleep(5)
+            os.environ['MAST_API_TOKEN'] = api_token.strip()
+
+            has_downloaded = False
+            ntries = 0
+            while not has_downloaded:
+                ntries += 1
+                try:
+                    print("Attempting to download WebbPSF data", flush=True)
+                    nrc = webbpsf.NIRCam()
+                    nrc.load_wss_opd_by_date(f'{obsdate}T00:00:00')
+                    nrc.filter = filtername
+                    if module in ('nrca', 'nrcb'):
+                        if 'F4' in filtername.upper() or 'F3' in filtername.upper():
+                            nrc.detector = f'{module.upper()}5'
+                        else:
+                            nrc.detector = f'{module.upper()}1'
+                        grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True,
+                                           fov_pixels=101, oversample=_psf_oversample, outdir=_psf_outdir)
+                    elif 'nrc' in module:
+                        nrc.detector = module.upper()
+                        grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True,
+                                           fov_pixels=101, oversample=_psf_oversample, outdir=_psf_outdir)
                     else:
-                        nrc.detector = f'{module.upper()}1' #TODO: figure out a way to use all 4?
-                    # default oversampling is 4
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True,
-                                       fov_pixels=101, outdir=psf_cache_dir or '.')
-                elif 'nrc' in module:
-                    # Allow nrca1, nrca2, ...
-                    nrc.detector = module.upper()
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=False, verbose=True, save=True,
-                                       fov_pixels=101, outdir=psf_cache_dir or '.')
-                else:
-                    grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True,
-                                       fov_pixels=101, outdir=psf_cache_dir or '.')
-                has_downloaded = True
-            except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-                print(f"Failed to build PSF: {ex}", flush=True)
-            except Exception as ex:
-                print(ex, flush=True)
-                if ntries > 10:
-                    # avoid infinite loops
-                    raise ValueError("Failed to download PSF, probably because of an error listed above")
-                else:
-                    continue
+                        grid = nrc.psf_grid(num_psfs=16, all_detectors=True, verbose=True, save=True,
+                                           fov_pixels=101, oversample=_psf_oversample, outdir=_psf_outdir)
+                    has_downloaded = True
+                except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
+                    print(f"Failed to build PSF: {ex}", flush=True)
+                except Exception as ex:
+                    print(ex, flush=True)
+                    if ntries > 10:
+                        # avoid infinite loops
+                        raise ValueError("Failed to download PSF, probably because of an error listed above")
+                    else:
+                        continue
 
         if use_grid:
             # 2026-04-24: stpsf's to_griddedpsfmodel sometimes returns
