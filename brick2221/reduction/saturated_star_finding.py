@@ -430,7 +430,7 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         #psf_model = WrappedPSFModel(grid, stampsz=(size,size))
 
         psfphot = PSFPhotometry(
-                                localbkg_estimator=LocalBackground(15, 30),
+                                localbkg_estimator=LocalBackground(25, 50),
                                 fitter=lmfitter,
                                 psf_model=big_grid,
                                 fit_shape=size,
