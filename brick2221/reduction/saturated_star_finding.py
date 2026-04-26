@@ -258,7 +258,58 @@ def compute_adaptive_mask_buffer(sat_area, mask_buffer_min=2, cap=6):
     return int(min(cap, max(mask_buffer_min, adaptive)))
 
 
-def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=81, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=2, adaptive_mask_buffer_scale=True, plot=True, rindsz=3, use_merged_psf_for_merged=False, outside_star_pixels=None, outside_star_fit_box=512):
+def compute_adaptive_bkg_annulus(sat_area, bkg_inner_min=15, bkg_inner_max=50):
+    """
+    Brightness-dependent background annulus radii for saturated-source fitting.
+
+    Deeply saturated (bright) sources have extended PSF wings that contaminate
+    the background annulus at close radii; this function scales the inner radius
+    outward with the saturation extent so that the background estimate is not
+    biased by unmasked PSF flux.  For marginally saturated sources the standard
+    narrow annulus (15, 30) is returned.
+
+    Parameters
+    ----------
+    sat_area : int
+        Number of pixels flagged SATURATED for this source.
+    bkg_inner_min : float
+        Inner radius (pixels) used for marginally saturated sources.  Default 15.
+    bkg_inner_max : float
+        Upper cap on the inner radius (pixels).  Default 50.
+
+    Returns
+    -------
+    bkg_inner, bkg_outer : int, int
+        Inner and outer radii of the background annulus.  The outer radius is
+        always 2 × inner.
+
+    Notes
+    -----
+    Calibrated against NIRCam SW synthetic recovery tests: ``sat_area=37``
+    (F200W mag ≈ 10.5, Δmag ≈ +4) maps to ``bkg_inner=25``, matching the
+    optimal parameters found in the sweep.  The power-law exponent 0.75
+    (≈ 3/4) approximates the expected scaling from a PSF wing profile that
+    falls as r^{−2.8}: to maintain constant contamination,
+    bkg_inner ∝ flux^{1/2.8} ∝ sat_radius^{2/2.8 × 2} = sat_radius^{1.4/2} ≈ sat_radius^{0.75}.
+
+    Typical values for NIRCam SW at ~2 µm:
+
+    =========  ===========  ============  ============
+    sat_area   sat_radius   bkg_inner     bkg_outer
+    =========  ===========  ============  ============
+    1–5        0.6–1.3      15            30
+    20         2.5          21            42
+    37         3.4          25            50
+    100        5.6          37            74
+    =========  ===========  ============  ============
+    """
+    sat_radius = np.sqrt(sat_area / np.pi)
+    bkg_inner = int(np.clip(np.round(10 * sat_radius ** 0.75), bkg_inner_min, bkg_inner_max))
+    bkg_outer = 2 * bkg_inner
+    return bkg_inner, bkg_outer
+
+
+def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psfs/', pad=81, size=None, min_sep_from_edge=5, edge_npix=10000, mask_buffer=2, adaptive_mask_buffer_scale=True, adaptive_bkg_annulus=True, plot=True, rindsz=3, use_merged_psf_for_merged=False, outside_star_pixels=None, outside_star_fit_box=512):
     """
     Detect and PSF-fit saturated sources in a JWST image.
 
@@ -296,6 +347,12 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         saturated region so that deeply saturated (bright) sources receive a
         larger buffer.  ``mask_buffer`` acts as the minimum.  See
         ``compute_adaptive_mask_buffer`` for the scaling formula.
+    adaptive_bkg_annulus : bool, optional
+        If ``True`` (default), scale the background annulus radii with the
+        saturation area so that deeply saturated sources use a wider annulus
+        (avoiding PSF wing contamination) while marginally saturated sources
+        use the standard narrow annulus (15, 30).  See
+        ``compute_adaptive_bkg_annulus`` for the calibration.
     plot : bool, optional
         If ``True``, display per-source diagnostic plots (cutout, model,
         residual, mask, thresholded model).
@@ -429,8 +486,34 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
 
         #psf_model = WrappedPSFModel(grid, stampsz=(size,size))
 
+        # Compute sat_area once; used by both adaptive mask buffer and adaptive bkg annulus.
+        if not forced_source:
+            src_sat_area = int(sum_labels(saturated, labels=sources, index=src_label))
+        else:
+            src_sat_area = None
+
+        # Brightness-dependent mask dilation: scale buffer with saturated area
+        # so deeply saturated sources exclude more of the non-linear fringe.
+        if adaptive_mask_buffer_scale and src_sat_area is not None:
+            effective_buffer = compute_adaptive_mask_buffer(
+                src_sat_area, mask_buffer_min=mask_buffer
+            )
+        else:
+            effective_buffer = mask_buffer
+
+        # Brightness-dependent background annulus: wider for brighter sources to
+        # avoid PSF-wing contamination of the background estimate.
+        if adaptive_bkg_annulus and src_sat_area is not None:
+            bkg_inner, bkg_outer = compute_adaptive_bkg_annulus(src_sat_area)
+        else:
+            bkg_inner, bkg_outer = 25, 50   # fixed wide annulus as fallback
+
+        print(f"  mask_buffer={effective_buffer}  bkg=({bkg_inner},{bkg_outer})"
+              f"  (sat_area={src_sat_area if src_sat_area is not None else 'forced'})",
+              flush=True)
+
         psfphot = PSFPhotometry(
-                                localbkg_estimator=LocalBackground(25, 50),
+                                localbkg_estimator=LocalBackground(bkg_inner, bkg_outer),
                                 fitter=lmfitter,
                                 psf_model=big_grid,
                                 fit_shape=size,
@@ -467,21 +550,7 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
                         print(f"Could not set bounds for {pname}; parameter object: {param}")
             else:
                 print(f"Model does not have parameter '{pname}'; param_names={getattr(model,'param_names',None)}")
-        # let x_0 be bounds at saturated pixels
-        #psfphot.x_0.bounds = (xcen - x0 - size_saturated , xcen - x0 + size_saturated)
-        #psfphot.y_0.bounds = (ycen - y0 - size_saturated, ycen - y0 + size_saturated)
         saturated_mask = saturated[y0:y1, x0:x1]
-
-        # Brightness-dependent mask dilation: scale buffer with saturated area
-        # so deeply saturated sources exclude more of the non-linear fringe.
-        if adaptive_mask_buffer_scale and not forced_source:
-            src_sat_area = int(sum_labels(saturated, labels=sources, index=src_label))
-            effective_buffer = compute_adaptive_mask_buffer(
-                src_sat_area, mask_buffer_min=mask_buffer
-            )
-        else:
-            effective_buffer = mask_buffer
-        print(f"  mask_buffer={effective_buffer} (sat_area={sum_labels(saturated, labels=sources, index=src_label) if not forced_source else 'forced'})", flush=True)
 
         saturated_mask_expanded = binary_dilation(saturated_mask, iterations=effective_buffer)
         mask = np.logical_or(cutout==0, np.isnan(cutout), saturated_mask_expanded)

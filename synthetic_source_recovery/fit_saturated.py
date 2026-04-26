@@ -41,13 +41,35 @@ def adaptive_mask_buffer(n_sat_pixels, mask_buffer_min: int = 2, cap: int = 6) -
     return int(min(cap, max(mask_buffer_min, int(np.ceil(sat_radius * 0.4)))))
 
 
+def adaptive_bkg_annulus(n_sat_pixels, bkg_inner_min: int = 15, bkg_inner_max: int = 50):
+    """
+    Brightness-dependent background annulus radii.
+
+    For deeply saturated sources the PSF wings contaminate a close-in annulus;
+    this scales the inner radius outward with sat_radius^0.75 (calibrated so
+    that n_sat=37 → inner=25, matching recovery-test optimal params).  For
+    marginally saturated sources the standard (15, 30) annulus is returned.
+
+    The outer radius is always 2 × inner.
+
+    Typical values for NIRCam SW at ~2 µm:
+      n_sat=1–5   → (15, 30)
+      n_sat=37    → (25, 50)
+      n_sat=100   → (37, 74)
+    """
+    sat_radius = np.sqrt(n_sat_pixels / np.pi)
+    inner = int(np.clip(np.round(10 * sat_radius ** 0.75), bkg_inner_min, bkg_inner_max))
+    return inner, 2 * inner
+
+
 def fit_saturated_source(
     sci,
     dq,
     psf_model,
     *,
     mask_buffer: int = 1,
-    adaptive: bool = False,   # if True, mask_buffer is a minimum; actual value scales with sat area
+    adaptive: bool = False,      # if True, mask_buffer is a minimum; actual value scales with sat area
+    adaptive_bkg: bool = False,  # if True, bkg_inner/outer scale with sat area
     bkg_inner: float = 15.0,
     bkg_outer: float = 30.0,
     fit_shape: int = 81,
@@ -71,9 +93,15 @@ def fit_saturated_source(
     mask_buffer : int
         Binary-dilation iterations applied to the saturated mask before fitting.
         Larger values exclude more pixels around the saturated core.
+    adaptive : bool
+        If True, mask_buffer is a minimum and scales with sat area.
+    adaptive_bkg : bool
+        If True, bkg_inner/bkg_outer scale with sat area (wider for brighter
+        sources to avoid PSF wing contamination).  bkg_inner/bkg_outer are used
+        as starting values / fallback when adaptive_bkg is False.
     bkg_inner, bkg_outer : float
-        Inner/outer radii (pixels) of the background annulus passed to
-        ``LocalBackground``.
+        Inner/outer radii (pixels) of the background annulus.  Ignored when
+        adaptive_bkg=True (overridden by adaptive_bkg_annulus()).
     fit_shape : int
         PSF fit window size (pixels), passed to ``PSFPhotometry``.
     fwhm_pix : float
@@ -96,6 +124,10 @@ def fit_saturated_source(
         effective_buffer = adaptive_mask_buffer(n_sat, mask_buffer_min=mask_buffer)
     else:
         effective_buffer = mask_buffer
+
+    # Resolve background annulus — overrides bkg_inner/bkg_outer when adaptive_bkg=True
+    if adaptive_bkg and n_sat > 0:
+        bkg_inner, bkg_outer = adaptive_bkg_annulus(n_sat)
 
     result_base = dict(
         mask_buffer=mask_buffer,
