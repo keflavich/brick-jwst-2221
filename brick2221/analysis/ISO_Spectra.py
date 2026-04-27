@@ -551,7 +551,7 @@ def make_reference_spectra_plots():
                 ax.set_title(f"{sp.specname}")
 
                 for key in filters:
-                    if key not in iso_mags:
+                    if (key not in iso_mags) and (key not in iso_flxd):
                         continue
                     mag = iso_mags[key]
                     mags[key.split(".")[-1]] = mag
@@ -561,12 +561,29 @@ def make_reference_spectra_plots():
                     twave = transmission_wavelength_um(TRANSDATA[key])
                     tcurve = np.array(TRANSDATA[key]["Transmission"], dtype=float)
                     mid = np.array(ax.get_ylim()).mean()
-                    ax.plot(
+                    filter_line, = ax.plot(
                         twave,
                         tcurve / tcurve.max() * mid,
                         linewidth=0.5,
                         label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else None,
                     )
+
+                    # Overplot the computed flux as a square at the effective wavelength
+                    # Use the same color as the filter transmission curve
+                    # Get effective wavelength from SVO filter metadata
+                    eff_wave = float(TRANSDATA[key].meta.get('WavelengthEff', np.nan))
+                    print("Effective wavelength for filter {}: {} um".format(key, eff_wave))
+                    flux_value = iso_flxd[key].to(u.Jy).value if hasattr(iso_flxd[key], 'to') else iso_flxd[key]
+                    if np.isfinite(flux_value) and flux_value > 0:
+                        ax.scatter(
+                            [eff_wave],
+                            [flux_value],
+                            marker='s',
+                            s=36,
+                            color=filter_line.get_color(),
+                            edgecolors='none',
+                            zorder=filter_line.get_zorder() + 1,
+                        )
 
                 if setname == "2221" and "F405N" in mags and "F466N" in mags and "F410M" in mags:
                     ax.plot(
