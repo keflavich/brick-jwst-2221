@@ -163,6 +163,7 @@ def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18,
 
     ax = pl.gca()
     transmission_ax = ax.twinx()
+    tmax = 0
 
     for filtername, linestyle in zip(filternames, linestyle_cycle):
         wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
@@ -177,12 +178,12 @@ def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18,
             zorder=-5,
             linestyle=linestyle,
         )
-        print("Max transmission: ", wavelength_table['Transmission'].max())
+        tmax = max(tmax, wavelength_table['Transmission'].max())
 
-    transmission_ax.set_ylim(0, 1.05)
+    transmission_ax.set_ylim(0, tmax * 1.05)
     transmission_ax.set_ylabel('Transmission')
 
-    return ax, transmission_ax
+    return ax, transmission_ax, tmax
 
 def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                                        'H2O': water_mastrapa,
@@ -280,12 +281,12 @@ if __name__ == "__main__":
 
     pl.figure(figsize=(8.5, 4))
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
-    plot_filters(['F466N', 'F410M', 'F405N'])
-    pl.text(4.66, 6e-18, 'F466N', ha='center')
-    pl.text(4.10, 6e-18, 'F410M', ha='center')
-    pl.text(4.05, 6e-18, 'F405N', ha='center')
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 1.01, 'F405N', ha='center')
     pl.xlim(3.71, 4.75);
-    pl.ylim(1e-21, 1e-17)
+    ax.set_ylim(1e-21, 1e-17)
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
@@ -350,11 +351,11 @@ if __name__ == "__main__":
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
-    ax, transmission_ax = plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
-    pl.text(2.77, 6e-18, 'F277W', ha='center')
-    pl.text(3.23, 6e-18, 'F323N', ha='center')
-    pl.text(3.60, 6e-18, 'F360M', ha='center')
-    pl.text(4.80, 6e-18, 'F480M', ha='center')
+    ax, transmission_ax, tmax = plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
+    transmission_ax.text(2.77, tmax * 1.01, 'F277W', ha='center')
+    transmission_ax.text(3.23, tmax * 1.01, 'F323N', ha='center')
+    transmission_ax.text(3.60, tmax * 1.01, 'F360M', ha='center')
+    transmission_ax.text(4.80, tmax * 1.01, 'F480M', ha='center')
     ax.set_ylim(1e-21, 1e-17)
     pl.xlim(2.00, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.pdf', dpi=150, bbox_inches='tight')
@@ -362,32 +363,32 @@ if __name__ == "__main__":
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia, co2_gerakines))
-    ax, transmission_ax = plot_filters(filternames=['F410M', 'F430M', 'F460M', 'F480M'])
-    pl.text(4.10, 6e-18, 'F410M', ha='center')
-    pl.text(4.30, 6e-18, 'F430M', ha='center')
-    pl.text(4.60, 6e-18, 'F460M', ha='center')
-    pl.text(4.80, 6e-18, 'F480M', ha='center')
+    ax, transmission_ax, tmax = plot_filters(filternames=['F410M', 'F430M', 'F460M', 'F480M'])
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.30, tmax * 1.01, 'F430M', ha='center')
+    transmission_ax.text(4.60, tmax * 1.01, 'F460M', ha='center')
+    transmission_ax.text(4.80, tmax * 1.01, 'F480M', ha='center')
     ax.set_ylim(1e-21, 1e-17)
     pl.xlim(3.80, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f410_f430_f460_f480.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
-    ax, transmission_ax = plot_filters(filternames=['F250M', 'F300M', 'F335M', 'F360M'])
-    pl.text(2.5, 6e-18, 'F250M', ha='center')
-    pl.text(3.0, 6e-18, 'F300M', ha='center')
-    pl.text(3.35, 6e-18, 'F335M', ha='center')
-    pl.text(3.6, 6e-18, 'F360M', ha='center')
+    ax, transmission_ax, tmax = plot_filters(filternames=['F250M', 'F300M', 'F335M', 'F360M'])
+    transmission_ax.text(2.5, tmax * 1.01, 'F250M', ha='center')
+    transmission_ax.text(3.0, tmax * 1.01, 'F300M', ha='center')
+    transmission_ax.text(3.35, tmax * 1.01, 'F335M', ha='center')
+    transmission_ax.text(3.6, tmax * 1.01, 'F360M', ha='center')
     ax.set_ylim(1e-21, 1e-17)
     pl.xlim(2.30, 3.90);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f250_f300_f335_f360.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
-    ax, transmission_ax = plot_filters(filternames=['F277W', 'F356W', 'F444W'])
-    pl.text(2.77, 6e-18, 'F277W', ha='center')
-    pl.text(3.56, 6e-18, 'F356W', ha='center')
-    pl.text(4.44, 6e-18, 'F444W', ha='center')
+    ax, transmission_ax, tmax = plot_filters(filternames=['F277W', 'F356W', 'F444W'])
+    transmission_ax.text(2.77, tmax * 1.01, 'F277W', ha='center')
+    transmission_ax.text(3.56, tmax * 1.01, 'F356W', ha='center')
+    transmission_ax.text(4.44, tmax * 1.01, 'F444W', ha='center')
     ax.set_ylim(1e-21, 1e-17)
     pl.xlim(2.20, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f356_f444.pdf', dpi=150, bbox_inches='tight')
