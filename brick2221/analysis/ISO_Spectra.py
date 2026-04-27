@@ -55,10 +55,10 @@ def get_jwst_filters_and_transmissions():
     filter_ids = [fid for fid in jfilts["filterID"] if fid.startswith("JWST/")]
     filter_data = {fid: float(jfilts.loc[fid]["ZeroPoint"]) for fid in filter_ids}
     transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
-    return filter_ids, filter_data, transdata
+    return jfilts, filter_ids, filter_data, transdata
 
 
-FILTER_IDS, FILTER_DATA, TRANSDATA = get_jwst_filters_and_transmissions()
+JFILTS, FILTER_IDS, FILTER_DATA, TRANSDATA = get_jwst_filters_and_transmissions()
 
 
 def get_overlapping_filter_ids(wavelength_um):
@@ -338,15 +338,70 @@ def _age_value_to_gyr(value, colname, unit=None):
 
 
 def find_published_ages_for_objects(object_names):
+
+    import pickle
+    from pathlib import Path
+    vizier_cache_dir = Path("/orange/adamginsburg/jwst/brick/icemodels_cache")
+    vizier_cache_dir.mkdir(parents=True, exist_ok=True)
+    vizier_cache_path = vizier_cache_dir / "vizier_age_cache.pkl"
+
+    # Load cache from disk if it exists
+    if vizier_cache_path.exists():
+        try:
+            with open(vizier_cache_path, "rb") as f:
+                _vizier_age_cache = pickle.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load VizieR age cache: {e}")
+            _vizier_age_cache = {}
+    else:
+        _vizier_age_cache = {}
+
     vizier = Vizier(columns=["**"], row_limit=20)
     rows = []
 
+    updated = False
     for obj in tqdm(object_names, desc="Searching published ages in VizieR"):
+        if obj in _vizier_age_cache:
+            tables = _vizier_age_cache[obj]
+        else:
+            try:
+                tables = vizier.query_object(obj, radius=5 * u.arcsec)
+            except (HTTPError, ReadTimeout, ConnectionError) as ex:
+                print(f"VizieR age lookup failed for {obj}: {ex}")
+                _vizier_age_cache[obj] = []
+                updated = True
+                continue
+            _vizier_age_cache[obj] = tables
+            updated = True
+
+        for table in tables:
+            if len(table) == 0:
+                continue
+            age_cols = _age_column_candidates(table.colnames)
+            if len(age_cols) == 0:
+                continue
+
+            first_row = table[0]
+            for age_col in age_cols:
+                age_unit = table[age_col].unit if age_col in table.colnames else None
+                age_gyr = _age_value_to_gyr(first_row[age_col], age_col, unit=age_unit)
+                if np.isfinite(age_gyr):
+                    rows.append(
+                        (
+                            obj,
+                            float(age_gyr),
+                            age_col,
+                            table.meta.get("name", "unknown_catalog"),
+                        )
+                    )
+
+    # Save cache to disk if updated
+    if updated:
         try:
-            tables = vizier.query_object(obj, radius=5 * u.arcsec)
-        except (HTTPError, ReadTimeout, ConnectionError) as ex:
-            print(f"VizieR age lookup failed for {obj}: {ex}")
-            continue
+            with open(vizier_cache_path, "wb") as f:
+                pickle.dump(_vizier_age_cache, f)
+        except Exception as e:
+            print(f"Warning: Could not save VizieR age cache: {e}")
 
         for table in tables:
             if len(table) == 0:
@@ -550,6 +605,11 @@ def make_reference_spectra_plots():
                 ax.set_xlabel("Wavelength [$\\mu m$]")
                 ax.set_title(f"{sp.specname}")
 
+                # Twin axis for filter transmission (0-1) on the right
+                ax_trans = ax.twinx()
+                ax_trans.set_ylim(0, 1.1)
+                ax_trans.set_ylabel("Transmission")
+
                 for key in filters:
                     if (key not in iso_mags) and (key not in iso_flxd):
                         continue
@@ -560,30 +620,41 @@ def make_reference_spectra_plots():
 
                     twave = transmission_wavelength_um(TRANSDATA[key])
                     tcurve = np.array(TRANSDATA[key]["Transmission"], dtype=float)
-                    mid = np.array(ax.get_ylim()).mean()
-                    filter_line, = ax.plot(
+                    filter_line, = ax_trans.plot(
                         twave,
-                        tcurve / tcurve.max() * mid,
+                        tcurve / tcurve.max(),
                         linewidth=0.5,
                         label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else None,
                     )
 
-                    # Overplot the computed flux as a square at the effective wavelength
-                    # Use the same color as the filter transmission curve
-                    # Get effective wavelength from SVO filter metadata
-                    eff_wave = float(TRANSDATA[key].meta.get('WavelengthEff', np.nan))
-                    print("Effective wavelength for filter {}: {} um".format(key, eff_wave))
+                    # Overplot the computed transmission-weighted flux as a hollow
+                    # square on the flux (left) axis at the filter's
+                    # transmission-weighted mean wavelength.  Edge color matches
+                    # the transmission line so the marker and curve are visually
+                    # tied together; face is hollow so the line style remains
+                    # readable.
+                    tsum = tcurve.sum()
+                    if tsum > 0:
+                        marker_wave_um = float((twave * tcurve).sum() / tsum)
+                    else:
+                        marker_wave_um = float(np.nanmean(twave))
                     flux_value = iso_flxd[key].to(u.Jy).value if hasattr(iso_flxd[key], 'to') else iso_flxd[key]
-                    if np.isfinite(flux_value) and flux_value > 0:
+                    if np.isfinite(flux_value) and flux_value != 0:
                         ax.scatter(
-                            [eff_wave],
+                            [marker_wave_um],
                             [flux_value],
                             marker='s',
                             s=36,
-                            color=filter_line.get_color(),
-                            edgecolors='none',
+                            facecolor='none',
+                            edgecolor=filter_line.get_color(),
+                            linestyle=filter_line.get_linestyle(),
+                            linewidth=1.2,
                             zorder=filter_line.get_zorder() + 1,
                         )
+                        if flux_value < 0:
+                            print(f"Warning: Negative flux value for filter {key} in {sp.specname}: {flux_value} Jy")
+                    else:
+                        raise ValueError(f"Invalid flux value for filter {key}: {flux_value}")
 
                 if setname == "2221" and "F405N" in mags and "F466N" in mags and "F410M" in mags:
                     ax.plot(
@@ -611,12 +682,19 @@ def make_reference_spectra_plots():
                     )
 
                 ax.set_ylim(0, ax.get_ylim()[1])
-                ax.legend(loc="upper left", fontsize=10)
+                # Merge handles from the flux and transmission axes so the
+                # filter labels (now drawn on the twin axis) appear in the
+                # same legend as any annotations added on `ax`.
+                h_main, l_main = ax.get_legend_handles_labels()
+                h_trans, l_trans = ax_trans.get_legend_handles_labels()
+                ax.legend(h_trans + h_main, l_trans + l_main,
+                          loc="upper left", fontsize=10)
                 adjust_yaxis_for_legend_overlap(ax)
 
                 save_specname = sp.specname.replace(" ", "_").replace("/", "_")
                 outpath = isodir / "pngs" / f"{os.path.splitext(os.path.basename(fn))[0]}_{save_specname}_{setname}.pdf"
                 plt.savefig(outpath, dpi=150)
+                plt.savefig(outpath.with_suffix('.png'), dpi=150)
                 plt.close("all")
 
 
