@@ -607,7 +607,7 @@ def make_reference_spectra_plots():
 
                 # Twin axis for filter transmission (0-1) on the right
                 ax_trans = ax.twinx()
-                ax_trans.set_ylim(0, 1.1)
+                ax_trans.set_ylim(0, 2.1)
                 ax_trans.set_ylabel("Transmission")
 
                 for key in filters:
