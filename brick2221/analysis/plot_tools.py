@@ -807,7 +807,7 @@ def xmatch_plot(basetable, ref_filter='f405n', filternames=filternames,
         ax2 = fig2.add_subplot(gridspec[ii])
         ax2.hist(sep.to(u.marcsec).value, bins=np.linspace(0, maxsep.to(u.marcsec).value), log=True)
         #ax2.set_xlabel("Separation (\")")
-        ax2.set_title(f'{filtername} $\mu$={np.median(sep).to(u.marcsec).value:0.1f} $\sigma$={np.std(sep).to(u.marcsec).value:0.1f}', fontsize=10)
+        ax2.set_title(rf'{filtername} $\mu$={np.median(sep).to(u.marcsec).value:0.1f} $\sigma$={np.std(sep).to(u.marcsec).value:0.1f}', fontsize=10)
 
         print(f"med sep: {np.median(sep)}, std(sep): {np.std(sep)}")
         statsd[filtername] = {
