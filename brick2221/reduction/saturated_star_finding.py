@@ -473,8 +473,18 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         # area_saturated = sum_labels(saturated, labels=sources, index=ii+1)
         cutout = data[y0:y1, x0:x1]
         init_params = QTable()
-        x_init = float(np.clip(xcen - x0, 0, max(0, cutout.shape[1] - 1)))
-        y_init = float(np.clip(ycen - y0, 0, max(0, cutout.shape[0] - 1)))
+        # For outside-FOV forced sources the star center may be outside the
+        # cutout bounds (xcen < x0 or xcen > x1).  DO NOT clip to [0, width-1]:
+        # clipping forces both seeds to (0,0), they fit the same corner bright
+        # source, and produce duplicate catalog rows with the wrong position.
+        # Allow the unclipped offset so the PSF is correctly initialised at its
+        # true (possibly negative) position in cutout coordinates.
+        if forced_source:
+            x_init = float(xcen - x0)
+            y_init = float(ycen - y0)
+        else:
+            x_init = float(np.clip(xcen - x0, 0, max(0, cutout.shape[1] - 1)))
+            y_init = float(np.clip(ycen - y0, 0, max(0, cutout.shape[0] - 1)))
         init_params['x'] = [x_init]
         init_params['y'] = [y_init]
         cutout[np.isnan(cutout)] = 0.0
@@ -508,21 +518,35 @@ def get_saturated_stars(fitsdata, path_prefix='/orange/adamginsburg/jwst/w51/psf
         else:
             bkg_inner, bkg_outer = 25, 50   # fixed wide annulus as fallback
 
-        print(f"  mask_buffer={effective_buffer}  bkg=({bkg_inner},{bkg_outer})"
-              f"  (sat_area={src_sat_area if src_sat_area is not None else 'forced'})",
-              flush=True)
+        # For forced outside-FOV sources the star center may be hundreds of
+        # pixels outside the image.  A LocalBackground annulus of 25–50 px
+        # centred there contains zero image pixels, causing the estimator to
+        # fail silently.  Skip local background for those sources; the frames
+        # are already bgsub'd so a zero-background assumption is appropriate.
+        if forced_source:
+            localbkg_estimator = None
+            print(f"  forced source: no local-bkg (source is off-edge)  "
+                  f"(sat_area=forced)", flush=True)
+        else:
+            print(f"  mask_buffer={effective_buffer}  bkg=({bkg_inner},{bkg_outer})"
+                  f"  (sat_area={src_sat_area})", flush=True)
+            localbkg_estimator = LocalBackground(bkg_inner, bkg_outer)
 
         psfphot = PSFPhotometry(
-                                localbkg_estimator=LocalBackground(bkg_inner, bkg_outer),
+                                localbkg_estimator=localbkg_estimator,
                                 fitter=lmfitter,
                                 psf_model=big_grid,
                                 fit_shape=size,
                                 aperture_radius=15*fwhm_pix)
         if forced_source:
-            low_x = 0
-            high_x = cutout.shape[1] - 1
-            low_y = 0
-            high_y = cutout.shape[0] - 1
+            # Keep the fitted centroid within ±size_saturated of the seed
+            # position.  Using [0, cutout-1] previously let both seeds drift
+            # to the same corner source, producing duplicate catalog rows.
+            # x_init / y_init may be negative for outside-FOV seeds.
+            low_x  = x_init - size_saturated
+            high_x = x_init + size_saturated
+            low_y  = y_init - size_saturated
+            high_y = y_init + size_saturated
         else:
             low_x  = xcen - x0 - size_saturated
             high_x = xcen - x0 + size_saturated
