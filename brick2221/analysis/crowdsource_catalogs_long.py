@@ -2266,9 +2266,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
 
     dq, weight, bad = get_uncertainty(err, data, wht=wht, dq=im1['DQ'].data if 'DQ' in im1 else None)
 
-    filter_table = SvoFps.get_filter_list(facility=telescope, instrument=instrument)
+    # SVO FPS uses mixed-case instrument names (e.g. NIRCam) while FITS headers
+    # use all-caps (NIRCAM). Map to SVO conventions before lookup.
+    _svo_inst_map = {'NIRCAM': 'NIRCam', 'NIRISS': 'NIRISS', 'NIRSPEC': 'NIRSpec', 'MIRI': 'MIRI'}
+    _svo_instrument = _svo_inst_map.get(instrument.upper(), instrument)
+    filter_table = SvoFps.get_filter_list(facility=telescope, instrument=_svo_instrument)
     filter_table.add_index('filterID')
-    eff_wavelength = filter_table.loc[f'{telescope}/{instrument}.{filt}']['WavelengthEff'] * u.AA
+    eff_wavelength = filter_table.loc[f'{telescope}/{_svo_instrument}.{filt}']['WavelengthEff'] * u.AA
 
     # DAO Photometry setup
     grouper = SourceGrouper(2 * fwhm_pix)
