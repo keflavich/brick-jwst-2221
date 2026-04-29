@@ -2611,16 +2611,43 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     #mask = preg.to_mask()
     #cutout = mask.cutout(im1[1].data)
     #err = mask.cutout(im1[2].data)
+    # Zoom regions live in a shared regions_/ directory across fields (brick,
+    # sgrb2, cloudc, sickle).  Two guards keep cross-field regions out:
+    # (1) sky-separation gate — if the region center sits more than
+    #     max_field_sep from this detector's pointing, it belongs to a
+    #     different field and projects to extreme pixel coords.
+    # (2) bbox sanity check — `to_mask()` allocates a (ny,nx) float64 array
+    #     sized to the bounding box (regions/shapes/rectangle.py:165).  A
+    #     half-degree-misplaced rectangle yields a TB-scale allocation that
+    #     drove sgrb2 nrca1 photometry to 564 GB peak.  Refuse anything
+    #     larger than 4× the detector.
     region_list = [y for x in glob.glob('regions_/*zoom*.reg') for y in
                    regions.Regions.read(x)]
+    ny, nx = data.shape
+    data_center_sky = ww.pixel_to_world(nx / 2.0, ny / 2.0)
+    max_field_sep = 6 * u.arcmin
     zoomcut_list = {}
     for _reg in region_list:
-        try:
-            _slc = _reg.to_pixel(ww).to_mask().get_overlap_slices(data.shape)[0]
-        except Exception:
-            _slc = None
-        if (_slc is not None
-                and _slc[0].start > 0 and _slc[1].start > 0
+        reg_center = getattr(_reg, 'center', None)
+        if isinstance(reg_center, SkyCoord):
+            if reg_center.separation(data_center_sky) > max_field_sep:
+                continue
+        _pix = _reg.to_pixel(ww)
+        bb = _pix.bounding_box
+        if bb.ixmax < 0 or bb.iymax < 0 or bb.ixmin >= nx or bb.iymin >= ny:
+            continue
+        bb_w = bb.ixmax - bb.ixmin
+        bb_h = bb.iymax - bb.iymin
+        if bb_w * bb_h > 4 * nx * ny:
+            print(f"Skipping oversized zoom region '{_reg.meta.get('text', '?')}': "
+                  f"bbox {bb_w}x{bb_h} exceeds 4x detector ({nx}x{ny})",
+                  flush=True)
+            continue
+        _slc_tuple = _pix.to_mask().get_overlap_slices(data.shape)
+        if _slc_tuple is None or _slc_tuple[0] is None:
+            continue
+        _slc = _slc_tuple[0]
+        if (_slc[0].start > 0 and _slc[1].start > 0
                 and _slc[0].stop < data.shape[0] and _slc[1].stop < data.shape[1]):
             zoomcut_list[_reg.meta['text']] = _slc
 
