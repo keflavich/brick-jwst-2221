@@ -2,6 +2,7 @@ import numpy as np
 import time
 import datetime
 import os
+import re
 import sys
 import warnings
 from astropy.io import fits
@@ -862,23 +863,63 @@ def merge_individual_frames(module='merged', suffix="", desat=False, filtername=
     else:
         raise ValueError(f"Method must be dao or crowdsource but was {method}")
 
-    tblfns = [x
-              for module_ in modules
-              for progid in obs_filters[target]
-              for visitid in range(1, max_visitid+1)
-              for exposure in exposure_numbers
-              for x in glob.glob(f"{basepath}/{filtername.upper()}/"
-                                 f"{filtername.lower()}_{module_}_visit{visitid:03d}_vgroup*_exp{exposure:05d}{desat}{bgsub}{fitpsf}{blur_}{iter_token}"
-                                 f"_{method_suffix}{suffix}.fits")
-              ]
-    tblfns = sorted(set(tblfns))
-    print(f"Found {len(tblfns)} tables for {filtername.lower()}_*_visit*_exp*{desat}{bgsub}{fitpsf}{blur_}:")
-    print("\n".join(tblfns))
+    # Glob both the un-chunked per-frame catalogs and the chunked variants
+    # produced by --n-seed-chunks > 1 in crowdsource_catalogs_long.py.  The
+    # chunked filename inserts a ``_chunkXXofYY`` token between the iter
+    # token and ``_{method_suffix}``; chunks for the same frame share the
+    # rest of the path.
+    raw_fns = []
+    for module_ in modules:
+        for progid in obs_filters[target]:
+            for visitid in range(1, max_visitid + 1):
+                for exposure in exposure_numbers:
+                    base_pat = (
+                        f"{basepath}/{filtername.upper()}/"
+                        f"{filtername.lower()}_{module_}_visit{visitid:03d}_vgroup*_exp{exposure:05d}"
+                        f"{desat}{bgsub}{fitpsf}{blur_}{iter_token}"
+                    )
+                    raw_fns.extend(glob.glob(
+                        f"{base_pat}_{method_suffix}{suffix}.fits"))
+                    raw_fns.extend(glob.glob(
+                        f"{base_pat}_chunk*of*_{method_suffix}{suffix}.fits"))
+    raw_fns = sorted(set(raw_fns))
+
+    # Group chunks of the same frame by their chunk-stripped path, then
+    # vstack them so combine_singleframe sees one table per physical frame.
+    _chunk_re = re.compile(r'_chunk\d+of\d+')
+    frame_groups = {}
+    for fn in raw_fns:
+        key = _chunk_re.sub('', fn)
+        frame_groups.setdefault(key, []).append(fn)
+
+    tblfns = sorted(frame_groups.keys())
+    n_chunked = sum(1 for fns in frame_groups.values() if len(fns) > 1)
+    print(f"Found {len(raw_fns)} files across {len(tblfns)} frames "
+          f"({n_chunked} chunked) for "
+          f"{filtername.lower()}_*_visit*_exp*{desat}{bgsub}{fitpsf}{blur_}:")
+    for key in tblfns:
+        chunks = frame_groups[key]
+        if len(chunks) == 1:
+            print(chunks[0])
+        else:
+            print(f"{key}  <- vstack of {len(chunks)} chunks")
 
     if len(tblfns) == 0:
         raise ValueError(f"No tables found matching {basepath}/{filtername.upper()}/{filtername.lower()}_{module}....{desat}{bgsub}{fitpsf}{blur_}_{method}{suffix}.fits")
 
-    tables = [Table.read(fn) for fn in tblfns]
+    tables = []
+    for key in tblfns:
+        chunks = frame_groups[key]
+        if len(chunks) == 1:
+            tb = Table.read(chunks[0])
+        else:
+            sub_tables = [Table.read(fn) for fn in sorted(chunks)]
+            tb = table.vstack(sub_tables, metadata_conflicts='silent')
+            # Use the chunk-stripped path's basename as the canonical
+            # FILENAME so downstream code (which keys on it) collapses
+            # all chunks of one frame to a single source identity.
+            tb.meta['FILENAME'] = os.path.basename(key)
+        tables.append(tb)
     for tb, fn in zip(tables, tblfns):
         if 'exposure' not in tb.meta:
             tb.meta['exposure'] = fn.split("_exp")[-1][:5]

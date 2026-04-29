@@ -124,6 +124,156 @@ def _make_iterative_psfphotometry(*, localbkg_estimator, **kwargs):
                                   **kwargs)
 
 
+class CappedSourceGrouper:
+    """SourceGrouper wrapper that caps the maximum group size.
+
+    photutils SourceGrouper has only a min_separation knob: any cluster of
+    sources mutually within that distance becomes one group, however large.
+    In dense fields with cross-band union seeds, those clusters routinely
+    reach 50-100+ sources, and the joint LevMar fit cost grows roughly
+    cubically with group size; brick LW iter3 saw the per-source rate
+    collapse from ~5 it/s to <1 it/s in dense regions, hitting the 96 h
+    walltime at ~14% completion.
+
+    This wrapper post-processes the inner grouper's output: any group
+    larger than ``max_size`` is split into ``ceil(N/max_size)`` spatially
+    coherent sub-groups by sorting along the group's principal axis.
+    Sparse-region groups (already <= max_size) are returned untouched.
+    """
+
+    def __init__(self, min_separation, max_size=0):
+        self._inner = SourceGrouper(min_separation)
+        self.min_separation = min_separation
+        self.max_size = int(max_size) if max_size else 0
+
+    def __call__(self, x, y):
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+        group_ids = np.asarray(self._inner(x, y)).astype(np.int64, copy=True)
+        if self.max_size <= 0 or group_ids.size == 0:
+            return group_ids
+        next_id = int(group_ids.max()) + 1
+        unique_ids, counts = np.unique(group_ids, return_counts=True)
+        oversized = unique_ids[counts > self.max_size]
+        if oversized.size == 0:
+            return group_ids
+        n_split = 0
+        for gid in oversized:
+            mask = group_ids == gid
+            n = int(mask.sum())
+            n_sub = int(np.ceil(n / self.max_size))
+            xy = np.column_stack([x[mask], y[mask]])
+            centered = xy - xy.mean(axis=0)
+            cov = centered.T @ centered
+            try:
+                eigvals, eigvecs = np.linalg.eigh(cov)
+                principal = eigvecs[:, int(np.argmax(eigvals))]
+                if not np.all(np.isfinite(principal)) or np.linalg.norm(principal) == 0:
+                    raise ValueError('degenerate principal axis')
+                proj = centered @ principal
+            except (ValueError, np.linalg.LinAlgError):
+                proj = xy[:, 0]
+            order = np.argsort(proj, kind='stable')
+            sub_size = int(np.ceil(n / n_sub))
+            sub_label = np.empty(n, dtype=np.int64)
+            for k in range(n_sub):
+                sub_label[order[k * sub_size:(k + 1) * sub_size]] = k
+            new_ids = np.empty(n, dtype=group_ids.dtype)
+            new_ids[sub_label == 0] = gid
+            for k in range(1, n_sub):
+                new_ids[sub_label == k] = next_id
+                next_id += 1
+            group_ids[mask] = new_ids
+            n_split += 1
+        print(f"CappedSourceGrouper: split {n_split} oversized "
+              f"group{'s' if n_split != 1 else ''} (cap={self.max_size}); "
+              f"total groups: {len(unique_ids)} -> {next_id - int(unique_ids[0])}",
+              flush=True)
+        return group_ids
+
+
+def _chunk_token(chunk_index, n_seed_chunks):
+    """Filename token for spatial seed chunking.
+
+    Returns '' when n_seed_chunks <= 1; otherwise '_chunk{i:02d}of{n:02d}'.
+    Two-digit fields keep the token sortable and unambiguous.
+    """
+    n = int(n_seed_chunks) if n_seed_chunks else 1
+    if n <= 1:
+        return ''
+    i = int(chunk_index)
+    if i < 0 or i >= n:
+        raise ValueError(
+            f'seed_chunk_index={i} out of range for n_seed_chunks={n}')
+    return f'_chunk{i:02d}of{n:02d}'
+
+
+# Match _chunkXXofYY (any width) when stripping the chunk suffix from an
+# iteration_label or filename component.
+_CHUNK_TOKEN_RE = re.compile(r'_chunk\d+of\d+')
+
+
+def _strip_chunk(label):
+    """Remove a trailing/embedded ``_chunkXXofYY`` token from a string.
+
+    Used to recover the *base* iteration label (e.g. ``'iter3'``) from
+    a chunk-suffixed compound label (e.g. ``'iter3_chunk03of08'``) so
+    semantic checks like ``is_iter3`` continue to fire when chunking is on.
+    """
+    if label is None:
+        return None
+    return _CHUNK_TOKEN_RE.sub('', str(label))
+
+
+def _seed_table_chunk_subset(seed_table, ww, image_shape,
+                             chunk_index, n_seed_chunks):
+    """Subset a seed table to one tile of an N-way image-pixel chunking.
+
+    The image is split into a ``Gx x Gy`` grid where
+    ``Gx = ceil(sqrt(N))`` and ``Gy = ceil(N / Gx)`` (so Gx * Gy >= N;
+    chunks beyond N never receive sources).  Each chunk owns a half-open
+    pixel rectangle; a seed is assigned to the chunk that contains its
+    pixel position.  Seeds with non-finite pixel coordinates (e.g. far
+    outside the FOV) are dropped.
+
+    Returns a NEW Table; the input is not modified.
+    """
+    n = int(n_seed_chunks)
+    if n <= 1:
+        return seed_table
+    ny, nx = int(image_shape[0]), int(image_shape[1])
+    gx = int(np.ceil(np.sqrt(n)))
+    gy = int(np.ceil(n / gx))
+    cx = chunk_index % gx
+    cy = chunk_index // gx
+    x_lo = (nx * cx) / gx
+    x_hi = (nx * (cx + 1)) / gx
+    y_lo = (ny * cy) / gy
+    y_hi = (ny * (cy + 1)) / gy
+
+    seed_table = _as_table(seed_table)
+    if 'skycoord' in seed_table.colnames:
+        sc = seed_table['skycoord']
+    else:
+        sc = SkyCoord(ra=seed_table['ra'], dec=seed_table['dec'], unit='deg')
+    xpix, ypix = ww.world_to_pixel(sc)
+    xpix = np.asarray(xpix, dtype=float)
+    ypix = np.asarray(ypix, dtype=float)
+    in_tile = (
+        np.isfinite(xpix) & np.isfinite(ypix)
+        & (xpix >= x_lo) & (xpix < x_hi)
+        & (ypix >= y_lo) & (ypix < y_hi)
+    )
+    n_kept = int(in_tile.sum())
+    print(
+        f"Seed chunking: chunk {chunk_index + 1}/{n} (grid {gx}x{gy}, "
+        f"x=[{x_lo:.1f},{x_hi:.1f}) y=[{y_lo:.1f},{y_hi:.1f})): "
+        f"{len(seed_table)} -> {n_kept} seeds",
+        flush=True,
+    )
+    return seed_table[in_tile]
+
+
 def _make_model_image(phot_obj, shape, *, psf_shape=None, include_local_bkg=False):
     """Call ``phot_obj.make_model_image`` with the version-appropriate
     include-local-bkg kwarg."""
@@ -1801,7 +1951,51 @@ def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
     parser.add_option('--list-missing-tasks', dest='list_missing_tasks',
                       default=False, action='store_true',
                       help='Enumerate --each-exposure work and print a comma-separated SLURM --array spec of only the bundled task indices that still need to run. Writes only the spec to stdout; logs go to stderr.')
+    parser.add_option('--max-group-size', dest='max_group_size',
+                      default=0, type='int',
+                      help=('Cap on photutils SourceGrouper group size '
+                            '(0 = no cap, the default).  Groups larger than '
+                            'this are split into spatially coherent sub-groups '
+                            'via principal-axis sorting before the joint fit.  '
+                            'Set to 15 for iter3-class runs to keep dense-region '
+                            'fits tractable within the 96 h walltime.'))
+    parser.add_option('--n-seed-chunks', dest='n_seed_chunks',
+                      default=1, type='int',
+                      help=('Split the seed catalog into N image-pixel tiles '
+                            'and fit only the seeds in this chunk\'s tile.  '
+                            'Combine with --seed-chunk-index.  Output filenames '
+                            'gain a _chunkXXofYY token between the iter token '
+                            'and _daophot_*; merge_catalogs.py vstacks chunks '
+                            'back into one per-frame catalog.'))
+    parser.add_option('--seed-chunk-index', dest='seed_chunk_index',
+                      default=0, type='int',
+                      help='Zero-based chunk index in [0, --n-seed-chunks).')
     (options, args) = parser.parse_args()
+
+    # Validate chunking args and fold the chunk token into iteration_label so
+    # every downstream filename composition (catalog, residual, satstar,
+    # diagnostic plots) automatically picks it up without further plumbing.
+    if options.n_seed_chunks and int(options.n_seed_chunks) > 1:
+        n_chunks = int(options.n_seed_chunks)
+        chunk_index = int(options.seed_chunk_index)
+        if chunk_index < 0 or chunk_index >= n_chunks:
+            raise SystemExit(
+                f'--seed-chunk-index={chunk_index} out of range '
+                f'for --n-seed-chunks={n_chunks}')
+        chunk_tok = _chunk_token(chunk_index, n_chunks)
+        if options.iteration_label:
+            options.iteration_label = f'{options.iteration_label}{chunk_tok}'
+        else:
+            # Bare-chunk (no base iter label) is meaningful for ad-hoc runs
+            # but unusual; tag the label so output files don't collide.
+            options.iteration_label = chunk_tok.lstrip('_')
+        # Also fold into the comma-separated --iteration-labels (used by
+        # --finalize-only) when set, so chunked finalize calls find the
+        # correct per-chunk filenames.
+        if options.iteration_labels:
+            options.iteration_labels = ','.join(
+                (f'{tok}{chunk_tok}' if tok else chunk_tok.lstrip('_'))
+                for tok in options.iteration_labels.split(','))
 
     filternames = options.filternames.split(",")
     modules = options.modules.split(",")
@@ -2278,8 +2472,14 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     filter_table.add_index('filterID')
     eff_wavelength = filter_table.loc[f'{telescope}/{_svo_instrument}.{filt}']['WavelengthEff'] * u.AA
 
-    # DAO Photometry setup
-    grouper = SourceGrouper(2 * fwhm_pix)
+    # DAO Photometry setup.  Use a CappedSourceGrouper when the caller
+    # asks for a group-size cap (--max-group-size); the inner SourceGrouper
+    # uses the same 2*FWHM linking distance as before.
+    _max_group_size = int(getattr(options, 'max_group_size', 0) or 0)
+    if _max_group_size > 0:
+        grouper = CappedSourceGrouper(2 * fwhm_pix, max_size=_max_group_size)
+    else:
+        grouper = SourceGrouper(2 * fwhm_pix)
     mmm_bkg = MMMBackground()
 
     # empirically determined in debugging session with Taehwa on 2025-12-09:
@@ -2309,8 +2509,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     # for iter3 -- iter3 must use the cross-band union seed catalog that
     # the caller passes in explicitly.  Silently falling back to the basic
     # per-frame catalog would defeat the purpose of iter3 entirely.
-    is_iter3 = (iteration_label is not None
-                and str(iteration_label).lower() == 'iter3')
+    # Use the *base* iteration label so a chunk-suffixed compound label
+    # (e.g. 'iter3_chunk03of08' from --n-seed-chunks > 1) still triggers
+    # the iter3-specific code path (explicit-seed requirement, xy_bounds,
+    # tighter local-SNR threshold).
+    _base_label = _strip_chunk(iteration_label)
+    is_iter3 = (_base_label is not None
+                and str(_base_label).lower() == 'iter3')
     if (seed_catalog is None and iteration_label not in (None, '')
             and not is_iter3):
         inferred_seed_catalog = (
@@ -2469,6 +2674,27 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     if seed_catalog is not None:
         preferred_seed_skycoord_col = f'skycoord_{filtername.lower()}'
         merged_seed_table = _as_table(seed_catalog)
+
+        # Optional spatial chunking: split the seed catalog into N image-pixel
+        # tiles and fit only the regular seeds whose pixel position lies in
+        # this chunk's tile.  Each chunk runs as its own SLURM array job and
+        # writes a _chunkXXofYY-tagged per-frame catalog; merge_catalogs.py
+        # vstacks them back into one per-frame table.  Used to stay under
+        # the 96 h walltime for brick LW iter3 (433 k seeds per frame).
+        # satstar_table is NOT subset here -- it stays full-frame so the
+        # postprocess-residual masking continues to see every satstar; the
+        # merge-time dedup catches the resulting cross-chunk satstar
+        # duplicates.
+        _n_seed_chunks = int(getattr(options, 'n_seed_chunks', 1) or 1)
+        _seed_chunk_index = int(getattr(options, 'seed_chunk_index', 0) or 0)
+        if _n_seed_chunks > 1:
+            merged_seed_table = _seed_table_chunk_subset(
+                merged_seed_table, ww=ww, image_shape=data.shape,
+                chunk_index=_seed_chunk_index,
+                n_seed_chunks=_n_seed_chunks,
+            )
+            seed_catalog = merged_seed_table
+
         seed_catalog = _combine_seed_and_satstars(seed_catalog, satstar_table)
         seed_after_sat_table = _as_table(seed_catalog)
         sat_seed_count = int(np.sum(np.asarray(seed_after_sat_table['is_saturated'], dtype=bool)))
