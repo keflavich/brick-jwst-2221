@@ -2142,7 +2142,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     if not tracemalloc.is_tracing():
         tracemalloc.start(25)
 
-    def _mem_report(label):
+    def _mem_report(label, deep=False):
         snap = tracemalloc.take_snapshot()
         top = snap.statistics('lineno')
         peak_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -2151,8 +2151,12 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         except Exception:
             curr_kb = 0
         print(f"=MEM= {label}: curr={curr_kb/1e6:.2f}GB peak={peak_kb/1e6:.2f}GB", flush=True)
-        for s in top[:8]:
+        for s in top[:12]:
             print(f"  {s.size/1e9:.3f}GB {s.traceback[0]}", flush=True)
+        if deep and top:
+            print(f"  --- traceback for #1 allocator ({top[0].size/1e9:.3f}GB) ---", flush=True)
+            for frame in top[0].traceback.format():
+                print(f"  {frame}", flush=True)
     fwhm_tbl = Table.read(FWHM_TABLE)
     row = fwhm_tbl[fwhm_tbl['Filter'] == filtername]
     fwhm = fwhm_arcsec = float(row['PSF FWHM (arcsec)'][0])
@@ -2529,6 +2533,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         _mem_report("before SeededFinder")
         finstars = SeededFinder(seed_catalog, ww=ww,
                                 preferred_skycoord_col=preferred_seed_skycoord_col)(nan_replaced_data, mask=mask)
+        _mem_report("after SeededFinder call", deep=True)
         seeded_init_params = Table()
         seeded_init_params['x_init'] = np.asarray(finstars['x_init'], dtype=float)
         seeded_init_params['y_init'] = np.asarray(finstars['y_init'], dtype=float)
@@ -2560,6 +2565,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                       f"{min_sep_pix:.2f} pix ({n_before} -> {len(seeded_init_params)}); "
                       f"{n_disagree} clusters had disagreeing init fluxes",
                       flush=True)
+        _mem_report("after seed dedup")
 
         finding_label = 'seeded'
     else:
@@ -2618,10 +2624,12 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 and _slc[0].stop < data.shape[0] and _slc[1].stop < data.shape[1]):
             zoomcut_list[_reg.meta['text']] = _slc
 
+    _mem_report("after region zoomcut loop", deep=True)
     zoomcut = slice(128, 256), slice(128, 256)
     modsky = data*0 # no model for daofind
     nullslice = (slice(None), slice(None))
 
+    _mem_report("before daofind catalog_zoom_diagnostic block")
     try:
         catalog_zoom_diagnostic(data, modsky, nullslice, stars)
         pl.suptitle(f"daofind Catalog Diagnostics zoomed {filtername} {module}{visitid_}{vgroupid_}{exposure_}{desat}{bgsub}")
@@ -2640,6 +2648,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                     bbox_inches='tight')
     except Exception as ex:
         print(f'FAILURE to produce catalog zoom diagnostics for module {module} and filter {filtername} for basic daofinder: {ex}')
+    _mem_report("after daofind catalog_zoom_diagnostic block", deep=True)
 
     if not options.nocrowdsource:
 
@@ -2708,11 +2717,13 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                 print()
                 print(f"Running crowdsource fit_im with weights & nskyx=nskyy={nsky} & fpsf={fpsf} & blur={blur_}")
                 print(f"data.shape={data.shape} weight_shape={weight.shape}", flush=True)
+                _mem_report("before crowdsource fit_im")
                 results = fit_im(nan_replaced_data, psf_model, weight=weight * (~mask),
                                  nskyx=nsky, nskyy=nsky, refit_psf=refit_psf, verbose=True,
                                  dq=dq,
                                  **crowdsource_default_kwargs
                                  )
+                _mem_report("after crowdsource fit_im", deep=True)
                 print(f"Done with weighted, refit={fpsf}, nsky={nsky} crowdsource. dt={time.time() - t0}")
                 stars, modsky, skymsky, psf = results
                 stars = save_crowdsource_results(results, ww, filename,
@@ -2729,6 +2740,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                                                  options=options,
                                                  suffix=f"nsky{nsky}",
                                                  iteration_label=iteration_label)
+                _mem_report("after save_crowdsource_results")
 
                 zoomcut = slice(128, 256), slice(128, 256)
 
@@ -2753,6 +2765,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
                     exc_tb = sys.exc_info()[2]
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     print(f"Exception {ex} was in {fname} line {exc_tb.tb_lineno}")
+                _mem_report("after crowdsource diag plotting", deep=True)
 
     if options.daophot:
         t0 = time.time()
