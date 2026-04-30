@@ -303,6 +303,7 @@ import datetime
 print("Done with imports", flush=True)
 
 FWHM_TABLE = Path(__file__).resolve().parents[1] / 'reduction' / 'fwhm_table.ecsv'
+REGIONS_DIR = Path(__file__).resolve().parents[2] / 'regions_'
 
 MIRI_FILTERS = frozenset(['f560w', 'f770w', 'f1000w', 'f1130w', 'f1280w',
                           'f1500w', 'f1800w', 'f2100w', 'f2550w'])
@@ -2847,7 +2848,7 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
     #     half-degree-misplaced rectangle yields a TB-scale allocation that
     #     drove sgrb2 nrca1 photometry to 564 GB peak.  Refuse anything
     #     larger than 4× the detector.
-    region_list = [y for x in glob.glob('regions_/*zoom*.reg') for y in
+    region_list = [y for x in glob.glob(str(REGIONS_DIR / '*zoom*.reg')) for y in
                    regions.Regions.read(x)]
     ny, nx = data.shape
     data_center_sky = ww.pixel_to_world(nx / 2.0, ny / 2.0)
