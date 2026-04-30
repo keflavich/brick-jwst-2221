@@ -175,7 +175,7 @@ def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18,
             color='k',
             linewidth=2,
             alpha=0.5,
-            zorder=-5,
+            #zorder=-5,
             linestyle=linestyle,
         )
         tmax = max(tmax, wavelength_table['Transmission'].max())
