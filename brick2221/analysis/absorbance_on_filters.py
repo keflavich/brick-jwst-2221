@@ -458,7 +458,7 @@ if __name__ == "__main__":
     transmission_ax1.text(4.05, tmax1 * 1.01, 'F405N', ha='center')
     pl.xlim(3.71, 4.75)
     ax1.set_ylim(1e-21, 1.2e-17)
-    transmission_ax1.set_ylim(0, tmax1 * 1.05)
+    transmission_ax1.set_ylim(0, tmax1 * 1.10)
     # Second subplot
     pl.subplot(2,1,2)
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
