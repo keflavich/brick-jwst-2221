@@ -1822,9 +1822,34 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
 
 
 def save_residual_datamodel(input_filename, output_filename, data):
+    import astropy.io.fits as fits_io
+
+    # Read S_REGION before opening with ImageModel; ImageModel.save() drops CONTINUE cards,
+    # truncating polygons longer than one FITS card (~68 chars).
+    s_region = None
+    s_region_ext = None
+    with fits_io.open(input_filename) as hdul:
+        for i, hdu in enumerate(hdul):
+            sr = hdu.header.get('S_REGION', None)
+            if sr:
+                s_region = sr
+                s_region_ext = i
+                break
+
     with ImageModel(input_filename) as model:
+        wcs = model.meta.wcs
         model.data = data
+        model.meta.wcs = wcs  # explicit re-assignment ensures GWCS is serialized to ASDF extension
         model.save(output_filename, overwrite=True)
+
+    # Restore full S_REGION (with CONTINUE support) that ImageModel.save() may have truncated.
+    if s_region is not None:
+        with fits_io.open(output_filename, mode='update') as hdul:
+            for hdu in hdul:
+                if 'S_REGION' in hdu.header:
+                    hdu.header['S_REGION'] = s_region
+                    break
+            hdul.flush()
 
 
 def main(smoothing_scales={'f182m': 0.25, 'f187n':0.25, 'f212n':0.55,
