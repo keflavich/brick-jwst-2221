@@ -1820,33 +1820,27 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
     print(f'Wrote residual infilled mosaic {infilled_filename}')
 
     # Always run make_starless after producing the infilled mosaic.
-    import sys as _sys
-    import importlib as _importlib
-    _msi_dir = os.path.dirname(os.path.abspath(__file__))
-    if _msi_dir not in _sys.path:
-        _sys.path.insert(0, _msi_dir)
-    _msi = _importlib.import_module('make_starless_image')
+    from brick2221.analysis.make_starless_image import TARGETS, make_starless_filter
 
     # Reverse-lookup the target config by basepath.
-    _cfg = None
-    for _tgt_cfg in _msi.TARGETS.values():
-        if os.path.abspath(_tgt_cfg['basepath']) == os.path.abspath(basepath):
-            _cfg = _tgt_cfg
+    cfg = None
+    for tgt_cfg in TARGETS.values():
+        if os.path.abspath(tgt_cfg['basepath']) == os.path.abspath(basepath):
+            cfg = tgt_cfg
             break
 
-    if _cfg is None:
-        raise ValueError(f'[starless] no TARGETS entry for basepath={basepath!r}')
+    if cfg is None:
+        raise ValueError(f'no TARGETS entry in make_starless_image for basepath={basepath!r}')
 
-    _cat_path = os.path.join(basepath, _cfg['catalog_rel'])
-    _out_dir  = os.path.join(basepath, 'catalogs', 'starless')
-    os.makedirs(_out_dir, exist_ok=True)
-    _cfg_regs = [os.path.join(basepath, p)
-                 for p in _cfg.get('force_mask_regs', [])]
-    _msi.make_starless_filter(
-        filtername, basepath, _cat_path, _out_dir,
+    cat_path = os.path.join(basepath, cfg['catalog_rel'])
+    out_dir  = os.path.join(basepath, 'catalogs', 'starless')
+    os.makedirs(out_dir, exist_ok=True)
+    cfg_regs = [os.path.join(basepath, p) for p in cfg.get('force_mask_regs', [])]
+    make_starless_filter(
+        filtername, basepath, cat_path, out_dir,
         method=residual_kind,
         bgsub=bgsub,
-        force_mask_regs=_cfg_regs or None,
+        force_mask_regs=cfg_regs or None,
     )
 
     return infilled_filename
