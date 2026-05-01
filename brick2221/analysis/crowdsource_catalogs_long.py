@@ -1818,6 +1818,37 @@ def mosaic_each_exposure_residuals(basepath, filtername, proposal_id, field, mod
         infilled_filename = output_filename.replace('_residual_i2d.fits', '_residual_infilled_i2d.fits')
         model.save(infilled_filename, overwrite=True)
     print(f'Wrote residual infilled mosaic {infilled_filename}')
+
+    # Always run make_starless after producing the infilled mosaic.
+    import sys as _sys
+    import importlib as _importlib
+    _msi_dir = os.path.dirname(os.path.abspath(__file__))
+    if _msi_dir not in _sys.path:
+        _sys.path.insert(0, _msi_dir)
+    _msi = _importlib.import_module('make_starless_image')
+
+    # Reverse-lookup the target config by basepath.
+    _cfg = None
+    for _tgt_cfg in _msi.TARGETS.values():
+        if os.path.abspath(_tgt_cfg['basepath']) == os.path.abspath(basepath):
+            _cfg = _tgt_cfg
+            break
+
+    if _cfg is None:
+        raise ValueError(f'[starless] no TARGETS entry for basepath={basepath!r}')
+
+    _cat_path = os.path.join(basepath, _cfg['catalog_rel'])
+    _out_dir  = os.path.join(basepath, 'catalogs', 'starless')
+    os.makedirs(_out_dir, exist_ok=True)
+    _cfg_regs = [os.path.join(basepath, p)
+                 for p in _cfg.get('force_mask_regs', [])]
+    _msi.make_starless_filter(
+        filtername, basepath, _cat_path, _out_dir,
+        method=residual_kind,
+        bgsub=bgsub,
+        force_mask_regs=_cfg_regs or None,
+    )
+
     return infilled_filename
 
 
