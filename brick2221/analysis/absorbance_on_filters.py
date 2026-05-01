@@ -289,6 +289,145 @@ if __name__ == "__main__":
     ax.set_ylim(1e-21, 1e-17)
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.pdf', dpi=150, bbox_inches='tight')
 
+    # New figure: F466N, F410M, F405N with all valid pure-water-ice opacity tables.
+    # Phase classification (amorphous / crystalline / liquid) drives linestyle;
+    # author drives color. Tables with wavelength coverage that does not span
+    # [4.0, 4.7] um are skipped (e.g. Mukai 23K, which begins at 4.17 um).
+    import glob
+    import os as _os
+
+    # (filename glob pattern under optical_constants_cache_dir, phase, author_key)
+    # phase rules (from literature):
+    #   - Mastrapa et al. 2008/2009: T <= 100 K amorphous, T >= 110 K crystalline
+    #   - Hudgins et al. 1993: T <= 100 K amorphous, T >= 120 K crystalline
+    #   - Kitta, Leger, Mukai (cold deposit): amorphous
+    #   - Bertie 1969 (100 K, annealed): crystalline Ih
+    #   - Curtis 2005, Rajaram 2010 (>=106 K, annealed): crystalline
+    #   - Clapp 1995 (190 K): crystalline (cubic/Ih)
+    #   - Zhang 2013 (243 K): liquid
+    def _classify_water(author, temperature):
+        author = str(author).strip()
+        tstr = str(temperature).strip()
+        if tstr.lower().endswith('k'):
+            tstr = tstr[:-1].strip()
+        T = float(tstr)
+        if author == 'Mastrapa':
+            return 'amorphous' if T < 110 else 'crystalline'
+        if author == 'Hudgins':
+            return 'amorphous' if T <= 100 else 'crystalline'
+        if author in ('Kitta', 'Léger', 'Leger', 'Mukai'):
+            return 'amorphous'
+        if author in ('Bertie', 'Curtis', 'Rajaram', 'Clapp'):
+            return 'crystalline'
+        if author == 'Zhang':
+            return 'liquid'
+        return 'unknown'
+
+    phase_linestyle = {'amorphous': '-', 'crystalline': '--', 'liquid': ':', 'unknown': '-.'}
+    author_color = {
+        'Mastrapa':    '#1f77b4',
+        'Hudgins':     '#ff7f0e',
+        'Bertie':      '#2ca02c',
+        'Clapp':       '#d62728',
+        'Kitta':       '#9467bd',
+        'Léger':       '#8c564b',
+        'Leger':       '#8c564b',
+        'Mukai':       '#e377c2',
+        'Curtis':      '#7f7f7f',
+        'Rajaram':     '#bcbd22',
+        'Zhang':       '#17becf',
+    }
+
+    water_files = sorted(glob.glob(f'{optical_constants_cache_dir}/*_H2O_(1)_*K_*.txt'))
+    water_entries = []
+    for fn in water_files:
+        try:
+            tb_w = read_ocdb_file(fn)
+        except Exception as ex:
+            print(f"Skipping {fn}: read error {ex}")
+            continue
+        wl = np.asarray(tb_w['Wavelength'], dtype=float)
+        # Require coverage of both 4.05 and 4.66 um
+        if not (np.isfinite(wl).any() and wl.min() <= 4.0 and wl.max() >= 4.7):
+            print(f"Skipping {_os.path.basename(fn)}: wl range {wl.min():.2f}-{wl.max():.2f} um")
+            continue
+        author = tb_w.meta.get('author', '')
+        temperature = tb_w.meta.get('temperature', np.nan)
+        phase = _classify_water(author, temperature)
+        tstr = str(temperature).strip()
+        if tstr.lower().endswith('k'):
+            tstr = tstr[:-1].strip()
+        try:
+            T_num = float(tstr)
+        except ValueError:
+            T_num = np.nan
+        water_entries.append((tb_w, author, T_num, phase))
+
+    # Group by (author, phase). For multi-T groups, plot a min/max envelope
+    # (fill_between) plus the median curve to keep the legend short. Single-T
+    # groups plot a single curve. Color = author, linestyle = phase.
+    from collections import defaultdict
+    from matplotlib.lines import Line2D
+
+    grid = np.linspace(3.7, 4.8, 1100)  # um, plot range
+
+    grouped = defaultdict(list)
+    for tb_w, author, T, phase in water_entries:
+        molwt = u.Quantity(composition_to_molweight(tb_w.meta['composition']), u.Da)
+        opacity = absorbed_spectrum(xarr=tb_w['Wavelength'], ice_column=1,
+                                    ice_model_table=tb_w, molecular_weight=molwt,
+                                    return_tau=True).to(u.cm**2).value
+        wl = np.asarray(tb_w['Wavelength'], dtype=float)
+        so = np.argsort(wl)
+        wl = wl[so]; opacity = opacity[so]
+        op_on_grid = np.interp(grid, wl, opacity, left=np.nan, right=np.nan)
+        grouped[(author, phase)].append((T, op_on_grid))
+
+    pl.figure(figsize=(9, 5))
+    phase_order = {'amorphous': 0, 'crystalline': 1, 'liquid': 2, 'unknown': 3}
+    legend_handles = []
+    for (author, phase), entries in sorted(grouped.items(),
+                                           key=lambda kv: (phase_order[kv[0][1]], kv[0][0])):
+        Ts = sorted(e[0] for e in entries)
+        stack = np.array([e[1] for e in entries])
+        color = author_color.get(author, None)
+        ls = phase_linestyle.get(phase, '-')
+        if len(entries) >= 2:
+            lo = np.nanmin(stack, axis=0)
+            hi = np.nanmax(stack, axis=0)
+            med = np.nanmedian(stack, axis=0)
+            pl.fill_between(grid, lo, hi, color=color, alpha=0.18, linewidth=0)
+            pl.plot(grid, med, color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({len(entries)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
+        else:
+            pl.plot(grid, stack[0], color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({Ts[0]:g} K)"
+        legend_handles.append(Line2D([0], [0], color=color, linestyle=ls,
+                                     linewidth=1.4, label=label))
+
+    pl.xlabel("Wavelength ($\\mu$m)")
+    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
+    pl.semilogy()
+    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 1.01, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax.set_ylim(1e-21, 1e-17)
+    # Phase legend (linestyle key)
+    phase_handles = [Line2D([0], [0], color='k', linestyle=ls, label=ph)
+                     for ph, ls in phase_linestyle.items()
+                     if any(e[3] == ph for e in water_entries)]
+    leg1 = ax.legend(handles=phase_handles, loc='upper left', fontsize=8, title='phase')
+    ax.add_artist(leg1)
+    # Group legend (author × phase)
+    ax.legend(handles=legend_handles, loc='upper left',
+              bbox_to_anchor=(1.08, 1.0), fontsize=8, frameon=True,
+              title='group (shaded = T range)')
+    pl.title("Pure H$_2$O ice opacities — bands span deposit T range")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_water_versions.pdf', dpi=150, bbox_inches='tight')
+
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,),
                         colors=[default_colors[ii] for ii  in [0,1,2]]
@@ -310,29 +449,33 @@ if __name__ == "__main__":
 
     # special: merge figure 3+4 for paper
     pl.figure(figsize=(8.5, 6))
+    # First subplot
     pl.subplot(2,1,1)
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
-    plot_filters(['F466N', 'F410M', 'F405N'])
-    pl.text(4.66, 6e-18, 'F466N', ha='center')
-    pl.text(4.15, 6e-18, 'F410M', ha='center')
-    pl.text(4.05, 6e-18, 'F405N', ha='center')
-    pl.xlim(3.71, 4.75);
-    pl.ylim(1e-21, 1.2e-17)
+    ax1, transmission_ax1, tmax1 = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax1.text(4.66, tmax1 * 1.01, 'F466N', ha='center')
+    transmission_ax1.text(4.15, tmax1 * 1.01, 'F410M', ha='center')
+    transmission_ax1.text(4.05, tmax1 * 1.01, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax1.set_ylim(1e-21, 1.2e-17)
+    transmission_ax1.set_ylim(0, tmax1 * 1.05)
+    # Second subplot
     pl.subplot(2,1,2)
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
-    plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
-    pl.text(3.56, 6e-18, 'F356W', ha='center')
-    pl.text(4.44, 6e-18, 'F444W', ha='center')
-    pl.xlim(3.00, 5.05);
-    pl.ylim(1e-21, 1.2e-17)
+    ax2, transmission_ax2, tmax2 = plot_filters(filternames=['F356W', 'F444W',])
+    transmission_ax2.text(3.56, tmax2 * 1.01, 'F356W', ha='center')
+    transmission_ax2.text(4.44, tmax2 * 1.01, 'F444W', ha='center')
+    pl.xlim(3.00, 5.05)
+    ax2.set_ylim(1e-21, 1.2e-17)
+    transmission_ax2.set_ylim(0, tmax2 * 1.10)
     handles, labels = pl.gca().get_legend_handles_labels()
     pl.subplot(2,1,1)
     leg = pl.legend(handles=handles,
-            labels=labels,
-            loc='lower left',
-            bbox_to_anchor=(0, 1, 0, 0),
-            ncol=2,
-            mode=None,
+        labels=labels,
+        loc='lower left',
+        bbox_to_anchor=(0, 1, 0, 0),
+        ncol=2,
+        mode=None,
     )
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_figure3plus4merge.pdf', dpi=150, bbox_inches='tight')
 
