@@ -547,7 +547,7 @@ if __name__ == "__main__":
     from icemodels.core import composition_to_molweight
     from astropy import units as u_
     sed_xarr = np.linspace(2.0, 5.5, 4000) * u_.um
-    phx = atmo_model(4000 * u_.K, xarr=sed_xarr, logg=4.0)
+    phx = atmo_model(4000, xarr=sed_xarr, logg=4.0)
     base_flux = phx['fnu'].quantity
 
     fig = pl.figure(figsize=(9, 6))
