@@ -476,6 +476,16 @@ def add_noise(data, infill_mask, err, rng):
     sigma-clipped background of the unmasked pixels.
     """
     if err is not None:
+        if err.shape != data.shape:
+            # Original i2d and residual mosaic can differ by a pixel along
+            # an axis due to different ResampleStep output grids.
+            if err.shape[0] >= data.shape[0] and err.shape[1] >= data.shape[1]:
+                err = err[:data.shape[0], :data.shape[1]]
+            else:
+                # err is smaller than data in at least one axis; can't trim
+                # data without shrinking the output, so fall back to global
+                # noise estimate.
+                err = None
         noise_map = np.abs(err) * NOISE_SCALE
     else:
         bkg = data[~infill_mask & np.isfinite(data)]
