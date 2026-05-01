@@ -480,6 +480,137 @@ if __name__ == "__main__":
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_figure3plus4merge.pdf', dpi=150, bbox_inches='tight')
 
 
+    # =====================================================================
+    # MAX-F466N variants of the paper figures.
+    #
+    # These mirror the previous opacity / SED figures but swap pure-CO from
+    # Gerakines2023 (25K, narrowest pristine deposit) to the broader / more
+    # F466N-absorbing pure-CO tables: Ehrenfreund 10K and 30K, Elsila 12K,
+    # Hudgins 10K (noisy floor). They also use Mastrapa 15K H2O (highest
+    # k(4.66 um) of the well-behaved water tables). The intent is to bracket
+    # the deepest-case ice scenario the published opacity tables can reach,
+    # to test whether broader CO matrices alone could explain the observed
+    # F466N depths without added water.
+    co_ehren10  = read_ocdb_file(f'{optical_constants_cache_dir}/34_CO_(1)_10K_Ehrenfreund.txt')
+    co_ehren30  = read_ocdb_file(f'{optical_constants_cache_dir}/35_CO_(1)_30K_Ehrenfreund.txt')
+    co_elsila12 = read_ocdb_file(f'{optical_constants_cache_dir}/43_CO_(1)_12K_Elsila.txt')
+    co_baratta  = read_ocdb_file(f'{optical_constants_cache_dir}/1_CO_(1)_12.5K_Baratta.txt')
+    co_hudgins10 = co_hudgins  # already loaded above
+    water_max = read_ocdb_file(f'{optical_constants_cache_dir}/239_H2O_(1)_15K_Mastrapa.txt')
+
+    max_co_set = (co_ehren10, co_ehren30, co_elsila12, co_baratta, co_hudgins10)
+
+    # Single-panel zoom on F405/F410/F466 with all max-F466N CO variants
+    pl.figure(figsize=(8.5, 4))
+    plot_opacity_tables(opacity_tables=max_co_set + (water_max, co2_gerakines, ocn))
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 1.01, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax.set_ylim(1e-21, 1e-17)
+    pl.title("Most-F466N-absorbing pure-ice opacity tables")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    # 2-panel merge mirroring opacities_figure3plus4merge but with max-F466N CO
+    pl.figure(figsize=(8.5, 6))
+    pl.subplot(2, 1, 1)
+    plot_opacity_tables(opacity_tables=max_co_set + (water_max, co2_gerakines, ocn))
+    ax1, transmission_ax1, tmax1 = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax1.text(4.66, tmax1 * 1.01, 'F466N', ha='center')
+    transmission_ax1.text(4.15, tmax1 * 1.01, 'F410M', ha='center')
+    transmission_ax1.text(4.05, tmax1 * 1.01, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax1.set_ylim(1e-21, 1.2e-17)
+    transmission_ax1.set_ylim(0, tmax1 * 1.10)
+
+    pl.subplot(2, 1, 2)
+    plot_opacity_tables(opacity_tables=max_co_set + (water_max, co2_gerakines, ocn,
+                                                      methanol, ethanol, water_ammonia),
+                        legend=False)
+    ax2, transmission_ax2, tmax2 = plot_filters(filternames=['F356W', 'F444W'])
+    transmission_ax2.text(3.56, tmax2 * 1.01, 'F356W', ha='center')
+    transmission_ax2.text(4.44, tmax2 * 1.01, 'F444W', ha='center')
+    pl.xlim(3.00, 5.05)
+    ax2.set_ylim(1e-21, 1.2e-17)
+    transmission_ax2.set_ylim(0, tmax2 * 1.10)
+    handles, labels = pl.gca().get_legend_handles_labels()
+    pl.subplot(2, 1, 1)
+    pl.legend(handles=handles, labels=labels,
+              loc='lower left', bbox_to_anchor=(0, 1, 0, 0), ncol=2)
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_figure3plus4merge_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    # Stellar SED with deepest-case ice absorption applied. Use Ehrenfreund
+    # 30K pure CO (most F466N-absorbing well-behaved table) and Mastrapa 15K
+    # H2O. Plot at several columns to show the band depth scaling.
+    from icemodels import atmo_model, absorbed_spectrum
+    from icemodels.core import composition_to_molweight
+    from astropy import units as u_
+    sed_xarr = np.linspace(2.0, 5.5, 4000) * u_.um
+    phx = atmo_model(4000 * u_.K, xarr=sed_xarr, logg=4.0)
+    base_flux = phx['fnu'].quantity
+
+    fig = pl.figure(figsize=(9, 6))
+    ax_sed = fig.add_subplot(111)
+    norm = base_flux.max()
+    ax_sed.plot(sed_xarr, base_flux / norm, color='k', lw=1.4, label='T=4000 K (no ice)')
+    co_columns = [1e17, 1e18, 5e18, 1e19]
+    h2o_columns = [c * 10 for c in co_columns]  # H2O:CO = 10:1
+    co_molwt = u_.Quantity(composition_to_molweight(co_ehren30.meta['composition']), u_.Da)
+    h2o_molwt = u_.Quantity(composition_to_molweight(water_max.meta['composition']), u_.Da)
+    cmap = pl.cm.viridis
+    for ii, (n_co, n_h2o) in enumerate(zip(co_columns, h2o_columns)):
+        spec = absorbed_spectrum(n_co * u_.cm**-2, co_ehren30,
+                                 molecular_weight=co_molwt,
+                                 spectrum=base_flux, xarr=sed_xarr)
+        spec = absorbed_spectrum(n_h2o * u_.cm**-2, water_max,
+                                 molecular_weight=h2o_molwt,
+                                 spectrum=spec, xarr=sed_xarr)
+        ax_sed.plot(sed_xarr, spec / norm, color=cmap(ii / max(1, len(co_columns) - 1)),
+                    lw=1.2,
+                    label=f"N(CO)={n_co:.0e}, N(H$_2$O)={n_h2o:.0e}")
+
+    ax_filt = ax_sed.twinx()
+    for filtername, ls in zip(['F405N', 'F410M', 'F466N'], ['-', ':', '--']):
+        wt = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
+        ax_filt.plot(wt['Wavelength'].quantity.to(u_.um), wt['Transmission'],
+                     color='gray', linestyle=ls, alpha=0.7, label=filtername)
+    ax_filt.set_ylabel('Filter transmission')
+    ax_sed.set_xlabel('Wavelength ($\\mu$m)')
+    ax_sed.set_ylabel('Normalized $F_\\nu$')
+    ax_sed.set_xlim(3.5, 5.0)
+    ax_sed.set_ylim(0, 1.1)
+    ax_sed.legend(loc='lower left', fontsize=8)
+    ax_filt.legend(loc='lower right', fontsize=8)
+    ax_sed.set_title("Stellar SED × Ehrenfreund-30K CO + Mastrapa-15K H$_2$O (10:1 ratio)")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/stellar_sed_iceabsorbed_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    # Same but pure CO only (no water) — to demonstrate that even with the
+    # most-broad pure-CO table, F466N depth saturates well below observed.
+    fig = pl.figure(figsize=(9, 6))
+    ax_sed = fig.add_subplot(111)
+    ax_sed.plot(sed_xarr, base_flux / norm, color='k', lw=1.4, label='T=4000 K (no ice)')
+    for ii, n_co in enumerate([1e17, 1e18, 5e18, 1e19, 5e19]):
+        spec = absorbed_spectrum(n_co * u_.cm**-2, co_ehren30,
+                                 molecular_weight=co_molwt,
+                                 spectrum=base_flux, xarr=sed_xarr)
+        ax_sed.plot(sed_xarr, spec / norm, color=cmap(ii / 4),
+                    lw=1.2, label=f"N(CO)={n_co:.0e} (no H$_2$O)")
+    ax_filt = ax_sed.twinx()
+    for filtername, ls in zip(['F405N', 'F410M', 'F466N'], ['-', ':', '--']):
+        wt = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
+        ax_filt.plot(wt['Wavelength'].quantity.to(u_.um), wt['Transmission'],
+                     color='gray', linestyle=ls, alpha=0.7, label=filtername)
+    ax_filt.set_ylabel('Filter transmission')
+    ax_sed.set_xlabel('Wavelength ($\\mu$m)')
+    ax_sed.set_ylabel('Normalized $F_\\nu$')
+    ax_sed.set_xlim(3.5, 5.0)
+    ax_sed.set_ylim(0, 1.1)
+    ax_sed.legend(loc='lower left', fontsize=8)
+    ax_filt.legend(loc='lower right', fontsize=8)
+    ax_sed.set_title("Stellar SED × pure CO (Ehrenfreund 30 K) only")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/stellar_sed_pureCO_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
 
     ocn_mix1 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:1).ecsv')
     ocn_mix2 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(2:1:0.1).ecsv')
