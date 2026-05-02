@@ -2823,7 +2823,15 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
         # doubling the model and producing large negative residuals.  No
         # quality metric exists at the seed stage, so the brightest init flux
         # wins any flux-disagreement tie.
-        min_sep_pix = 0.5 * fwhm_pix
+        #
+        # For iter3 the union seed catalog contains sources from all filters,
+        # including SW-only detections that are unresolved at LW wavelengths.
+        # Fitting many seeds within one PSF FWHM of each other produces an
+        # ill-conditioned LSQ system with wildly oscillating positive/negative
+        # fluxes that contaminate the residual image.  Tighten the dedup to
+        # 1.0×FWHM for iter3 to collapse seeds within one resolution element
+        # to a single fit position before entering the solver.
+        min_sep_pix = 1.0 * fwhm_pix if is_iter3 else 0.5 * fwhm_pix
         n_before = len(seeded_init_params)
         if n_before > 1:
             keep, n_disagree = _dedup_close_sources(
