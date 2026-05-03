@@ -197,7 +197,25 @@ def load_frame_cutout(crf_path, center, size):
     wcs = WCS(sci_hdr, naxis=2)
     substrt1 = int(prim.get('SUBSTRT1', sci_hdr.get('SUBSTRT1', 1)))
     substrt2 = int(prim.get('SUBSTRT2', sci_hdr.get('SUBSTRT2', 1)))
-    filt = prim.get('FILTER') or sci_hdr.get('FILTER')
+    # NIRCam narrow-band filters (F187N, F212N, F405N, F466N, F470N, ...)
+    # sit in the pupil wheel: header FILTER is the wide partner (F444W,
+    # F150W, ...) and PUPIL holds the actual bandpass. Pick whichever
+    # starts with 'F' followed by digits + N/M and treat as the filter.
+    raw_filter = prim.get('FILTER') or sci_hdr.get('FILTER')
+    raw_pupil = prim.get('PUPIL') or sci_hdr.get('PUPIL')
+    candidates = [c for c in (raw_filter, raw_pupil) if c]
+    filt = None
+    for c in candidates:
+        cl = c.lower()
+        if re.fullmatch(r'f\d{3,4}[nmw]', cl):
+            # prefer narrow over wide if both match
+            if filt is None or (cl.endswith('n') and not filt.endswith('n')):
+                filt = cl
+    if filt is None:
+        raise ValueError(
+            f'Cannot determine filter from FILTER={raw_filter!r} '
+            f'PUPIL={raw_pupil!r} in {crf_path}'
+        )
     detector = (prim.get('DETECTOR') or sci_hdr.get('DETECTOR')).lower()
 
     try:
@@ -236,7 +254,7 @@ def load_frame_cutout(crf_path, center, size):
         wcs=sci_cut.wcs,
         dx=float(dx),
         dy=float(dy),
-        filter=filt.lower() if filt else None,
+        filter=filt,
         detector=detector,
         exposure_id=exposure_id,
         substrt1=substrt1,
@@ -247,10 +265,18 @@ def load_frame_cutout(crf_path, center, size):
     )
 
 
+_PSF_DET_MAP = {'nrcalong': 'nrca5', 'nrcblong': 'nrcb5'}
+
+
 def load_psf_grid(filt, det_token):
-    """Load the stpsf gridded PSF for (filter, detector)."""
+    """Load the stpsf gridded PSF for (filter, detector).
+
+    stpsf names long-wavelength grids ``nrca5``/``nrcb5`` while JWST
+    headers and crf filenames use ``nrcalong``/``nrcblong``. Translate.
+    """
+    psf_det = _PSF_DET_MAP.get(det_token, det_token)
     psf_path = os.path.join(PSF_DIR,
-                            f'nircam_{det_token}_{filt}_fovp101_samp4_npsf16.fits')
+                            f'nircam_{psf_det}_{filt}_fovp101_samp4_npsf16.fits')
     if not os.path.exists(psf_path):
         raise FileNotFoundError(f'Missing stpsf grid: {psf_path}')
     return GriddedPSFModel.read(psf_path)
@@ -366,7 +392,33 @@ def write_frame_log(frames, path):
     Table(rows).write(path, format='csv', overwrite=True)
 
 
+def _parse_args():
+    import argparse
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
+        '--mode', choices=('joint', 'independent'), default='joint',
+        help="AllFramePhotometry mode. 'joint' = shared sky positions "
+             "across all frames (slow). 'independent' = per-frame fits "
+             "stitched together (fast). Default: joint.",
+    )
+    p.add_argument(
+        '--filters', nargs='+', default=None,
+        help='Subset of filters to include (e.g. --filters f187n f210m). '
+             'Default: every filter in FILTER_CFG.',
+    )
+    return p.parse_args()
+
+
 def main():
+    args = _parse_args()
+
+    if args.filters:
+        global FILTER_CFG
+        wanted = {f.lower() for f in args.filters}
+        FILTER_CFG = [(f, d, lw) for (f, d, lw) in FILTER_CFG if f in wanted]
+        if not FILTER_CFG:
+            raise ValueError(f'No matching filters in FILTER_CFG for {wanted}')
+
     print(f'Reading region {REGION_FILE}', flush=True)
     center, size = parse_box_region(REGION_FILE)
     print(f'  center = {center.to_string("hmsdms")}, '
@@ -404,15 +456,15 @@ def main():
         for f in frames
     ]
 
-    print('Building AllFramePhotometry (joint, shared sky positions) ...',
-          flush=True)
+    print(f'Building AllFramePhotometry (mode={args.mode}, sky frame, '
+          f'share_position={args.mode == "joint"}) ...', flush=True)
     aff = AllFramePhotometry(
         psf_models=psf_models,
         fit_shape=fit_shape_per_frame,
         aperture_radius=aperture_per_frame,
-        mode='joint',
+        mode=args.mode,
         position_frame='sky',
-        share_position=True,
+        share_position=(args.mode == 'joint'),
         grouper=SourceGrouper(min_separation=8),
         progress_bar=True,
     )
