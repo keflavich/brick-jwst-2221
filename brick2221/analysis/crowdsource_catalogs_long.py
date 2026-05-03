@@ -2746,6 +2746,27 @@ def do_photometry_step(options, filtername, module, detector, field, basepath,
             )
             seed_catalog = merged_seed_table
 
+        # Remove is_saturated=True entries from the union seed catalog before
+        # combining with the current-frame satstar table.  Union-catalog satstar
+        # rows carry per-filter flux columns (e.g. flux_f335m) but NOT flux_fit;
+        # after vstack with satstar_table they get flux_fit=NaN, which makes
+        # them ineligible for deduplication (_dedup_close_sources only clusters
+        # entries with finite flux).  The current-frame satstar entries (finite
+        # flux_fit) therefore cannot dedup against them, so both copies survive
+        # and the fitter double-subtracts every saturated star.  Stripping them
+        # here lets _combine_seed_and_satstars add only the fresh current-frame
+        # positions (which have finite flux and dedup correctly).
+        if satstar_table is not None:
+            st = _as_table(seed_catalog)
+            if 'is_saturated' in st.colnames:
+                is_sat_mask = np.asarray(st['is_saturated'], dtype=bool)
+                n_sat_in_union = int(np.sum(is_sat_mask))
+                if n_sat_in_union > 0:
+                    seed_catalog = st[~is_sat_mask]
+                    merged_seed_table = _as_table(seed_catalog)
+                    print(f"Stripped {n_sat_in_union} is_saturated=True rows from union seed catalog "
+                          f"(current-frame satstar positions used instead)", flush=True)
+
         seed_catalog = _combine_seed_and_satstars(seed_catalog, satstar_table)
         seed_after_sat_table = _as_table(seed_catalog)
         sat_seed_count = int(np.sum(np.asarray(seed_after_sat_table['is_saturated'], dtype=bool)))
