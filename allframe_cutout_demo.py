@@ -165,6 +165,24 @@ class OffsetGriddedPSF(Fittable2DModel):
         b.flux = float(flux)
         return b(np.asarray(x) + self._dx, np.asarray(y) + self._dy)
 
+    @property
+    def bounding_box(self):
+        # Half-extent of the underlying gridded PSF in detector pixels =
+        # underlying data shape / 2 / oversampling. The bounding box is
+        # centred on (x_0, y_0) in CUTOUT coordinates; size is detector-
+        # equivalent because the wrapper preserves pixel scale.
+        base = self._base
+        over = np.atleast_1d(np.asarray(getattr(base, 'oversampling', 1)))
+        # oversampling can be scalar or (y, x); use last/first respectively
+        ovx = float(over[-1])
+        ovy = float(over[0])
+        ny, nx = base.data.shape[-2:]
+        half_x = (nx / 2.0) / ovx
+        half_y = (ny / 2.0) / ovy
+        x0 = float(self.x_0.value)
+        y0 = float(self.y_0.value)
+        return ((y0 - half_y, y0 + half_y), (x0 - half_x, x0 + half_x))
+
 
 # ─── frame loading ───────────────────────────────────────────────────────────
 
