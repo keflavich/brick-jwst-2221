@@ -31,7 +31,8 @@ from astropy import units as u
 from astropy.table import Table
 
 from icemodels.core import (read_ocdb_file, optical_constants_cache_dir,
-                            absorbed_spectrum, composition_to_molweight)
+                            absorbed_spectrum, composition_to_molweight,
+                            read_ehrenfreund_NK_file)
 from icemodels.colorcolordiagrams import (
     compute_dmag_from_column, _resolve_single_mol_id, ext as ccd_ext,
     carbon_abundance, oxygen_abundance, _fmt_sci, mixes2,
@@ -515,87 +516,6 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
     return out
 
 
-def _parse_NK_description(desc):
-    """Convert an Ehrenfreund 'Description: ...' string into (composition, T_K).
-
-    Handles forms:
-        'pure CO 10 K'                    -> ('CO (1)', 10.0)
-        'H2O:CO=10:1 30 K'                -> ('H2O:CO (10:1)', 30.0)
-        'H2O:CO:O2=1:80:20 10 K'          -> ('H2O:CO:O2 (1:80:20)', 10.0)
-        'CO 10 K'                         -> ('CO (1)', 10.0)
-    """
-    import re as _re
-    desc = desc.strip()
-    m = _re.search(r'\s+(\d+(?:\.\d+)?)\s*K\s*$', desc)
-    T = float(m.group(1)) if m else float('nan')
-    comp_part = desc[:m.start()].strip() if m else desc
-    if comp_part.lower().startswith('pure'):
-        comp = comp_part.split(None, 1)[1].strip() + ' (1)'
-    elif '=' in comp_part:
-        species, ratios = comp_part.split('=', 1)
-        comp = f"{species.strip()} ({ratios.strip()})"
-    elif ':' not in comp_part:
-        comp = comp_part.strip() + ' (1)'
-    else:
-        comp = comp_part.strip()
-    return comp, T
-
-
-def _read_ehrenfreund_NK_file(fn):
-    """Parse a wayback Ehrenfreund E*.NK opacity file.
-
-    Format (line-numbered):
-        1: '<npts> <ncols> <?>' (whitespace-separated integers)
-        2: 'Spectrum: E<n>'
-        3: 'Description: <composition + T>'
-        4: column header (skipped)
-        5..: data rows: 'freq[cm-1] wavel[um] absorbance n k'
-            (Fortran D-exponent: 1.33550D+00 -> 1.33550E+00)
-    """
-    import re as _re
-    with open(fn, 'r', errors='replace') as fh:
-        lines = fh.readlines()
-    if len(lines) < 5:
-        raise ValueError(f"{fn}: too few lines")
-    counts = lines[0].split()
-    npts = int(counts[0])
-    spec_id = lines[1].strip()
-    if ':' in lines[2]:
-        desc = lines[2].split(':', 1)[1].strip()
-    else:
-        desc = lines[2].strip()
-    composition, T = _parse_NK_description(desc)
-
-    wl_um = []
-    kk = []
-    for line in lines[4:4 + npts + 50]:    # tolerate small npts mismatch
-        s = line.replace('D', 'E').replace('d', 'E')
-        parts = s.split()
-        if len(parts) < 5:
-            continue
-        try:
-            wl_um.append(float(parts[1]))
-            kk.append(float(parts[4]))
-        except ValueError:
-            continue
-        if len(wl_um) >= npts:
-            break
-
-    tb = Table({'Wavelength': u.Quantity(wl_um, u.um), 'k': kk})
-    so = np.argsort(np.asarray(tb['Wavelength'], dtype=float))
-    tb = tb[so]
-    n_match = _re.search(r'(\d+)', spec_id)
-    tb.meta['composition'] = composition
-    tb.meta['temperature'] = T
-    tb.meta['author'] = 'Ehrenfreund'
-    tb.meta['molecule'] = composition.split(':')[0].split(' ')[0]
-    tb.meta['index'] = int(n_match.group(1)) if n_match else -1
-    tb.meta['database'] = 'wayback_ehrenfreund'
-    tb.meta['filename'] = fn
-    tb.meta['density'] = 1 * u.g / u.cm**3
-    return tb
-
-
 def _load_ehrenfreund_co_tables(require_overlap=(4.62, 4.70)):
     """Find every optical-constants table whose author or filename references
     Ehrenfreund and whose composition contains CO. Includes:
@@ -644,7 +564,7 @@ def _load_ehrenfreund_co_tables(require_overlap=(4.62, 4.70)):
 
     for fn in candidates_NK:
         try:
-            tb = _read_ehrenfreund_NK_file(fn)
+            tb = read_ehrenfreund_NK_file(fn)
         except Exception as ex:
             print(f"  skip {os.path.basename(fn)}: NK parse error: {ex}")
             continue
