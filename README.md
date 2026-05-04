@@ -9,6 +9,28 @@ work if you have the directory structure set up right and the right files in
 place, but I haven't put in the time needed to make clear what that structure
 should be.
 
+## Package split
+
+As of 2026, the generic JWST photometry pipeline that was originally developed
+in this repository has been extracted into a separate package,
+[`jwst-gc-pipeline`](https://github.com/keflavich/jwst-gc-pipeline),
+so that other Galactic Center JWST programs can share the same reduction and
+crowded-field photometry code.
+
+- **`brick2221`** (this repository) keeps the Brick / Cloud C science:
+  ice analyses (`make_icecolumn_fig9*`, `icecolumn_*`, `make_ccd_with_icemodels`,
+  `co_*`, etc.), foreground extinction modeling, paper-figure generators,
+  selections, distance analysis, and `analysis_setup` / `paths` configuration.
+- **`jwst-gc-pipeline`** holds the field-agnostic pipeline:
+  `PipelineRerun*`, `destreak`, `align_to_catalogs`, `saturated_star_finding`,
+  `filtering`, `make_merged_psf`, `merge_a_plus_b`, `crowdsource_catalogs_*`,
+  `merge_catalogs`, `make_reftable`, generic `plot_tools`, and `isochrones`.
+
+The old import paths inside `brick2221.reduction.*` and
+`brick2221.analysis.*` continue to work as backward-compatibility shims —
+they re-export the implementation from `jwst_gc_pipeline`. New code should
+import directly from `jwst_gc_pipeline`.
+
 ## Reduction process
 
  1. Pipeline files are in `reduction/`.
