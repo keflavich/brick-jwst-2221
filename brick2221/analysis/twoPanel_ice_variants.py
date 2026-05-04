@@ -218,7 +218,7 @@ def _opacity_panel(ax, entries, species, show_phase_in_label=True):
     transmission_ax, tmax = _draw_filter_overlay(ax)
     transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
     transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
-    transmission_ax.text(4.05, tmax * 1.03, 'F405N', ha='center', fontsize=8)
+    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center', fontsize=8)
 
     return legend_handles
 
@@ -515,21 +515,111 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
     return out
 
 
-def _load_ehrenfreund_co_tables(require_overlap=(4.5, 4.8)):
+def _parse_NK_description(desc):
+    """Convert an Ehrenfreund 'Description: ...' string into (composition, T_K).
+
+    Handles forms:
+        'pure CO 10 K'                    -> ('CO (1)', 10.0)
+        'H2O:CO=10:1 30 K'                -> ('H2O:CO (10:1)', 30.0)
+        'H2O:CO:O2=1:80:20 10 K'          -> ('H2O:CO:O2 (1:80:20)', 10.0)
+        'CO 10 K'                         -> ('CO (1)', 10.0)
+    """
+    import re as _re
+    desc = desc.strip()
+    m = _re.search(r'\s+(\d+(?:\.\d+)?)\s*K\s*$', desc)
+    T = float(m.group(1)) if m else float('nan')
+    comp_part = desc[:m.start()].strip() if m else desc
+    if comp_part.lower().startswith('pure'):
+        comp = comp_part.split(None, 1)[1].strip() + ' (1)'
+    elif '=' in comp_part:
+        species, ratios = comp_part.split('=', 1)
+        comp = f"{species.strip()} ({ratios.strip()})"
+    elif ':' not in comp_part:
+        comp = comp_part.strip() + ' (1)'
+    else:
+        comp = comp_part.strip()
+    return comp, T
+
+
+def _read_ehrenfreund_NK_file(fn):
+    """Parse a wayback Ehrenfreund E*.NK opacity file.
+
+    Format (line-numbered):
+        1: '<npts> <ncols> <?>' (whitespace-separated integers)
+        2: 'Spectrum: E<n>'
+        3: 'Description: <composition + T>'
+        4: column header (skipped)
+        5..: data rows: 'freq[cm-1] wavel[um] absorbance n k'
+            (Fortran D-exponent: 1.33550D+00 -> 1.33550E+00)
+    """
+    import re as _re
+    with open(fn, 'r', errors='replace') as fh:
+        lines = fh.readlines()
+    if len(lines) < 5:
+        raise ValueError(f"{fn}: too few lines")
+    counts = lines[0].split()
+    npts = int(counts[0])
+    spec_id = lines[1].strip()
+    if ':' in lines[2]:
+        desc = lines[2].split(':', 1)[1].strip()
+    else:
+        desc = lines[2].strip()
+    composition, T = _parse_NK_description(desc)
+
+    wl_um = []
+    kk = []
+    for line in lines[4:4 + npts + 50]:    # tolerate small npts mismatch
+        s = line.replace('D', 'E').replace('d', 'E')
+        parts = s.split()
+        if len(parts) < 5:
+            continue
+        try:
+            wl_um.append(float(parts[1]))
+            kk.append(float(parts[4]))
+        except ValueError:
+            continue
+        if len(wl_um) >= npts:
+            break
+
+    tb = Table({'Wavelength': u.Quantity(wl_um, u.um), 'k': kk})
+    so = np.argsort(np.asarray(tb['Wavelength'], dtype=float))
+    tb = tb[so]
+    n_match = _re.search(r'(\d+)', spec_id)
+    tb.meta['composition'] = composition
+    tb.meta['temperature'] = T
+    tb.meta['author'] = 'Ehrenfreund'
+    tb.meta['molecule'] = composition.split(':')[0].split(' ')[0]
+    tb.meta['index'] = int(n_match.group(1)) if n_match else -1
+    tb.meta['database'] = 'wayback_ehrenfreund'
+    tb.meta['filename'] = fn
+    tb.meta['density'] = 1 * u.g / u.cm**3
+    return tb
+
+
+def _load_ehrenfreund_co_tables(require_overlap=(4.62, 4.70)):
     """Find every optical-constants table whose author or filename references
-    Ehrenfreund and whose composition contains CO. Includes pure CO + mixes
-    (CO:CO2 etc). Wavelength range relaxed to [4.5, 4.8] um since the
-    archived Ehrenfreund pure-CO tables only span the CO fundamental."""
-    candidates = sorted(set(
+    Ehrenfreund and whose composition contains CO. Includes:
+      * OCDB Ehrenfreund deposits (`*Ehrenfreund*.txt`)
+      * Wayback E*.NK files (`wayback_ehrenfreund_E*.NK`) — these are the
+        Ehrenfreund/Schutte ISODB tables retrieved from the Internet Archive
+      * Schutte Dropbox files containing CO (raw experiment data)
+
+    Wavelength range relaxed to [4.5, 4.8] um since the archived Ehrenfreund
+    pure-CO tables only span the CO fundamental."""
+    candidates_ocdb = sorted(set(
         glob.glob(f'{optical_constants_cache_dir}/*Ehrenfreund*.txt') +
         glob.glob(f'{optical_constants_cache_dir}/*ehrenfreund*.txt') +
         [fn for fn in glob.glob(f'{optical_constants_cache_dir}/wayback_*')
-         if 'CO' in os.path.basename(fn).upper()] +
+         if 'CO' in os.path.basename(fn).upper()
+         and not fn.upper().endswith('.NK')] +
         [fn for fn in glob.glob(f'{optical_constants_cache_dir}/schutte_dropbox_*')
          if 'CO' in os.path.basename(fn).upper()]
     ))
+    candidates_NK = sorted(glob.glob(
+        f'{optical_constants_cache_dir}/wayback_ehrenfreund_E*.NK'))
+
     out = []
-    for fn in candidates:
+    for fn in candidates_ocdb:
         try:
             tb = read_ocdb_file(fn)
         except Exception:
@@ -551,6 +641,28 @@ def _load_ehrenfreund_co_tables(require_overlap=(4.5, 4.8)):
         author = tb.meta.get('author', 'Ehrenfreund')
         T = _temp_str_to_float(tb.meta.get('temperature', np.nan))
         out.append((tb, author, T, comp, fn))
+
+    for fn in candidates_NK:
+        try:
+            tb = _read_ehrenfreund_NK_file(fn)
+        except Exception as ex:
+            print(f"  skip {os.path.basename(fn)}: NK parse error: {ex}")
+            continue
+        comp = tb.meta.get('composition', '')
+        # Token-level CO check: skip CO2-only / pure-CO2 tables.
+        comp_tokens = [tok.split('(')[0].strip()
+                       for tok in comp.split(':')]
+        if 'CO' not in comp_tokens:
+            continue
+        wl = np.asarray(tb['Wavelength'], dtype=float)
+        if not (np.isfinite(wl).any() and wl.min() <= require_overlap[0]
+                and wl.max() >= require_overlap[1]):
+            print(f"  skip {os.path.basename(fn)} ({comp}): wl "
+                  f"{wl.min():.2f}-{wl.max():.2f}")
+            continue
+        T = _temp_str_to_float(tb.meta.get('temperature', np.nan))
+        out.append((tb, 'Ehrenfreund', T, comp, fn))
+
     # Deduplicate by (composition, T): prefer shortest path (raw OCDB id over
     # `ocdb_<id>_` duplicate copies).
     by_key = {}
