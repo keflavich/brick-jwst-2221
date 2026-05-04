@@ -315,12 +315,6 @@ def _color_vs_column_panel(ax, dmag_tbl, entries, species,
     ax.set_ylabel(rf'{color[0]} - {color[1]} (mag, ice + dust)')
     ax.grid(alpha=0.3)
 
-    ylim = ax.get_ylim()
-    if ylim[0] < -5:
-        ax.set_ylim(bottom=-5)
-    if ylim[1] > 5:
-        ax.set_ylim(top=5)
-
     # secondary x-axis: A_V (top)
     secax_av = ax.secondary_xaxis(
         'top',
@@ -328,6 +322,8 @@ def _color_vs_column_panel(ax, dmag_tbl, entries, species,
                    lambda x: x * NH_TO_AV / NH2_TO_NH),
     )
     secax_av.set_xlabel('A$_V$ (mag)')
+    # hard-clamp the y-axis to ±5 mag (after secondary axes / autoscale)
+    ax.set_ylim(-5, 5)
     return legend_handles
 
 
@@ -349,6 +345,13 @@ def make_two_panel(species, dmag_tbl, savedir):
                                           show_phase_in_label=show_phase)
     right_handles = _opacity_panel(ax_op, entries, species,
                                    show_phase_in_label=show_phase)
+
+
+    ylim = ax_left.get_ylim()
+    if ylim[0] < -5:
+        ax_left.set_ylim(bottom=-5)
+    if ylim[1] > 5:
+        ax_left.set_ylim(top=5)
 
     # Single combined legend (group key — color = author, linestyle = phase
     # if multiple phases present, shaded = T range across deposits). Left and
@@ -480,6 +483,7 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
         functions=(lambda x: x * NH2_TO_NH / NH_TO_AV,
                    lambda x: x * NH_TO_AV / NH2_TO_NH))
     secax.set_xlabel(r'$A_V$ (mag)')
+    ax_left.set_ylim(-5, 5)  # hard-clamp color axis to +/- 5 mag
 
     # right panel cosmetics
     ax_op.set_xlabel(r'Wavelength ($\mu$m)')
@@ -632,6 +636,7 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
         functions=(lambda x: x * NH2_TO_NH / NH_TO_AV,
                    lambda x: x * NH_TO_AV / NH2_TO_NH))
     secax.set_xlabel(r'$A_V$ (mag)')
+    ax_left.set_ylim(-5, 5)  # hard-clamp color axis to +/- 5 mag
 
     # right panel cosmetics
     ax_op.set_xlabel(r'Wavelength ($\mu$m)')
