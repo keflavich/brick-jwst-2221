@@ -18,7 +18,8 @@ dependencies = [
   "mpl_plot_templates",
   "pyspeckit",
   "grid_strategy",
-  "stpsf"
+  "stpsf",
+  "jwst-gc-pipeline",
 ]
 dynamic = ["version"]
 
