@@ -314,6 +314,13 @@ def _color_vs_column_panel(ax, dmag_tbl, entries, species,
     ax.set_xlabel(r'N(H$_2$) [cm$^{-2}$]')
     ax.set_ylabel(rf'{color[0]} - {color[1]} (mag, ice + dust)')
     ax.grid(alpha=0.3)
+
+    ylim = ax.get_ylim()
+    if ylim[0] < -5:
+        ax.set_ylim(bottom=-5)
+    if ylim[1] > 5:
+        ax.set_ylim(top=5)
+
     # secondary x-axis: A_V (top)
     secax_av = ax.secondary_xaxis(
         'top',
@@ -366,9 +373,9 @@ def make_two_panel(species, dmag_tbl, savedir):
     fig.suptitle(
         rf"Pure {species_label} ice — left: ${color[0]}-{color[1]}$ "
         rf"(ice + dust) vs $N(\mathrm{{H_2}})$ at "
-        rf"$N({species_label})/N(\mathrm{{H_2}}) = {_fmt_sci(abundance)}$;  "
+        rf"$N(${species_label}$)/N(\mathrm{{H_2}}) = {_fmt_sci(abundance)}$;  "
         rf"right: opacity profile",
-        fontsize=11, y=0.97,
+        fontsize=11, y=0.90,
     )
     fig.tight_layout(rect=(0, 0.08, 1, 0.94))
     out = os.path.join(savedir, f'twopanel_iceVariants_{species}.pdf')
@@ -483,7 +490,7 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
     transmission_ax, tmax = _draw_filter_overlay(ax_op)
     transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
     transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
-    transmission_ax.text(4.05, tmax * 1.03, 'F405N', ha='center', fontsize=8)
+    transmission_ax.text(4.05, tmax * 0.90, 'F405N', ha='center', fontsize=8)
 
     fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=8,
                frameon=True, bbox_to_anchor=(0.5, -0.02),
@@ -498,6 +505,157 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
     )
     fig.tight_layout(rect=(0, 0.10, 1, 0.94))
     out = os.path.join(savedir, f'twopanel_iceVariants_{name}.pdf')
+    fig.savefig(out, dpi=150, bbox_inches='tight')
+    pl.close(fig)
+    print(f"  saved {out}")
+    return out
+
+
+def _load_ehrenfreund_co_tables(require_overlap=(4.5, 4.8)):
+    """Find every optical-constants table whose author or filename references
+    Ehrenfreund and whose composition contains CO. Includes pure CO + mixes
+    (CO:CO2 etc). Wavelength range relaxed to [4.5, 4.8] um since the
+    archived Ehrenfreund pure-CO tables only span the CO fundamental."""
+    candidates = sorted(set(
+        glob.glob(f'{optical_constants_cache_dir}/*Ehrenfreund*.txt') +
+        glob.glob(f'{optical_constants_cache_dir}/*ehrenfreund*.txt') +
+        [fn for fn in glob.glob(f'{optical_constants_cache_dir}/wayback_*')
+         if 'CO' in os.path.basename(fn).upper()] +
+        [fn for fn in glob.glob(f'{optical_constants_cache_dir}/schutte_dropbox_*')
+         if 'CO' in os.path.basename(fn).upper()]
+    ))
+    out = []
+    for fn in candidates:
+        try:
+            tb = read_ocdb_file(fn)
+        except Exception:
+            try:
+                from icemodels.core import read_lida_file
+                tb = read_lida_file(fn)
+            except Exception as ex:
+                print(f"  skip {os.path.basename(fn)}: read error: {ex}")
+                continue
+        comp = tb.meta.get('composition', '')
+        if 'CO' not in comp.upper():
+            continue
+        wl = np.asarray(tb['Wavelength'], dtype=float)
+        if not (np.isfinite(wl).any() and wl.min() <= require_overlap[0]
+                and wl.max() >= require_overlap[1]):
+            print(f"  skip {os.path.basename(fn)} ({comp}): wl "
+                  f"{wl.min():.2f}-{wl.max():.2f}")
+            continue
+        author = tb.meta.get('author', 'Ehrenfreund')
+        T = _temp_str_to_float(tb.meta.get('temperature', np.nan))
+        out.append((tb, author, T, comp, fn))
+    # Deduplicate by (composition, T): prefer shortest path (raw OCDB id over
+    # `ocdb_<id>_` duplicate copies).
+    by_key = {}
+    for entry in out:
+        key = (entry[3], entry[2])
+        if key not in by_key or len(entry[4]) < len(by_key[key][4]):
+            by_key[key] = entry
+    return list(by_key.values())
+
+
+def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
+                                  color=DEFAULT_COLOR,
+                                  abundance_wrt_h2=2.5e-4,
+                                  icemol='CO'):
+    """Two-panel figure dedicated to Ehrenfreund CO opacity variants
+    (pure CO + CO-bearing mixes tagged with Ehrenfreund authorship)."""
+    print("=== CO_ehrenfreund two-panel ===")
+    entries = _load_ehrenfreund_co_tables()
+    if not entries:
+        print("  no Ehrenfreund CO tables found; skipping")
+        return None
+    print(f"  {len(entries)} Ehrenfreund CO-bearing tables")
+
+    h2_grid = np.geomspace(H2_GRID_MIN, H2_GRID_MAX, 200)
+    av_grid = h2_grid * NH2_TO_NH / NH_TO_AV
+    EVc = (ccd_ext(_wavelength_of_filter(color[0])) -
+           ccd_ext(_wavelength_of_filter(color[1])))
+    a_color = av_grid * EVc
+    grid = np.linspace(3.7, 4.8, 1100)
+
+    fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
+    cycle = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    legend_handles = []
+
+    for ii, (tb, author, T, comp, fn) in enumerate(entries):
+        c = cycle[ii % len(cycle)]
+        # ---- left panel: color vs N(H2) ----
+        try:
+            sub = (dmag_tbl
+                   .loc['composition', comp]
+                   .loc['temperature', float(T)])
+        except Exception:
+            sub = None
+        if sub is not None and len(sub):
+            n_icemol = h2_grid * abundance_wrt_h2
+            try:
+                dmag = compute_dmag_from_column(
+                    n_icemol, sub, icemol=icemol, maxcol=1e22,
+                    filter1=color[0], filter2=color[1], verbose=False)
+                ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
+                             label=f"{comp} {T:g}K")
+            except Exception as ex:
+                print(f"  left dmag failed {comp} {T}K: {ex}")
+        else:
+            print(f"  no dmag entry for {comp} {T}K (skipped left panel)")
+
+        # ---- right panel: opacity vs wavelength ----
+        try:
+            molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+            op = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1,
+                                   ice_model_table=tb,
+                                   molecular_weight=molwt,
+                                   return_tau=True).to(u.cm**2).value
+        except Exception as ex:
+            print(f"  right opacity failed {comp}: {ex}")
+            continue
+        wl = np.asarray(tb['Wavelength'], dtype=float)
+        so = np.argsort(wl)
+        op_g = np.interp(grid, wl[so], op[so], left=np.nan, right=np.nan)
+        ax_op.plot(grid, op_g, color=c, linewidth=1.3, label=f"{comp} {T:g}K")
+
+        legend_handles.append(Line2D([0], [0], color=c, linewidth=1.3,
+                                     label=f"{comp} {T:g}K"))
+
+    # left panel cosmetics
+    ax_left.set_xscale('log')
+    ax_left.set_xlabel(r'$N(\mathrm{H_2})$ [cm$^{-2}$]')
+    ax_left.set_ylabel(rf'${color[0]}-{color[1]}$ (mag, ice + dust)')
+    ax_left.grid(alpha=0.3)
+    secax = ax_left.secondary_xaxis(
+        'top',
+        functions=(lambda x: x * NH2_TO_NH / NH_TO_AV,
+                   lambda x: x * NH_TO_AV / NH2_TO_NH))
+    secax.set_xlabel(r'$A_V$ (mag)')
+
+    # right panel cosmetics
+    ax_op.set_xlabel(r'Wavelength ($\mu$m)')
+    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.semilogy()
+    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_xlim(3.71, 4.75)
+    transmission_ax, tmax = _draw_filter_overlay(ax_op)
+    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
+    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
+    transmission_ax.text(4.05, tmax * 0.90, 'F405N', ha='center', fontsize=8)
+
+    fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=8,
+               frameon=True, bbox_to_anchor=(0.5, -0.02),
+               title='Ehrenfreund CO-bearing opacity tables')
+    fig.suptitle(
+        rf"Ehrenfreund CO opacity variants — left: ${color[0]}-{color[1]}$ "
+        rf"(ice + dust) vs $N(\mathrm{{H_2}})$ at "
+        rf"$N(\mathrm{{{icemol}}})/N(\mathrm{{H_2}}) = "
+        rf"{_fmt_sci(abundance_wrt_h2)}$;  right: opacity profile",
+        fontsize=11, y=0.97,
+    )
+    fig.tight_layout(rect=(0, 0.10, 1, 0.94))
+    out = os.path.join(savedir, 'twopanel_iceVariants_CO_ehrenfreund.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -520,3 +678,4 @@ if __name__ == '__main__':
         for species in ('H2O', 'CO', 'CO2'):
             make_two_panel(species, dmag_tbl, savedir)
         make_two_panel_mixes(dmag_tbl, savedir)
+        make_two_panel_co_ehrenfreund(dmag_tbl, savedir)
