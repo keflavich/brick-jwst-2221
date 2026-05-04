@@ -34,7 +34,7 @@ from icemodels.core import (read_ocdb_file, optical_constants_cache_dir,
                             absorbed_spectrum, composition_to_molweight)
 from icemodels.colorcolordiagrams import (
     compute_dmag_from_column, _resolve_single_mol_id, ext as ccd_ext,
-    carbon_abundance, oxygen_abundance,
+    carbon_abundance, oxygen_abundance, _fmt_sci, mixes2,
 )
 from astroquery.svo_fps import SvoFps
 
@@ -168,7 +168,7 @@ def _draw_filter_overlay(ax, filternames=('F466N', 'F410M', 'F405N'),
     return transmission_ax, tmax
 
 
-def _opacity_panel(ax, entries, species):
+def _opacity_panel(ax, entries, species, show_phase_in_label=True):
     """Right-panel: opacity vs wavelength, grouped by (author, phase). For
     multi-T groups, plot min/max envelope + median curve."""
     grid = np.linspace(3.7, 4.8, 1100)
@@ -191,7 +191,8 @@ def _opacity_panel(ax, entries, species):
         Ts = sorted(e[0] for e in eg)
         stack = np.array([e[1] for e in eg])
         color = AUTHOR_COLOR.get(author, None)
-        ls = PHASE_LINESTYLE.get(phase, '-')
+        ls = PHASE_LINESTYLE.get(phase, '-') if show_phase_in_label else '-'
+        phase_tag = f" {phase}" if show_phase_in_label else ""
         if len(eg) >= 2:
             lo = np.nanmin(stack, axis=0)
             hi = np.nanmax(stack, axis=0)
@@ -199,11 +200,11 @@ def _opacity_panel(ax, entries, species):
             ax.fill_between(grid, lo, hi, color=color, alpha=0.18, linewidth=0)
             ax.plot(grid, med, color=color, linestyle=ls, alpha=0.95,
                     linewidth=1.4)
-            label = f"{author} {phase} ({len(eg)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
+            label = f"{author}{phase_tag} ({len(eg)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
         else:
             ax.plot(grid, stack[0], color=color, linestyle=ls, alpha=0.95,
                     linewidth=1.4)
-            label = f"{author} {phase} ({Ts[0]:g} K)"
+            label = f"{author}{phase_tag} ({Ts[0]:g} K)"
         legend_handles.append(Line2D([0], [0], color=color, linestyle=ls,
                                      linewidth=1.4, label=label))
 
@@ -239,7 +240,8 @@ def _wavelength_of_filter(filtername):
 
 
 def _color_vs_column_panel(ax, dmag_tbl, entries, species,
-                           color=DEFAULT_COLOR, abundance_wrt_h2=None):
+                           color=DEFAULT_COLOR, abundance_wrt_h2=None,
+                           show_phase_in_label=True):
     """Left-panel: ice+dust color vs N(H2) (with A_V and N(species) secondary
     x-axes), grouped by (author, phase). Multi-T groups get min/max envelope
     + median curve. Uses the same author color and phase linestyle as the
@@ -293,17 +295,18 @@ def _color_vs_column_panel(ax, dmag_tbl, entries, species,
         Ts = sorted(e[0] for e in eg)
         stack = np.array([e[1] for e in eg])
         c = AUTHOR_COLOR.get(author, None)
-        ls = PHASE_LINESTYLE.get(phase, '-')
+        ls = PHASE_LINESTYLE.get(phase, '-') if show_phase_in_label else '-'
+        phase_tag = f" {phase}" if show_phase_in_label else ""
         if len(eg) >= 2:
             lo = np.nanmin(stack, axis=0)
             hi = np.nanmax(stack, axis=0)
             med = np.nanmedian(stack, axis=0)
             ax.fill_between(h2_grid, lo, hi, color=c, alpha=0.18, linewidth=0)
             ax.plot(h2_grid, med, color=c, linestyle=ls, alpha=0.95, linewidth=1.4)
-            label = f"{author} {phase} ({len(eg)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
+            label = f"{author}{phase_tag} ({len(eg)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
         else:
             ax.plot(h2_grid, stack[0], color=c, linestyle=ls, alpha=0.95, linewidth=1.4)
-            label = f"{author} {phase} ({Ts[0]:g} K)"
+            label = f"{author}{phase_tag} ({Ts[0]:g} K)"
         legend_handles.append(Line2D([0], [0], color=c, linestyle=ls,
                                      linewidth=1.4, label=label))
 
@@ -331,13 +334,18 @@ def make_two_panel(species, dmag_tbl, savedir):
         print(f"  no entries for {species}; skipping")
         return None
 
-    fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
-    left_handles = _color_vs_column_panel(ax_left, dmag_tbl, entries, species)
-    right_handles = _opacity_panel(ax_op, entries, species)
+    phases_present = {ph for _, _, _, ph in entries}
+    show_phase = len(phases_present) > 1
 
-    # Single combined legend (group key — color = author, linestyle = phase,
-    # shaded = T range). Left and right panels share the same encoding so
-    # one legend suffices. Build by deduplicating on label.
+    fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
+    left_handles = _color_vs_column_panel(ax_left, dmag_tbl, entries, species,
+                                          show_phase_in_label=show_phase)
+    right_handles = _opacity_panel(ax_op, entries, species,
+                                   show_phase_in_label=show_phase)
+
+    # Single combined legend (group key — color = author, linestyle = phase
+    # if multiple phases present, shaded = T range across deposits). Left and
+    # right panels share the same encoding so one legend suffices.
     seen = set()
     combined = []
     for h in list(left_handles) + list(right_handles):
@@ -345,22 +353,151 @@ def make_two_panel(species, dmag_tbl, savedir):
             continue
         seen.add(h.get_label())
         combined.append(h)
+    legend_title = ('group (shaded = T range across deposits)'
+                    if not show_phase else
+                    'group (color = author, linestyle = phase, shaded = T range)')
     fig.legend(handles=combined, loc='lower center', ncol=4, fontsize=8,
                frameon=True, bbox_to_anchor=(0.5, -0.02),
-               title='group (shaded = T range across deposits)')
+               title=legend_title)
 
     species_label = {'H2O': r'H$_2$O', 'CO': 'CO', 'CO2': r'CO$_2$'}[species]
     abundance = ABUNDANCE_DEFAULT[species]
     color = DEFAULT_COLOR
     fig.suptitle(
-        rf"Pure {species_label} ice — left: {color[0]}-{color[1]} "
-        rf"(ice + dust) vs N(H$_2$) at "
-        rf"$N({species_label})/N(\mathrm{{H_2}}) = {abundance:.1e}$;  "
+        rf"Pure {species_label} ice — left: ${color[0]}-{color[1]}$ "
+        rf"(ice + dust) vs $N(\mathrm{{H_2}})$ at "
+        rf"$N({species_label})/N(\mathrm{{H_2}}) = {_fmt_sci(abundance)}$;  "
         rf"right: opacity profile",
-        fontsize=11,
+        fontsize=11, y=0.97,
     )
-    fig.tight_layout(rect=(0, 0.10, 1, 0.95))
+    fig.tight_layout(rect=(0, 0.08, 1, 0.94))
     out = os.path.join(savedir, f'twopanel_iceVariants_{species}.pdf')
+    fig.savefig(out, dpi=150, bbox_inches='tight')
+    pl.close(fig)
+    print(f"  saved {out}")
+    return out
+
+
+def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
+                         color=DEFAULT_COLOR, abundance_wrt_h2=2.5e-4,
+                         icemol='CO'):
+    """Two-panel for the paper's standard ice mixture set (mixes2 by default).
+    Left: ice+dust color vs N(H2) for each mix composition (one curve per
+    entry, color cycles by entry index). Right: opacity vs wavelength loaded
+    from the precomputed mymixes ecsv tables when available; otherwise
+    rebuilt on the fly.
+    """
+    print(f"=== {name} two-panel ===")
+    h2_grid = np.geomspace(H2_GRID_MIN, H2_GRID_MAX, 200)
+    av_grid = h2_grid * NH2_TO_NH / NH_TO_AV
+    EVc = (ccd_ext(_wavelength_of_filter(color[0])) -
+           ccd_ext(_wavelength_of_filter(color[1])))
+    a_color = av_grid * EVc
+
+    fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
+
+    # color cycle
+    cycle = pl.rcParams['axes.prop_cycle'].by_key().get('color',
+            ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'])
+
+    grid = np.linspace(3.7, 4.8, 1100)
+    legend_handles = []
+    mymix_dir = ('/blue/adamginsburg/adamginsburg/repos/icemodels/'
+                 'icemodels/data/mymixes')
+
+    for ii, (composition, T) in enumerate(mixes):
+        c = cycle[ii % len(cycle)]
+        # ----- left panel: color vs N(H2) -----
+        try:
+            sub = (dmag_tbl
+                   .loc['composition', composition]
+                   .loc['temperature', float(T)])
+        except Exception as ex:
+            print(f"  skip left {composition} {T}K: {ex}")
+            sub = None
+        if sub is not None and len(sub):
+            n_icemol = h2_grid * abundance_wrt_h2
+            try:
+                dmag = compute_dmag_from_column(
+                    n_icemol, sub, icemol=icemol,
+                    maxcol=1e22, filter1=color[0], filter2=color[1],
+                    verbose=False)
+                ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
+                             label=f"{composition} {T:g}K")
+            except Exception as ex:
+                print(f"  left dmag failed {composition}: {ex}")
+
+        # ----- right panel: opacity vs wavelength -----
+        # Use precomputed mymix file if it exists, else skip (rebuilding on
+        # the fly requires component opacity tables).
+        safe_comp = composition.replace(' ', '_').replace(':', ':')
+        candidates = glob.glob(f"{mymix_dir}/{safe_comp}.ecsv") + \
+                     glob.glob(f"{mymix_dir}/{composition.replace(' ', '_')}.ecsv")
+        op_tab = None
+        for cand in candidates:
+            try:
+                op_tab = Table.read(cand)
+                break
+            except Exception:
+                continue
+        if op_tab is None:
+            print(f"  skip right {composition}: no mymix file")
+            continue
+        kk = op_tab['k₁'] if 'k₁' in op_tab.colnames else op_tab['k']
+        molwt = u.Quantity(composition_to_molweight(composition), u.Da)
+        try:
+            op = absorbed_spectrum(xarr=op_tab['Wavelength'], ice_column=1,
+                                   ice_model_table=op_tab,
+                                   molecular_weight=molwt,
+                                   return_tau=True).to(u.cm**2).value
+        except Exception as ex:
+            print(f"  right opacity failed {composition}: {ex}")
+            continue
+        wl = np.asarray(op_tab['Wavelength'], dtype=float)
+        so = np.argsort(wl)
+        op_g = np.interp(grid, wl[so], op[so], left=np.nan, right=np.nan)
+        ax_op.plot(grid, op_g, color=c, linewidth=1.3,
+                   label=f"{composition} {T:g}K")
+
+        legend_handles.append(Line2D([0], [0], color=c, linewidth=1.3,
+                                     label=f"{composition} {T:g}K"))
+
+    # left panel cosmetics
+    ax_left.set_xscale('log')
+    ax_left.set_xlabel(r'$N(\mathrm{H_2})$ [cm$^{-2}$]')
+    ax_left.set_ylabel(rf'${color[0]}-{color[1]}$ (mag, ice + dust)')
+    ax_left.grid(alpha=0.3)
+    secax = ax_left.secondary_xaxis(
+        'top',
+        functions=(lambda x: x * NH2_TO_NH / NH_TO_AV,
+                   lambda x: x * NH_TO_AV / NH2_TO_NH))
+    secax.set_xlabel(r'$A_V$ (mag)')
+
+    # right panel cosmetics
+    ax_op.set_xlabel(r'Wavelength ($\mu$m)')
+    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.semilogy()
+    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_xlim(3.71, 4.75)
+    transmission_ax, tmax = _draw_filter_overlay(ax_op)
+    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
+    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
+    transmission_ax.text(4.05, tmax * 1.03, 'F405N', ha='center', fontsize=8)
+
+    fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=8,
+               frameon=True, bbox_to_anchor=(0.5, -0.02),
+               title=f'{name} compositions')
+
+    fig.suptitle(
+        rf"Standard mix set ({name}) — left: ${color[0]}-{color[1]}$ "
+        rf"(ice + dust) vs $N(\mathrm{{H_2}})$ at "
+        rf"$N(\mathrm{{{icemol}}})/N(\mathrm{{H_2}}) = "
+        rf"{_fmt_sci(abundance_wrt_h2)}$;  right: opacity profile",
+        fontsize=11, y=0.97,
+    )
+    fig.tight_layout(rect=(0, 0.10, 1, 0.94))
+    out = os.path.join(savedir, f'twopanel_iceVariants_{name}.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -382,3 +519,4 @@ if __name__ == '__main__':
         warnings.simplefilter('default')
         for species in ('H2O', 'CO', 'CO2'):
             make_two_panel(species, dmag_tbl, savedir)
+        make_two_panel_mixes(dmag_tbl, savedir)
