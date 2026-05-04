@@ -263,13 +263,25 @@ if __name__ == "__main__":
     default_colors = list(pl.rcParams['axes.prop_cycle'].by_key()['color'])
     default_colors =['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
     print(f"default_colors: {default_colors}")
-    pl.figure()
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, ocn),
-                       colors=[default_colors[ii] for ii  in [0,1,3]]
-    )
-    plot_filters()
-    pl.xlim(4.55, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.pdf', dpi=150, bbox_inches='tight')
+    # Sized for a single-column 3.5" wide figure with ~10 pt text. Font sizes
+    # are absolute points, so keeping them at 10 with figsize=(3.5, ...) yields
+    # 10 pt text in the embedded PDF.
+    import matplotlib as _mpl
+    _withocn_rc = {
+        'font.size':       10,
+        'axes.labelsize':  10,
+        'axes.titlesize':  10,
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+        'legend.fontsize': 9,
+    }
+    with _mpl.rc_context(_withocn_rc):
+        pl.figure(figsize=(3.5, 2.6))
+        plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, ocn),
+                           colors=[default_colors[ii] for ii  in [0,1,3]])
+        plot_filters()
+        pl.xlim(4.55, 4.75);
+        pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.pdf', dpi=150, bbox_inches='tight')
 
 
 
@@ -361,6 +373,18 @@ if __name__ == "__main__":
             T_num = float(tstr)
         except ValueError:
             T_num = np.nan
+        # Clapp 1995 H2O 190 K (OCDB id 5) has a single-channel spike at
+        # 4.165 um where k jumps to ~0.18 between neighbors at ~0.015-0.025.
+        # No real H2O ice feature exists at 4.16 um; the surrounding values
+        # are consistent with the smooth ν2+ν3 combination wing. Treat as
+        # a digitization error and drop the lone outlier point.
+        if author == 'Clapp':
+            wl_ = np.asarray(tb_w['Wavelength'], dtype=float)
+            kk_ = np.asarray(tb_w['k'], dtype=float)
+            spike = (wl_ > 4.13) & (wl_ < 4.20) & (kk_ > 0.05)
+            if spike.any():
+                tb_w = tb_w[~spike]
+                print(f"  Clapp 190K: dropped {spike.sum()} spurious 4.16-um spike point(s)")
         water_entries.append((tb_w, author, T_num, phase))
 
     # Group by (author, phase). For multi-T groups, plot a min/max envelope
@@ -411,7 +435,7 @@ if __name__ == "__main__":
     pl.ylim(1e-21, 1e-17)
     ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
     transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
-    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.15, tmax * 1.01, 'F410M', ha='center')
     transmission_ax.text(4.05, tmax * 1.01, 'F405N', ha='center')
     pl.xlim(3.71, 4.75)
     ax.set_ylim(1e-21, 1e-17)
@@ -425,8 +449,53 @@ if __name__ == "__main__":
     ax.legend(handles=legend_handles, loc='upper left',
               bbox_to_anchor=(1.08, 1.0), fontsize=8, frameon=True,
               title='group (shaded = T range)')
-    pl.title("Pure H$_2$O ice opacities — bands span deposit T range")
+    pl.title("Pure H$_2$O ice opacities")
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_water_versions.pdf', dpi=150, bbox_inches='tight')
+
+
+    pl.figure(figsize=(9, 5))
+    phase_order = {'amorphous': 0, 'crystalline': 1, 'liquid': 2, 'unknown': 3}
+    legend_handles = []
+    for (author, phase), entries in sorted(grouped.items(),
+                                           key=lambda kv: (phase_order[kv[0][1]], kv[0][0])):
+        Ts = sorted(e[0] for e in entries)
+        stack = np.array([e[1] for e in entries])
+        color = author_color.get(author, None)
+        ls = phase_linestyle.get(phase, '-')
+        if len(entries) >= 2:
+            lo = np.nanmin(stack, axis=0)
+            hi = np.nanmax(stack, axis=0)
+            med = np.nanmedian(stack, axis=0)
+            pl.fill_between(grid, lo, hi, color=color, alpha=0.18, linewidth=0)
+            pl.plot(grid, med, color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({len(entries)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
+        else:
+            pl.plot(grid, stack[0], color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({Ts[0]:g} K)"
+        legend_handles.append(Line2D([0], [0], color=color, linestyle=ls,
+                                     linewidth=1.4, label=label))
+    pl.xlabel("Wavelength ($\\mu$m)")
+    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
+    pl.semilogy()
+    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(['F444W', 'F356W',])
+    transmission_ax.text(4.44, tmax * 1.01, 'F444W', ha='center')
+    transmission_ax.text(3.56, tmax * 1.01, 'F356W', ha='center')
+    pl.xlim(3.01, 4.85)
+    ax.set_ylim(1e-21, 1e-17)
+    # Phase legend (linestyle key)
+    phase_handles = [Line2D([0], [0], color='k', linestyle=ls, label=ph)
+                     for ph, ls in phase_linestyle.items()
+                     if any(e[3] == ph for e in water_entries)]
+    leg1 = ax.legend(handles=phase_handles, loc='upper left', fontsize=8, title='phase')
+    ax.add_artist(leg1)
+    # Group legend (author × phase)
+    ax.legend(handles=legend_handles, loc='upper left',
+              bbox_to_anchor=(1.08, 1.0), fontsize=8, frameon=True,
+              title='group (shaded = T range)')
+    pl.title("Pure H$_2$O ice opacities")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f444wf356w.pdf', dpi=150, bbox_inches='tight')
+
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,),
