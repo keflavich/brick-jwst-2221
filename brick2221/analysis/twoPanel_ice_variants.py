@@ -679,8 +679,9 @@ if __name__ == '__main__':
         dmag_tbl.add_index(col)
 
     with warnings.catch_warnings():
-        warnings.simplefilter('default')
+        warnings.simplefilter('always')
         for species in ('H2O', 'CO', 'CO2'):
             make_two_panel(species, dmag_tbl, savedir)
         make_two_panel_mixes(dmag_tbl, savedir)
         make_two_panel_co_ehrenfreund(dmag_tbl, savedir)
+        print("=== all panels done ===")
