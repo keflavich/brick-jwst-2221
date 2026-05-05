@@ -699,6 +699,207 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
     return out
 
 
+def _filter_avg_exp_tau(tau_lambda, wl_um, filtername):
+    """Filter-transmission-weighted mean of exp(-tau(λ)).
+    Returns a scalar. Approximates the stellar SED as flat across the filter
+    (good to <1% for narrow JWST filters near peak SED of T=4000 K star)."""
+    wt = SvoFps.get_transmission_data(f'JWST/NIRCam.{filtername}')
+    fwl = wt['Wavelength'].quantity.to(u.um).value
+    ftr = np.asarray(wt['Transmission'])
+    # interpolate tau onto filter wavelength grid
+    so = np.argsort(wl_um)
+    tau_on_filter = np.interp(fwl, wl_um[so], tau_lambda[so],
+                              left=0.0, right=0.0)
+    weights = ftr / np.trapezoid(ftr, fwl)
+    return np.trapezoid(np.exp(-tau_on_filter) * weights, fwl)
+
+
+def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
+                           abundance_wrt_h2=2.5e-4, icemol='CO',
+                           require_overlap=(3.8, 4.75)):
+    """Two-panel for the Bergner & Piacentino (2024) Zenodo ice library.
+
+    Left: ice + dust color (F405N - F466N by default) vs N(H2). For each
+    Bergner file we have a bulk mixture k(λ) plus the actual deposit column
+    densities (Bergner Table 3). The dmag is computed on the fly by
+    integrating exp(-tau(λ;N)) through F405N and F466N transmissions and
+    rescaling to N(icemol)/N(H2) = abundance_wrt_h2.
+
+    Right: opacity vs wavelength, grouped by Bergner sample with min/max
+    envelope across deposit temperature.
+    """
+    from icemodels.core import read_bergner_file as _read_bergner
+    print("=== Bergner two-panel ===")
+    files = sorted(glob.glob(
+        f'{optical_constants_cache_dir}/bergner_*.txt'))
+    entries = []
+    for fn in files:
+        try:
+            tb = _read_bergner(fn)
+        except Exception as ex:
+            print(f"  skip {os.path.basename(fn)}: {ex}")
+            continue
+        if 'k' not in tb.colnames:
+            continue
+        wl = np.asarray(tb['Wavelength'], dtype=float)
+        if not (np.isfinite(wl).any() and wl.min() <= require_overlap[0]
+                and wl.max() >= require_overlap[1]):
+            continue
+        sample = tb.meta.get('sample', os.path.basename(fn))
+        T = tb.meta['temperature']
+        comp = tb.meta.get('composition', sample)
+        col_dens = tb.meta.get('column_densities_1e15_per_cm2', {}) or {}
+        if not col_dens:
+            continue
+        entries.append((tb, sample, T, comp, col_dens))
+    print(f"  {len(entries)} Bergner tables")
+    if not entries:
+        return None
+
+    # group by sample for envelopes
+    by_sample = defaultdict(list)
+    for e in entries:
+        by_sample[e[1]].append(e)
+    print(f"  {len(by_sample)} unique samples")
+
+    h2_grid = np.geomspace(H2_GRID_MIN, H2_GRID_MAX, 60)
+    av_grid = h2_grid * NH2_TO_NH / NH_TO_AV
+    EVc = (ccd_ext(_wavelength_of_filter(color[0])) -
+           ccd_ext(_wavelength_of_filter(color[1])))
+    a_color = av_grid * EVc
+    grid = np.linspace(3.7, 4.8, 1100)
+
+    # color cycle
+    cycle = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+    fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
+    legend_handles = []
+
+    def _color_path(tb, col_dens):
+        """For one Bergner spectrum, return dmag(F405N) - dmag(F466N) on the
+        h2_grid. Tau scales linearly with N, so we evaluate at one reference
+        N and rescale."""
+        if icemol not in col_dens:
+            return None
+        n_ice_ref = col_dens[icemol] * 1e15   # cm^-2
+        molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
+                           u.Da)
+        tau1 = absorbed_spectrum(
+            xarr=tb['Wavelength'], ice_column=n_ice_ref,
+            ice_model_table=tb, molecular_weight=molwt,
+            return_tau=True).value   # dimensionless
+        wl = np.asarray(tb['Wavelength'], dtype=float)
+        # for each N(H2), N(icemol) = h2_grid * abundance, scale tau linearly
+        n_icemol = h2_grid * abundance_wrt_h2
+        scale = n_icemol / n_ice_ref
+        c1 = np.empty_like(h2_grid)
+        c2 = np.empty_like(h2_grid)
+        for ii, s in enumerate(scale):
+            tau_s = tau1 * s
+            c1[ii] = -2.5 * np.log10(_filter_avg_exp_tau(tau_s, wl, color[0]))
+            c2[ii] = -2.5 * np.log10(_filter_avg_exp_tau(tau_s, wl, color[1]))
+        return (c1 - c2)
+
+    for ii, (sample, group) in enumerate(sorted(by_sample.items())):
+        c = cycle[ii % len(cycle)]
+        Ts = sorted(g[2] for g in group)
+        # left panel
+        color_paths = []
+        for tb, sname, T, comp, col_dens in sorted(group, key=lambda g: g[2]):
+            p = _color_path(tb, col_dens)
+            if p is None:
+                continue
+            color_paths.append(p + a_color)
+        if color_paths:
+            stack = np.array(color_paths)
+            if len(color_paths) >= 2:
+                lo = np.nanmin(stack, axis=0)
+                hi = np.nanmax(stack, axis=0)
+                med = np.nanmedian(stack, axis=0)
+                ax_left.fill_between(h2_grid, lo, hi, color=c, alpha=0.18,
+                                     linewidth=0)
+                ax_left.plot(h2_grid, med, color=c, linewidth=1.3)
+            else:
+                ax_left.plot(h2_grid, stack[0], color=c, linewidth=1.3)
+
+        # right panel
+        op_paths = []
+        for tb, sname, T, comp, col_dens in sorted(group, key=lambda g: g[2]):
+            molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
+                               u.Da)
+            try:
+                op = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1,
+                                       ice_model_table=tb,
+                                       molecular_weight=molwt,
+                                       return_tau=True).to(u.cm**2).value
+            except Exception as ex:
+                print(f"    opacity failed {sample} {T}K: {ex}")
+                continue
+            wl = np.asarray(tb['Wavelength'], dtype=float)
+            so = np.argsort(wl)
+            op_paths.append(np.interp(grid, wl[so], op[so],
+                                      left=np.nan, right=np.nan))
+        if op_paths:
+            stk = np.array(op_paths)
+            if len(op_paths) >= 2:
+                lo = np.nanmin(stk, axis=0)
+                hi = np.nanmax(stk, axis=0)
+                med = np.nanmedian(stk, axis=0)
+                ax_op.fill_between(grid, lo, hi, color=c, alpha=0.18,
+                                   linewidth=0)
+                ax_op.plot(grid, med, color=c, linewidth=1.3)
+            else:
+                ax_op.plot(grid, stk[0], color=c, linewidth=1.3)
+
+        comp_label = group[0][3]
+        T_label = (f"{Ts[0]:g}–{Ts[-1]:g} K" if len(Ts) >= 2
+                   else f"{Ts[0]:g} K")
+        legend_handles.append(Line2D([0], [0], color=c, linewidth=1.4,
+                                     label=f"{sample} ({comp_label}) {T_label}"))
+
+    # left panel cosmetics
+    ax_left.set_xscale('log')
+    ax_left.set_xlabel(r'$N(\mathrm{H_2})$ [cm$^{-2}$]')
+    ax_left.set_ylabel(rf'${color[0]}-{color[1]}$ (mag, ice + dust)')
+    ax_left.grid(alpha=0.3)
+    secax = ax_left.secondary_xaxis(
+        'top',
+        functions=(lambda x: x * NH2_TO_NH / NH_TO_AV,
+                   lambda x: x * NH_TO_AV / NH2_TO_NH))
+    secax.set_xlabel(r'$A_V$ (mag)')
+    ax_left.set_ylim(-5, 5)
+
+    # right panel cosmetics
+    ax_op.set_xlabel(r'Wavelength ($\mu$m)')
+    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.semilogy()
+    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_xlim(3.71, 4.75)
+    transmission_ax, tmax = _draw_filter_overlay(ax_op)
+    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
+    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
+    transmission_ax.text(4.05, tmax * 0.90, 'F405N', ha='center', fontsize=8)
+
+    fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=7,
+               frameon=True, bbox_to_anchor=(0.5, -0.02),
+               title='Bergner & Piacentino 2024 ice samples '
+                     '(shaded = T range across deposits)')
+    fig.suptitle(
+        rf"Bergner+Piacentino 2024 ice library — left: ${color[0]}-{color[1]}$ "
+        rf"(ice + dust) vs $N(\mathrm{{H_2}})$ at "
+        rf"$N(\mathrm{{{icemol}}})/N(\mathrm{{H_2}}) = "
+        rf"{_fmt_sci(abundance_wrt_h2)}$;  right: opacity profile",
+        fontsize=11, y=0.97,
+    )
+    fig.tight_layout(rect=(0, 0.10, 1, 0.94))
+    out = os.path.join(savedir, 'twopanel_iceVariants_bergner.pdf')
+    fig.savefig(out, dpi=150, bbox_inches='tight')
+    pl.close(fig)
+    print(f"  saved {out}")
+    return out
+
+
 if __name__ == '__main__':
     savedir = '/orange/adamginsburg/ice/colors_of_ices_overleaf/figures'
     os.makedirs(savedir, exist_ok=True)
@@ -716,4 +917,5 @@ if __name__ == '__main__':
             make_two_panel(species, dmag_tbl, savedir)
         make_two_panel_mixes(dmag_tbl, savedir)
         make_two_panel_co_ehrenfreund(dmag_tbl, savedir)
+        make_two_panel_bergner(savedir)
         print("=== all panels done ===")
