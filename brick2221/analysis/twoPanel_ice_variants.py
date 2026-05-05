@@ -169,10 +169,13 @@ def _draw_filter_overlay(ax, filternames=('F466N', 'F410M', 'F405N'),
     return transmission_ax, tmax
 
 
-def _opacity_panel(ax, entries, species, show_phase_in_label=True):
+def _opacity_panel(ax, entries, species, show_phase_in_label=True,
+                   left_color=None):
     """Right-panel: opacity vs wavelength, grouped by (author, phase). For
-    multi-T groups, plot min/max envelope + median curve."""
-    grid = np.linspace(3.7, 4.8, 1100)
+    multi-T groups, plot min/max envelope + median curve. Filter overlay
+    and x-limits track ``left_color`` (the left panel's filter pair)."""
+    filters, xlim = _right_panel_filters_xlim(left_color or DEFAULT_COLOR)
+    grid = np.linspace(min(xlim[0], 3.0), max(xlim[1], 5.2), 1500)
     grouped = defaultdict(list)
     for tb, author, T, phase in entries:
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
@@ -214,17 +217,31 @@ def _opacity_panel(ax, entries, species, show_phase_in_label=True):
     ax.set_ylabel(rf'$\kappa_{{eff}}$ [$\tau = \kappa_{{eff}}\,N$({species_label})]')
     ax.semilogy()
     ax.set_ylim(1e-21, 1e-17)
-    ax.set_xlim(3.71, 4.75)
+    ax.set_xlim(*xlim)
 
-    transmission_ax, tmax = _draw_filter_overlay(ax)
-    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
-    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
-    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center', fontsize=8)
+    transmission_ax, tmax = _draw_filter_overlay(ax, filternames=filters)
+    for fname in filters:
+        wl0 = int(fname[1:-1]) / 100.0
+        transmission_ax.text(wl0, tmax * 1.03, fname, ha='center', fontsize=8)
 
     return legend_handles
 
 
 DEFAULT_COLOR = ('F405N', 'F466N')   # filter pair for the left-panel y-axis
+# Right-panel filter overlay + xlim per left-panel color choice. Picked so
+# the panel zooms onto the wavelength range that drives the chosen color.
+RIGHT_PANEL_FILTERS = {
+    ('F405N', 'F466N'): (('F405N', 'F410M', 'F466N'), (3.71, 4.75)),
+    ('F405N', 'F410M'): (('F405N', 'F410M'),          (3.85, 4.25)),
+    ('F356W', 'F444W'): (('F356W', 'F405N', 'F410M',
+                          'F444W', 'F466N'),          (2.90, 5.10)),
+}
+
+
+def _right_panel_filters_xlim(color):
+    return RIGHT_PANEL_FILTERS.get(
+        tuple(color), (('F466N', 'F410M', 'F405N'), (3.71, 4.75)))
+
 NH_TO_AV = 2.21e21                   # cm^-2 mag^-1
 NH2_TO_NH = 2                        # N(H) = 2 * N(H2)
 H2_GRID_MIN = 1e21                   # cm^-2 (~A_V ~ 0.9)
@@ -330,7 +347,7 @@ def _color_vs_column_panel(ax, dmag_tbl, entries, species,
 
 # ---------------- top-level driver ---------------- #
 
-def make_two_panel(species, dmag_tbl, savedir):
+def make_two_panel(species, dmag_tbl, savedir, color=DEFAULT_COLOR):
     print(f"=== {species} two-panel ===")
     entries = _load_species_tables(species)
     print(f"  {len(entries)} valid tables")
@@ -343,9 +360,11 @@ def make_two_panel(species, dmag_tbl, savedir):
 
     fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
     left_handles = _color_vs_column_panel(ax_left, dmag_tbl, entries, species,
+                                          color=color,
                                           show_phase_in_label=show_phase)
     right_handles = _opacity_panel(ax_op, entries, species,
-                                   show_phase_in_label=show_phase)
+                                   show_phase_in_label=show_phase,
+                                   left_color=color)
 
 
     ylim = ax_left.get_ylim()
@@ -373,7 +392,6 @@ def make_two_panel(species, dmag_tbl, savedir):
 
     species_label = {'H2O': r'H$_2$O', 'CO': 'CO', 'CO2': r'CO$_2$'}[species]
     abundance = ABUNDANCE_DEFAULT[species]
-    color = DEFAULT_COLOR
     fig.suptitle(
         rf"Pure {species_label} ice — left: ${color[0]}-{color[1]}$ "
         rf"(ice + dust) vs $N(\mathrm{{H_2}})$ at "
@@ -382,7 +400,9 @@ def make_two_panel(species, dmag_tbl, savedir):
         fontsize=11, y=0.90,
     )
     fig.tight_layout(rect=(0, 0.08, 1, 0.94))
-    out = os.path.join(savedir, f'twopanel_iceVariants_{species}.pdf')
+    out = os.path.join(
+        savedir,
+        f'twopanel_iceVariants_{species}_{color[0]}-{color[1]}.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -412,7 +432,8 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
             ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'])
 
-    grid = np.linspace(3.7, 4.8, 1100)
+    _f_xlim = _right_panel_filters_xlim(color)[1]
+    grid = np.linspace(min(_f_xlim[0], 3.0), max(_f_xlim[1], 5.2), 1500)
     legend_handles = []
     mymix_dir = ('/blue/adamginsburg/adamginsburg/repos/icemodels/'
                  'icemodels/data/mymixes')
@@ -491,11 +512,12 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
     ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
     ax_op.semilogy()
     ax_op.set_ylim(1e-21, 1e-17)
-    ax_op.set_xlim(3.71, 4.75)
-    transmission_ax, tmax = _draw_filter_overlay(ax_op)
-    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
-    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
-    transmission_ax.text(4.05, tmax * 0.90, 'F405N', ha='center', fontsize=8)
+    _filters, _xlim = _right_panel_filters_xlim(color)
+    ax_op.set_xlim(*_xlim)
+    transmission_ax, tmax = _draw_filter_overlay(ax_op, filternames=_filters)
+    for _fname in _filters:
+        _wl0 = int(_fname[1:-1]) / 100.0
+        transmission_ax.text(_wl0, tmax * 1.03, _fname, ha='center', fontsize=8)
 
     fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=8,
                frameon=True, bbox_to_anchor=(0.5, -0.02),
@@ -509,7 +531,9 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
         fontsize=11, y=0.97,
     )
     fig.tight_layout(rect=(0, 0.10, 1, 0.94))
-    out = os.path.join(savedir, f'twopanel_iceVariants_{name}.pdf')
+    out = os.path.join(
+        savedir,
+        f'twopanel_iceVariants_{name}_{color[0]}-{color[1]}.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -611,7 +635,8 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
     EVc = (ccd_ext(_wavelength_of_filter(color[0])) -
            ccd_ext(_wavelength_of_filter(color[1])))
     a_color = av_grid * EVc
-    grid = np.linspace(3.7, 4.8, 1100)
+    _f_xlim = _right_panel_filters_xlim(color)[1]
+    grid = np.linspace(min(_f_xlim[0], 3.0), max(_f_xlim[1], 5.2), 1500)
 
     fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
     cycle = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
@@ -675,11 +700,12 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
     ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
     ax_op.semilogy()
     ax_op.set_ylim(1e-21, 1e-17)
-    ax_op.set_xlim(3.71, 4.75)
-    transmission_ax, tmax = _draw_filter_overlay(ax_op)
-    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
-    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
-    transmission_ax.text(4.05, tmax * 0.90, 'F405N', ha='center', fontsize=8)
+    _filters, _xlim = _right_panel_filters_xlim(color)
+    ax_op.set_xlim(*_xlim)
+    transmission_ax, tmax = _draw_filter_overlay(ax_op, filternames=_filters)
+    for _fname in _filters:
+        _wl0 = int(_fname[1:-1]) / 100.0
+        transmission_ax.text(_wl0, tmax * 1.03, _fname, ha='center', fontsize=8)
 
     fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=8,
                frameon=True, bbox_to_anchor=(0.5, -0.02),
@@ -692,7 +718,9 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
         fontsize=11, y=0.97,
     )
     fig.tight_layout(rect=(0, 0.10, 1, 0.94))
-    out = os.path.join(savedir, 'twopanel_iceVariants_CO_ehrenfreund.pdf')
+    out = os.path.join(
+        savedir,
+        f'twopanel_iceVariants_CO_ehrenfreund_{color[0]}-{color[1]}.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -767,7 +795,8 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
     EVc = (ccd_ext(_wavelength_of_filter(color[0])) -
            ccd_ext(_wavelength_of_filter(color[1])))
     a_color = av_grid * EVc
-    grid = np.linspace(3.7, 4.8, 1100)
+    _f_xlim = _right_panel_filters_xlim(color)[1]
+    grid = np.linspace(min(_f_xlim[0], 3.0), max(_f_xlim[1], 5.2), 1500)
 
     # color cycle
     cycle = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
@@ -776,23 +805,48 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
     fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
     legend_handles = []
 
+    # Per-species ISM abundances X(species) = N(species_in_ice)/N(H2). These
+    # are used to scale a deposit's bulk-mixture opacity to a chosen N(H2).
+    # We pick the deposit's dominant constituent (by column density) for the
+    # scaling so every Bergner sample has a left-panel curve, not just CO-
+    # bearing ones. The choice of abundance only affects the absolute
+    # x-position of the curve along N(H2), not its shape.
+    species_abundance_defaults = {
+        'CO':    abundance_wrt_h2,   # paper default (2.5e-4)
+        'H2O':   1.0e-4,             # ~half of cosmic O in water ice
+        'CO2':   3.0e-5,             # CO2/H2O ~ 0.3 in dense clouds
+        'CH3OH': 5.0e-6,             # CH3OH/H2O ~ 0.05
+        'CH4':   2.0e-6,
+        'NH3':   2.0e-6,
+        'O2':    1.0e-6,
+        'OCS':   1.0e-7,
+        'HCOOH': 1.0e-7,
+    }
+
     def _color_path(tb, col_dens):
-        """For one Bergner spectrum, return dmag(F405N) - dmag(F466N) on the
-        h2_grid. Tau scales linearly with N, so we evaluate at one reference
-        N and rescale."""
-        if icemol not in col_dens:
+        """For one Bergner spectrum, return color(F1)-color(F2) on the h2_grid.
+        Scales by the deposit's dominant constituent species (max N) using
+        the assumed N(species)/N(H2) abundance from
+        ``species_abundance_defaults``. Tau scales linearly with N, so we
+        evaluate at the deposit's actual column once and rescale.
+        """
+        if not col_dens:
             return None
-        n_ice_ref = col_dens[icemol] * 1e15   # cm^-2
+        # choose dominant species from this deposit
+        species_for_scaling = max(col_dens, key=col_dens.get)
+        abund = species_abundance_defaults.get(species_for_scaling)
+        if abund is None:
+            return None
+        n_ice_ref = col_dens[species_for_scaling] * 1e15   # cm^-2
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
                            u.Da)
         tau1 = absorbed_spectrum(
             xarr=tb['Wavelength'], ice_column=n_ice_ref,
             ice_model_table=tb, molecular_weight=molwt,
-            return_tau=True).value   # dimensionless
+            return_tau=True).value
         wl = np.asarray(tb['Wavelength'], dtype=float)
-        # for each N(H2), N(icemol) = h2_grid * abundance, scale tau linearly
-        n_icemol = h2_grid * abundance_wrt_h2
-        scale = n_icemol / n_ice_ref
+        n_species = h2_grid * abund        # N(species at given H2)
+        scale = n_species / n_ice_ref
         c1 = np.empty_like(h2_grid)
         c2 = np.empty_like(h2_grid)
         for ii, s in enumerate(scale):
@@ -875,11 +929,12 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
     ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
     ax_op.semilogy()
     ax_op.set_ylim(1e-21, 1e-17)
-    ax_op.set_xlim(3.71, 4.75)
-    transmission_ax, tmax = _draw_filter_overlay(ax_op)
-    transmission_ax.text(4.66, tmax * 1.03, 'F466N', ha='center', fontsize=8)
-    transmission_ax.text(4.10, tmax * 1.03, 'F410M', ha='center', fontsize=8)
-    transmission_ax.text(4.05, tmax * 0.90, 'F405N', ha='center', fontsize=8)
+    _filters, _xlim = _right_panel_filters_xlim(color)
+    ax_op.set_xlim(*_xlim)
+    transmission_ax, tmax = _draw_filter_overlay(ax_op, filternames=_filters)
+    for _fname in _filters:
+        _wl0 = int(_fname[1:-1]) / 100.0
+        transmission_ax.text(_wl0, tmax * 1.03, _fname, ha='center', fontsize=8)
 
     fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=7,
                frameon=True, bbox_to_anchor=(0.5, -0.02),
@@ -893,7 +948,9 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
         fontsize=11, y=0.97,
     )
     fig.tight_layout(rect=(0, 0.10, 1, 0.94))
-    out = os.path.join(savedir, 'twopanel_iceVariants_bergner.pdf')
+    out = os.path.join(
+        savedir,
+        f'twopanel_iceVariants_bergner_{color[0]}-{color[1]}.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -911,11 +968,18 @@ if __name__ == '__main__':
     for col in ('mol_id', 'composition', 'temperature', 'database', 'author'):
         dmag_tbl.add_index(col)
 
+    color_pairs = (
+        ('F405N', 'F466N'),
+        ('F405N', 'F410M'),
+        ('F356W', 'F444W'),
+    )
     with warnings.catch_warnings():
         warnings.simplefilter('always')
-        for species in ('H2O', 'CO', 'CO2'):
-            make_two_panel(species, dmag_tbl, savedir)
-        make_two_panel_mixes(dmag_tbl, savedir)
-        make_two_panel_co_ehrenfreund(dmag_tbl, savedir)
-        make_two_panel_bergner(savedir)
-        print("=== all panels done ===")
+        for color in color_pairs:
+            print(f"\n########## color = {color[0]} - {color[1]} ##########")
+            for species in ('H2O', 'CO', 'CO2'):
+                make_two_panel(species, dmag_tbl, savedir, color=color)
+            make_two_panel_mixes(dmag_tbl, savedir, color=color)
+            make_two_panel_co_ehrenfreund(dmag_tbl, savedir, color=color)
+            make_two_panel_bergner(savedir, color=color)
+        print("\n=== all panels done ===")
