@@ -823,21 +823,34 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
         'HCOOH': 1.0e-7,
     }
 
+    # Priority order when picking which deposit constituent sets the
+    # absolute scaling. CO is preferred (paper convention; CO is the
+    # dominant F466N absorber so its abundance assumption controls the
+    # blueing magnitude). H2O second (since it dominates ice mass and
+    # F356W-F444W reddening). CO2 / CH3OH tertiary.
+    species_priority = ['CO', 'H2O', 'CO2', 'CH3OH', 'NH3', 'CH4',
+                        'O2', 'OCS', 'HCOOH']
+
     def _color_path(tb, col_dens):
         """For one Bergner spectrum, return color(F1)-color(F2) on the h2_grid.
-        Scales by the deposit's dominant constituent species (max N) using
-        the assumed N(species)/N(H2) abundance from
-        ``species_abundance_defaults``. Tau scales linearly with N, so we
-        evaluate at the deposit's actual column once and rescale.
+        Scales by the highest-priority constituent present in the deposit
+        using the assumed N(species)/N(H2) from ``species_abundance_defaults``.
+        Tau scales linearly with N, so we evaluate at the deposit's actual
+        column once and rescale to N(species)=N(H2)*abundance.
         """
         if not col_dens:
             return None
-        # choose dominant species from this deposit
-        species_for_scaling = max(col_dens, key=col_dens.get)
+        species_for_scaling = None
+        for sp in species_priority:
+            if sp in col_dens:
+                species_for_scaling = sp
+                break
+        if species_for_scaling is None:
+            species_for_scaling = max(col_dens, key=col_dens.get)
         abund = species_abundance_defaults.get(species_for_scaling)
         if abund is None:
             return None
-        n_ice_ref = col_dens[species_for_scaling] * 1e15   # cm^-2
+        n_ice_ref = col_dens[species_for_scaling] * 1e15 / u.cm**2
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
                            u.Da)
         tau1 = absorbed_spectrum(
@@ -846,7 +859,7 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
             return_tau=True).value
         wl = np.asarray(tb['Wavelength'], dtype=float)
         n_species = h2_grid * abund        # N(species at given H2)
-        scale = n_species / n_ice_ref
+        scale = n_species / (col_dens[species_for_scaling] * 1e15)
         c1 = np.empty_like(h2_grid)
         c2 = np.empty_like(h2_grid)
         for ii, s in enumerate(scale):
