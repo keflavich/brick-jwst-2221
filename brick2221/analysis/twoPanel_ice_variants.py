@@ -798,9 +798,10 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
     _f_xlim = _right_panel_filters_xlim(color)[1]
     grid = np.linspace(min(_f_xlim[0], 3.0), max(_f_xlim[1], 5.2), 1500)
 
-    # color cycle
-    cycle = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    # 20-color tab20 cycle so all 13 Bergner samples render in unique colors.
+    import matplotlib.cm as _cm
+    _cmap = _cm.get_cmap('tab20', 20)
+    cycle = [_cmap(i) for i in range(20)]
 
     fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(14, 6.5))
     legend_handles = []
@@ -970,6 +971,162 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
     return out
 
 
+def make_two_panel_bluest_compare(dmag_tbl, savedir,
+                                  bergner_sample='Polar-10-2-2',
+                                  bergner_T=30,
+                                  mixes_entry=('H2O:CO:CO2 (5:1:1)', 25.0),
+                                  color=DEFAULT_COLOR,
+                                  abundance_wrt_h2=2.5e-4,
+                                  icemol='CO'):
+    """Two-panel side-by-side comparison of the bluest Bergner sample and
+    the bluest mixes2 entry. Left: ice + dust color vs N(H2). Right:
+    opacity vs wavelength. Useful for diagnosing why Bergner deposits show
+    less blueing than the synthetic mixes2 ratios."""
+    print(f"=== bluest compare: Bergner {bergner_sample}@{bergner_T}K vs "
+          f"mixes2 {mixes_entry} ===")
+    from icemodels.core import read_bergner_file as _read_bergner
+    h2_grid = np.geomspace(H2_GRID_MIN, H2_GRID_MAX, 200)
+    av_grid = h2_grid * NH2_TO_NH / NH_TO_AV
+    EVc = (ccd_ext(_wavelength_of_filter(color[0])) -
+           ccd_ext(_wavelength_of_filter(color[1])))
+    a_color = av_grid * EVc
+    grid = np.linspace(3.7, 4.8, 1500)
+
+    fig, (ax_left, ax_op) = pl.subplots(1, 2, figsize=(13, 5.5))
+
+    # ---- Bergner curve ----
+    matches = sorted(glob.glob(
+        f'{optical_constants_cache_dir}/bergner_*_'
+        f'{bergner_sample}_{bergner_T}K.txt'))
+    if not matches:
+        print(f"  no Bergner file for {bergner_sample} {bergner_T}K")
+        return None
+    tb_b = _read_bergner(matches[0], baseline_subtract=False)
+    cd = tb_b.meta['column_densities_1e15_per_cm2']
+    sp_b = 'CO' if 'CO' in cd else max(cd, key=cd.get)
+    n_ref = cd[sp_b] * 1e15 / u.cm**2
+    molwt_b = u.Quantity(composition_to_molweight(tb_b.meta['composition']),
+                         u.Da)
+    tau_b = absorbed_spectrum(xarr=tb_b['Wavelength'], ice_column=n_ref,
+                              ice_model_table=tb_b, molecular_weight=molwt_b,
+                              return_tau=True).value
+    wl_b = np.asarray(tb_b['Wavelength'], dtype=float)
+    n_obs = h2_grid * abundance_wrt_h2
+    scale_b = n_obs / (cd[sp_b] * 1e15)
+    c1_b = np.empty_like(h2_grid)
+    c2_b = np.empty_like(h2_grid)
+    for ii, s in enumerate(scale_b):
+        c1_b[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_b*s, wl_b, color[0]))
+        c2_b[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_b*s, wl_b, color[1]))
+    diff_b_ice = c1_b - c2_b
+    ax_left.plot(h2_grid, diff_b_ice + a_color, color='C0', linewidth=1.6,
+                 label=f"Bergner {bergner_sample} {bergner_T} K (ice + dust)")
+    ax_left.plot(h2_grid, diff_b_ice, color='C0', linewidth=1.0, linestyle=':',
+                 alpha=0.6, label="  ice-only")
+    op_b = absorbed_spectrum(xarr=tb_b['Wavelength'], ice_column=1,
+                             ice_model_table=tb_b, molecular_weight=molwt_b,
+                             return_tau=True).to(u.cm**2).value
+    so_b = np.argsort(wl_b)
+    op_b_g = np.interp(grid, wl_b[so_b], op_b[so_b], left=np.nan, right=np.nan)
+    ax_op.plot(grid, op_b_g, color='C0', linewidth=1.4,
+               label=f"Bergner {bergner_sample} {bergner_T} K")
+
+    # ---- mixes2 curve ----
+    comp, T = mixes_entry
+    sub = dmag_tbl.loc['composition', comp].loc['temperature', float(T)]
+    # opacity for mixes2: load from mymix file. Use this same k(lambda) for
+    # both panels — left dmag is computed on the fly via filter integrals
+    # (matches the Bergner pipeline) so the right-panel curve and the
+    # left-panel curve are guaranteed consistent.
+    mymix_path = ('/blue/adamginsburg/adamginsburg/repos/icemodels/'
+                  f'icemodels/data/mymixes/{comp.replace(" ", "_")}.ecsv')
+    try:
+        op_tab = Table.read(mymix_path)
+        if 'k' not in op_tab.colnames and 'k₁' in op_tab.colnames:
+            op_tab['k'] = op_tab['k₁']
+        molwt_m = u.Quantity(composition_to_molweight(comp), u.Da)
+        # right panel curve
+        op_m = absorbed_spectrum(xarr=op_tab['Wavelength'], ice_column=1,
+                                 ice_model_table=op_tab,
+                                 molecular_weight=molwt_m,
+                                 return_tau=True).to(u.cm**2).value
+        wl_m = np.asarray(op_tab['Wavelength'], dtype=float)
+        so_m = np.argsort(wl_m)
+        op_m_g = np.interp(grid, wl_m[so_m], op_m[so_m],
+                           left=np.nan, right=np.nan)
+        ax_op.plot(grid, op_m_g, color='C3', linewidth=1.4,
+                   label=f"mixes2 {comp} {T:g} K")
+        # left panel: compute dmag on the fly from same k(lambda)
+        # mixes2 composition keeps mol_fractions; CO mol fraction:
+        from icemodels.core import molscomps
+        mols, comps = molscomps(comp)
+        co_frac = (comps[mols.index('CO')] / sum(comps)) if 'CO' in mols else 1.0
+        # tau at deposit ref column = 1 / cm^2 -> nonsense; instead pick
+        # n_ref = 1e18 cm^-2 *for CO* and back out the total ice column
+        # such that N(CO_in_mix) = 1e18.
+        n_co_ref = 1e18 / u.cm**2
+        n_total_ref = n_co_ref / co_frac
+        tau_m = absorbed_spectrum(xarr=op_tab['Wavelength'],
+                                  ice_column=n_total_ref,
+                                  ice_model_table=op_tab,
+                                  molecular_weight=molwt_m,
+                                  return_tau=True).value
+        # for each N(H2): N(CO_obs) = h2_grid * abundance, scale tau by
+        # N(CO_obs)/n_co_ref
+        scale_m = (h2_grid * abundance_wrt_h2) / 1e18
+        c1_m = np.empty_like(h2_grid)
+        c2_m = np.empty_like(h2_grid)
+        for ii, s in enumerate(scale_m):
+            c1_m[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_m*s, wl_m, color[0]))
+            c2_m[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_m*s, wl_m, color[1]))
+        diff_m_ice = c1_m - c2_m
+        ax_left.plot(h2_grid, diff_m_ice + a_color, color='C3', linewidth=1.6,
+                     label=f"mixes2 {comp} {T:g} K (ice + dust)")
+        ax_left.plot(h2_grid, diff_m_ice, color='C3', linewidth=1.0,
+                     linestyle=':', alpha=0.6, label="  ice-only")
+    except Exception as ex:
+        print(f"  could not load/compute mixes2: {ex}")
+
+    # left panel cosmetics
+    ax_left.set_xscale('log')
+    ax_left.set_xlabel(r'$N(\mathrm{H_2})$ [cm$^{-2}$]')
+    ax_left.set_ylabel(rf'${color[0]}-{color[1]}$ (mag)')
+    ax_left.grid(alpha=0.3)
+    secax = ax_left.secondary_xaxis(
+        'top',
+        functions=(lambda x: x * NH2_TO_NH / NH_TO_AV,
+                   lambda x: x * NH_TO_AV / NH2_TO_NH))
+    secax.set_xlabel(r'$A_V$ (mag)')
+    ax_left.set_ylim(-2.5, 0.5)
+    ax_left.legend(fontsize=7, loc='best')
+
+    # right panel cosmetics
+    ax_op.set_xlabel(r'Wavelength ($\mu$m)')
+    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.semilogy()
+    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_xlim(3.71, 4.75)
+    transmission_ax, tmax = _draw_filter_overlay(
+        ax_op, filternames=('F405N', 'F410M', 'F466N'))
+    for fname in ('F405N', 'F410M', 'F466N'):
+        wl0 = int(fname[1:-1]) / 100.0
+        transmission_ax.text(wl0, tmax * 1.03, fname, ha='center', fontsize=8)
+    ax_op.legend(fontsize=8, loc='upper left')
+
+    fig.suptitle(
+        rf"Bluest models: Bergner {bergner_sample} vs mixes2 {comp}; "
+        rf"$N(\mathrm{{{icemol}}})/N(\mathrm{{H_2}})={_fmt_sci(abundance_wrt_h2)}$",
+        fontsize=11,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    out = os.path.join(savedir,
+                       f'twopanel_iceVariants_BLUEST_compare_{color[0]}-{color[1]}.pdf')
+    fig.savefig(out, dpi=150, bbox_inches='tight')
+    pl.close(fig)
+    print(f"  saved {out}")
+    return out
+
+
 if __name__ == '__main__':
     savedir = '/orange/adamginsburg/ice/colors_of_ices_overleaf/figures'
     os.makedirs(savedir, exist_ok=True)
@@ -995,4 +1152,9 @@ if __name__ == '__main__':
             make_two_panel_mixes(dmag_tbl, savedir, color=color)
             make_two_panel_co_ehrenfreund(dmag_tbl, savedir, color=color)
             make_two_panel_bergner(savedir, color=color)
+        # Bergner vs mixes2 at IDENTICAL component ratios (Polar-10-2-2 = 5:1:1)
+        make_two_panel_bluest_compare(
+            dmag_tbl, savedir,
+            bergner_sample='Polar-10-2-2', bergner_T=30,
+            mixes_entry=('H2O:CO:CO2 (5:1:1)', 25.0))
         print("\n=== all panels done ===")
