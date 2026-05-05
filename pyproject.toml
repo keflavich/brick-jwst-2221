@@ -19,7 +19,7 @@ dependencies = [
   "pyspeckit",
   "grid_strategy",
   "stpsf",
-  "photutils>=2.0",
+  "photutils>=2.0.dev0",
   "jwst-gc-pipeline",
 ]
 dynamic = ["version"]
