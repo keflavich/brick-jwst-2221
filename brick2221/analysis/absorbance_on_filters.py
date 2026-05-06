@@ -79,7 +79,17 @@ def _format_author_label(author):
 
 def _format_species_label(species):
     species = str(species).strip()
+    # Drop "(1)" or trailing bare " 1" used as a single-component marker
     species = re.sub(r'\s*\(1\)\s*', ' ', species)
+    species = re.sub(r'\s+1\s*$', '', species)
+    # Normalize ratio parens: '(4 1)' / '(4 1 1)' / '(10  2  2)' -> '(4:1)' /
+    # '(4:1:1)' / '(10:2:2)'. Match a parenthesized run of integers
+    # separated by whitespace and rewrite with colons.
+    species = re.sub(
+        r'\(\s*(\d+(?:\s+\d+)+)\s*\)',
+        lambda m: '(' + ':'.join(m.group(1).split()) + ')',
+        species,
+    )
     species = re.sub(r'([A-Za-z])([0-9]+)', r'\1$_\2$', species)
     species = re.sub(r'\s+', ' ', species).strip()
     return species
