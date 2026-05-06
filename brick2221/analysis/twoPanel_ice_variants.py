@@ -180,9 +180,11 @@ def _opacity_panel(ax, entries, species, show_phase_in_label=True,
     for tb, author, T, phase in entries:
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
                            u.Da)
-        op = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1,
-                               ice_model_table=tb, molecular_weight=molwt,
-                               return_tau=True).to(u.cm**2).value
+        op_per_mol = absorbed_spectrum(
+            xarr=tb['Wavelength'], ice_column=1,
+            ice_model_table=tb, molecular_weight=molwt,
+            return_tau=True).to(u.cm**2).value     # cm^2 per molecule
+        op = op_per_mol / molwt.to(u.g).value      # cm^2 / g
         wl = np.asarray(tb['Wavelength'], dtype=float)
         so = np.argsort(wl)
         op_g = np.interp(grid, wl[so], op[so], left=np.nan, right=np.nan)
@@ -213,10 +215,9 @@ def _opacity_panel(ax, entries, species, show_phase_in_label=True,
                                      linewidth=1.4, label=label))
 
     ax.set_xlabel(r'Wavelength ($\mu$m)')
-    species_label = {'H2O': r'H$_2$O', 'CO': 'CO', 'CO2': r'CO$_2$'}[species]
-    ax.set_ylabel(rf'$\kappa_{{eff}}$ [$\tau = \kappa_{{eff}}\,N$({species_label})]')
+    ax.set_ylabel(r'$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)')
     ax.semilogy()
-    ax.set_ylim(1e-21, 1e-17)
+    ax.set_ylim(1, 1e5)
     ax.set_xlim(*xlim)
 
     transmission_ax, tmax = _draw_filter_overlay(ax, filternames=filters)
@@ -479,10 +480,11 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
         kk = op_tab['k₁'] if 'k₁' in op_tab.colnames else op_tab['k']
         molwt = u.Quantity(composition_to_molweight(composition), u.Da)
         try:
-            op = absorbed_spectrum(xarr=op_tab['Wavelength'], ice_column=1,
-                                   ice_model_table=op_tab,
-                                   molecular_weight=molwt,
-                                   return_tau=True).to(u.cm**2).value
+            op_per_mol = absorbed_spectrum(
+                xarr=op_tab['Wavelength'], ice_column=1,
+                ice_model_table=op_tab, molecular_weight=molwt,
+                return_tau=True).to(u.cm**2).value
+            op = op_per_mol / molwt.to(u.g).value     # cm^2 / g
         except Exception as ex:
             print(f"  right opacity failed {composition}: {ex}")
             continue
@@ -509,9 +511,9 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
 
     # right panel cosmetics
     ax_op.set_xlabel(r'Wavelength ($\mu$m)')
-    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.set_ylabel(r'$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)')
     ax_op.semilogy()
-    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_ylim(1, 1e5)
     _filters, _xlim = _right_panel_filters_xlim(color)
     ax_op.set_xlim(*_xlim)
     transmission_ax, tmax = _draw_filter_overlay(ax_op, filternames=_filters)
@@ -668,10 +670,11 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
         # ---- right panel: opacity vs wavelength ----
         try:
             molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-            op = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1,
-                                   ice_model_table=tb,
-                                   molecular_weight=molwt,
-                                   return_tau=True).to(u.cm**2).value
+            op_per_mol = absorbed_spectrum(
+                xarr=tb['Wavelength'], ice_column=1,
+                ice_model_table=tb, molecular_weight=molwt,
+                return_tau=True).to(u.cm**2).value
+            op = op_per_mol / molwt.to(u.g).value      # cm^2 / g
         except Exception as ex:
             print(f"  right opacity failed {comp}: {ex}")
             continue
@@ -697,9 +700,9 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
 
     # right panel cosmetics
     ax_op.set_xlabel(r'Wavelength ($\mu$m)')
-    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.set_ylabel(r'$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)')
     ax_op.semilogy()
-    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_ylim(1, 1e5)
     _filters, _xlim = _right_panel_filters_xlim(color)
     ax_op.set_xlim(*_xlim)
     transmission_ax, tmax = _draw_filter_overlay(ax_op, filternames=_filters)
@@ -897,10 +900,11 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
             molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
                                u.Da)
             try:
-                op = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1,
-                                       ice_model_table=tb,
-                                       molecular_weight=molwt,
-                                       return_tau=True).to(u.cm**2).value
+                op_per_mol = absorbed_spectrum(
+                    xarr=tb['Wavelength'], ice_column=1,
+                    ice_model_table=tb, molecular_weight=molwt,
+                    return_tau=True).to(u.cm**2).value
+                op = op_per_mol / molwt.to(u.g).value     # cm^2 / g
             except Exception as ex:
                 print(f"    opacity failed {sample} {T}K: {ex}")
                 continue
@@ -940,9 +944,9 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
 
     # right panel cosmetics
     ax_op.set_xlabel(r'Wavelength ($\mu$m)')
-    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.set_ylabel(r'$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)')
     ax_op.semilogy()
-    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_ylim(1, 1e5)
     _filters, _xlim = _right_panel_filters_xlim(color)
     ax_op.set_xlim(*_xlim)
     transmission_ax, tmax = _draw_filter_overlay(ax_op, filternames=_filters)
@@ -1023,9 +1027,11 @@ def make_two_panel_bluest_compare(dmag_tbl, savedir,
                  label=f"Bergner {bergner_sample} {bergner_T} K (ice + dust)")
     ax_left.plot(h2_grid, diff_b_ice, color='C0', linewidth=1.0, linestyle=':',
                  alpha=0.6, label="  ice-only")
-    op_b = absorbed_spectrum(xarr=tb_b['Wavelength'], ice_column=1,
-                             ice_model_table=tb_b, molecular_weight=molwt_b,
-                             return_tau=True).to(u.cm**2).value
+    op_b_per_mol = absorbed_spectrum(
+        xarr=tb_b['Wavelength'], ice_column=1,
+        ice_model_table=tb_b, molecular_weight=molwt_b,
+        return_tau=True).to(u.cm**2).value
+    op_b = op_b_per_mol / molwt_b.to(u.g).value     # cm^2 / g
     so_b = np.argsort(wl_b)
     op_b_g = np.interp(grid, wl_b[so_b], op_b[so_b], left=np.nan, right=np.nan)
     ax_op.plot(grid, op_b_g, color='C0', linewidth=1.4,
@@ -1046,10 +1052,11 @@ def make_two_panel_bluest_compare(dmag_tbl, savedir,
             op_tab['k'] = op_tab['k₁']
         molwt_m = u.Quantity(composition_to_molweight(comp), u.Da)
         # right panel curve
-        op_m = absorbed_spectrum(xarr=op_tab['Wavelength'], ice_column=1,
-                                 ice_model_table=op_tab,
-                                 molecular_weight=molwt_m,
-                                 return_tau=True).to(u.cm**2).value
+        op_m_per_mol = absorbed_spectrum(
+            xarr=op_tab['Wavelength'], ice_column=1,
+            ice_model_table=op_tab, molecular_weight=molwt_m,
+            return_tau=True).to(u.cm**2).value
+        op_m = op_m_per_mol / molwt_m.to(u.g).value     # cm^2 / g
         wl_m = np.asarray(op_tab['Wavelength'], dtype=float)
         so_m = np.argsort(wl_m)
         op_m_g = np.interp(grid, wl_m[so_m], op_m[so_m],
@@ -1102,9 +1109,9 @@ def make_two_panel_bluest_compare(dmag_tbl, savedir,
 
     # right panel cosmetics
     ax_op.set_xlabel(r'Wavelength ($\mu$m)')
-    ax_op.set_ylabel(r'$\kappa_{eff}$ [$\tau = \kappa_{eff}\,N$(mix)]')
+    ax_op.set_ylabel(r'$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)')
     ax_op.semilogy()
-    ax_op.set_ylim(1e-21, 1e-17)
+    ax_op.set_ylim(1, 1e5)
     ax_op.set_xlim(3.71, 4.75)
     transmission_ax, tmax = _draw_filter_overlay(
         ax_op, filternames=('F405N', 'F410M', 'F466N'))
@@ -1121,6 +1128,143 @@ def make_two_panel_bluest_compare(dmag_tbl, savedir,
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     out = os.path.join(savedir,
                        f'twopanel_iceVariants_BLUEST_compare_{color[0]}-{color[1]}.pdf')
+    fig.savefig(out, dpi=150, bbox_inches='tight')
+    pl.close(fig)
+    print(f"  saved {out}")
+    return out
+
+
+def make_bergner_ccd(savedir, color1, color2,
+                     abundance_wrt_h2=2.5e-4, icemol='CO',
+                     baseline_subtract=False):
+    """Plot Bergner deposits on a (color1, color2) CCD.
+
+    color1 = (F_a, F_b) for x-axis (F_a - F_b); color2 = (F_c, F_d) for y.
+    For each Bergner sample we compute on-the-fly the dmag in each filter
+    via filter-transmission-weighted exp(-tau), then add foreground dust
+    reddening using CT06_MWGC. Baseline subtraction is OFF by default
+    because the polynomial baseline clips real CO band wings.
+    """
+    from icemodels.core import read_bergner_file as _read_bergner
+    print(f"=== Bergner CCD: {color1} vs {color2} ===")
+
+    h2_grid = np.geomspace(H2_GRID_MIN, H2_GRID_MAX, 200)
+    av_grid = h2_grid * NH2_TO_NH / NH_TO_AV
+    EVc1 = (ccd_ext(_wavelength_of_filter(color1[0])) -
+            ccd_ext(_wavelength_of_filter(color1[1])))
+    EVc2 = (ccd_ext(_wavelength_of_filter(color2[0])) -
+            ccd_ext(_wavelength_of_filter(color2[1])))
+    a1 = av_grid * EVc1
+    a2 = av_grid * EVc2
+
+    files = sorted(glob.glob(
+        f'{optical_constants_cache_dir}/bergner_*.txt'))
+    by_sample = defaultdict(list)
+    for fn in files:
+        try:
+            tb = _read_bergner(fn, baseline_subtract=baseline_subtract)
+        except Exception as ex:
+            continue
+        if 'k' not in tb.colnames:
+            continue
+        cd = tb.meta.get('column_densities_1e15_per_cm2', {}) or {}
+        if not cd:
+            continue
+        wl = np.asarray(tb['Wavelength'], dtype=float)
+        # require coverage from F182M (1.82 um) through F466N (4.66 um). Use
+        # the requested filter wavelengths to set the bound (NIR side from
+        # min(filt) - 0.05 um, IR side from max(filt) + 0.05 um).
+        filter_wls = [int(f[1:-1]) / 100.0
+                      for f in (color1[0], color1[1], color2[0], color2[1])]
+        wl_lo = min(filter_wls) - 0.05
+        wl_hi = max(filter_wls) + 0.05
+        if not (np.isfinite(wl).any() and wl.min() <= wl_lo and wl.max() >= wl_hi):
+            continue
+        sample = tb.meta['sample']
+        by_sample[sample].append((tb.meta['temperature'], tb, cd))
+
+    if not by_sample:
+        print("  no Bergner deposits cover the required wavelength range")
+        return None
+
+    species_priority = ['CO', 'H2O', 'CO2', 'CH3OH', 'NH3', 'CH4',
+                        'O2', 'OCS', 'HCOOH']
+    abund_defaults = {
+        'CO': abundance_wrt_h2, 'H2O': 1.0e-4, 'CO2': 3.0e-5,
+        'CH3OH': 5.0e-6, 'NH3': 2.0e-6, 'CH4': 2.0e-6,
+        'O2': 1.0e-6, 'OCS': 1.0e-7, 'HCOOH': 1.0e-7,
+    }
+
+    import matplotlib.cm as _cm
+    cmap = _cm.get_cmap('tab20', 20)
+
+    fig, ax = pl.subplots(figsize=(9, 7))
+    legend_handles = []
+    for ii, (sample, eg) in enumerate(sorted(by_sample.items())):
+        eg.sort(key=lambda x: x[0])    # by T
+        c = cmap(ii % 20)
+        c1_paths = []
+        c2_paths = []
+        Ts = []
+        for T, tb, cd in eg:
+            sp = next((s for s in species_priority if s in cd), None)
+            if sp is None:
+                sp = max(cd, key=cd.get)
+            ab = abund_defaults.get(sp)
+            if ab is None:
+                continue
+            n_ref = cd[sp] * 1e15 / u.cm**2
+            molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
+                               u.Da)
+            try:
+                tau1 = absorbed_spectrum(
+                    xarr=tb['Wavelength'], ice_column=n_ref,
+                    ice_model_table=tb, molecular_weight=molwt,
+                    return_tau=True).value
+            except Exception:
+                continue
+            wl = np.asarray(tb['Wavelength'], dtype=float)
+            scale = (h2_grid * ab) / (cd[sp] * 1e15)
+            c1 = np.empty_like(h2_grid)
+            c2 = np.empty_like(h2_grid)
+            for jj, s in enumerate(scale):
+                tau_s = tau1 * s
+                d_a = -2.5*np.log10(_filter_avg_exp_tau(tau_s, wl, color1[0]))
+                d_b = -2.5*np.log10(_filter_avg_exp_tau(tau_s, wl, color1[1]))
+                d_cc = -2.5*np.log10(_filter_avg_exp_tau(tau_s, wl, color2[0]))
+                d_d = -2.5*np.log10(_filter_avg_exp_tau(tau_s, wl, color2[1]))
+                c1[jj] = (d_a - d_b) + a1[jj]
+                c2[jj] = (d_cc - d_d) + a2[jj]
+            c1_paths.append(c1)
+            c2_paths.append(c2)
+            Ts.append(T)
+        if not c1_paths:
+            continue
+        # plot the deposit at the lowest temperature for each sample
+        ax.plot(c1_paths[0], c2_paths[0], color=c, linewidth=1.4,
+                label=f"{sample} {Ts[0]:g}-{Ts[-1]:g}K")
+        legend_handles.append(Line2D([0], [0], color=c, linewidth=1.4,
+                                     label=f"{sample} ({Ts[0]:g}-{Ts[-1]:g} K)"))
+
+    # plot a pure-dust reddening line (extinction only, no ice)
+    ax.plot(a1, a2, color='k', linewidth=2, linestyle='--',
+            label='pure dust (CT06 MWGC)')
+
+    ax.set_xlabel(f'{color1[0]} - {color1[1]}')
+    ax.set_ylabel(f'{color2[0]} - {color2[1]}')
+    ax.grid(alpha=0.3)
+    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), fontsize=7)
+    ax.set_title(
+        rf"Bergner ices on CCD ({color1[0]}-{color1[1]}) vs "
+        rf"({color2[0]}-{color2[1]});  "
+        rf"$N(\mathrm{{{icemol}}})/N(\mathrm{{H_2}}) = "
+        rf"{_fmt_sci(abundance_wrt_h2)}$, baseline_subtract={baseline_subtract}",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    out = os.path.join(
+        savedir,
+        f'CCD_bergner_{color1[0]}-{color1[1]}_{color2[0]}-{color2[1]}.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     pl.close(fig)
     print(f"  saved {out}")
@@ -1157,4 +1301,17 @@ if __name__ == '__main__':
             dmag_tbl, savedir,
             bergner_sample='Polar-10-2-2', bergner_T=30,
             mixes_entry=('H2O:CO:CO2 (5:1:1)', 25.0))
+        # Bergner CCD plots — many color pairs. Baseline-subtract OFF: the
+        # F182M & F212N filters sit on Bergner's noise floor anyway, but the
+        # baseline polynomial would clip the CO band wings on F466N.
+        bergner_ccd_color_pairs = [
+            (('F182M', 'F212N'), ('F212N', 'F466N')),
+            (('F182M', 'F212N'), ('F405N', 'F466N')),
+            (('F182M', 'F212N'), ('F405N', 'F410M')),
+            (('F356W', 'F444W'), ('F405N', 'F466N')),
+            (('F405N', 'F410M'), ('F405N', 'F466N')),
+            (('F200W', 'F356W'), ('F356W', 'F444W')),
+        ]
+        for c1, c2 in bergner_ccd_color_pairs:
+            make_bergner_ccd(savedir, c1, c2)
         print("\n=== all panels done ===")

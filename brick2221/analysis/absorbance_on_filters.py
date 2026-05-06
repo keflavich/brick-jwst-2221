@@ -129,9 +129,24 @@ def _opacity_label_from_meta(meta):
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
                         colors=None,
-                        ylim=(1e-21, 6e-18),
-                        legend=True
+                        ylim=None,
+                        legend=True,
+                        units='kappa_eff',
                         ):
+    """Overplot opacity profiles for a list of optical-constants tables.
+
+    Parameters
+    ----------
+    units : {'kappa_eff', 'kappa_mass'}
+        ``'kappa_eff'`` (default; preserves prior behavior) plots the
+        per-molecule opacity in cm² (i.e., ``τ = κ_eff · N(ice)``).
+        ``'kappa_mass'`` plots the per-mass opacity in cm² g⁻¹ (i.e.,
+        ``τ = κ · Σ_ice``); useful for comparison with dust opacity tools
+        like OpTool.
+    """
+    if ylim is None:
+        ylim = (1e-21, 6e-18) if units == 'kappa_eff' else (1, 1e5)
+
     for ii, tb in enumerate(opacity_tables):
 
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
@@ -141,6 +156,11 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
 
         # calculated "tau" with unitless ice_column to get the same as calculated above
         opacity = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1, ice_model_table=tb, molecular_weight=molwt, return_tau=True).to(u.cm**2)
+
+        if units == 'kappa_mass':
+            opacity = opacity.value / molwt.to(u.g).value     # cm^2 / g
+        elif units != 'kappa_eff':
+            raise ValueError(f"units must be 'kappa_eff' or 'kappa_mass', not {units!r}")
 
         pl.plot(tb['Wavelength'],
                 opacity,
@@ -155,7 +175,10 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
     else:
         leg = None
     pl.xlabel("Wavelength ($\\mu$m)")
-    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    if units == 'kappa_mass':
+        pl.ylabel(r"$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)")
+    else:
+        pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
     pl.semilogy();
     pl.ylim(ylim);
 
@@ -201,9 +224,19 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                         mixture={'CO': 1},
                         colors=None,
                         normalize_to_molecule=False,
-                        ylim=(1e-21, 6e-18),
+                        ylim=None,
                         legend=True,
+                        units='kappa_eff',
                         **kwargs):
+    """Plot opacity of an on-the-fly mixture of pure-component opacity tables.
+
+    Parameters
+    ----------
+    units : {'kappa_eff', 'kappa_mass'}
+        See :func:`plot_opacity_tables`.
+    """
+    if ylim is None:
+        ylim = (1e-21, 6e-18) if units == 'kappa_eff' else (1, 1e5)
 
     authors = {mol: tb.meta['author'] for mol, tb in opacity_tables.items()}
 
@@ -225,6 +258,11 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
         molfrac_mol = molval / total
         opacity = opacity * molfrac_mol
 
+    if units == 'kappa_mass':
+        opacity = opacity.value / molwt.to(u.g).value     # cm^2 / g
+    elif units != 'kappa_eff':
+        raise ValueError(f"units must be 'kappa_eff' or 'kappa_mass', not {units!r}")
+
     pl.plot(tb['Wavelength'],
             opacity,
             label=_opacity_label_from_meta(tb.meta),
@@ -236,7 +274,10 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
     if legend:
         pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
-    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    if units == 'kappa_mass':
+        pl.ylabel(r"$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)")
+    else:
+        pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
     pl.semilogy();
     pl.ylim(ylim);
 
