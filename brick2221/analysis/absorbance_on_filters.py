@@ -79,7 +79,17 @@ def _format_author_label(author):
 
 def _format_species_label(species):
     species = str(species).strip()
+    # Drop "(1)" or trailing bare " 1" used as a single-component marker
     species = re.sub(r'\s*\(1\)\s*', ' ', species)
+    species = re.sub(r'\s+1\s*$', '', species)
+    # Normalize ratio parens: '(4 1)' / '(4 1 1)' / '(10  2  2)' -> '(4:1)' /
+    # '(4:1:1)' / '(10:2:2)'. Match a parenthesized run of integers
+    # separated by whitespace and rewrite with colons.
+    species = re.sub(
+        r'\(\s*(\d+(?:\s+\d+)+)\s*\)',
+        lambda m: '(' + ':'.join(m.group(1).split()) + ')',
+        species,
+    )
     species = re.sub(r'([A-Za-z])([0-9]+)', r'\1$_\2$', species)
     species = re.sub(r'\s+', ' ', species).strip()
     return species
@@ -129,9 +139,24 @@ def _opacity_label_from_meta(meta):
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
                         colors=None,
-                        ylim=(1e-21, 6e-18),
-                        legend=True
+                        ylim=None,
+                        legend=True,
+                        units='kappa_eff',
                         ):
+    """Overplot opacity profiles for a list of optical-constants tables.
+
+    Parameters
+    ----------
+    units : {'kappa_eff', 'kappa_mass'}
+        ``'kappa_eff'`` (default; preserves prior behavior) plots the
+        per-molecule opacity in cm² (i.e., ``τ = κ_eff · N(ice)``).
+        ``'kappa_mass'`` plots the per-mass opacity in cm² g⁻¹ (i.e.,
+        ``τ = κ · Σ_ice``); useful for comparison with dust opacity tools
+        like OpTool.
+    """
+    if ylim is None:
+        ylim = (1e-21, 6e-18) if units == 'kappa_eff' else (1, 1e5)
+
     for ii, tb in enumerate(opacity_tables):
 
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
@@ -142,6 +167,11 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
         # calculated "tau" with unitless ice_column to get the same as calculated above
         opacity = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1, ice_model_table=tb, molecular_weight=molwt, return_tau=True).to(u.cm**2)
 
+        if units == 'kappa_mass':
+            opacity = opacity.value / molwt.to(u.g).value     # cm^2 / g
+        elif units != 'kappa_eff':
+            raise ValueError(f"units must be 'kappa_eff' or 'kappa_mass', not {units!r}")
+
         pl.plot(tb['Wavelength'],
                 opacity,
             label=_opacity_label(tb),
@@ -151,11 +181,19 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
         # DEBUG if colors is not None:
         # DEBUG     print(f"table {ii} plotted with color {colors[ii]} [{tb.meta['composition']}].  colors={colors}")
     if legend:
-        pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+        leg = pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+    else:
+        leg = None
     pl.xlabel("Wavelength ($\\mu$m)")
-    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    if units == 'kappa_mass':
+        pl.ylabel(r"$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)")
+    else:
+        pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
     pl.semilogy();
     pl.ylim(ylim);
+
+    return pl.gca(), leg
+
 
 def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18,
                  linestyles=['-', ':']):
@@ -196,9 +234,19 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                         mixture={'CO': 1},
                         colors=None,
                         normalize_to_molecule=False,
-                        ylim=(1e-21, 6e-18),
+                        ylim=None,
                         legend=True,
+                        units='kappa_eff',
                         **kwargs):
+    """Plot opacity of an on-the-fly mixture of pure-component opacity tables.
+
+    Parameters
+    ----------
+    units : {'kappa_eff', 'kappa_mass'}
+        See :func:`plot_opacity_tables`.
+    """
+    if ylim is None:
+        ylim = (1e-21, 6e-18) if units == 'kappa_eff' else (1, 1e5)
 
     authors = {mol: tb.meta['author'] for mol, tb in opacity_tables.items()}
 
@@ -220,6 +268,11 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
         molfrac_mol = molval / total
         opacity = opacity * molfrac_mol
 
+    if units == 'kappa_mass':
+        opacity = opacity.value / molwt.to(u.g).value     # cm^2 / g
+    elif units != 'kappa_eff':
+        raise ValueError(f"units must be 'kappa_eff' or 'kappa_mass', not {units!r}")
+
     pl.plot(tb['Wavelength'],
             opacity,
             label=_opacity_label_from_meta(tb.meta),
@@ -231,7 +284,10 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
     if legend:
         pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
-    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    if units == 'kappa_mass':
+        pl.ylabel(r"$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)")
+    else:
+        pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
     pl.semilogy();
     pl.ylim(ylim);
 
@@ -520,24 +576,24 @@ if __name__ == "__main__":
     pl.figure(figsize=(8.5, 6))
     # First subplot
     pl.subplot(2,1,1)
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
+    ax1, leg1 = plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, ), legend=False)
     ax1, transmission_ax1, tmax1 = plot_filters(['F466N', 'F410M', 'F405N'])
     transmission_ax1.text(4.66, tmax1 * 1.01, 'F466N', ha='center')
-    transmission_ax1.text(4.15, tmax1 * 1.01, 'F410M', ha='center')
-    transmission_ax1.text(4.05, tmax1 * 1.01, 'F405N', ha='center')
+    transmission_ax1.text(4.10, tmax1 * 1.01, 'F410M', ha='center')
+    transmission_ax1.text(4.05, tmax1 * 0.9, 'F405N', ha='center')
     pl.xlim(3.71, 4.75)
     ax1.set_ylim(1e-21, 1.2e-17)
     transmission_ax1.set_ylim(0, tmax1 * 1.10)
     # Second subplot
     pl.subplot(2,1,2)
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
-    ax2, transmission_ax2, tmax2 = plot_filters(filternames=['F356W', 'F444W',])
+    ax2, leg2 = plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
+    ax2a, transmission_ax2, tmax2 = plot_filters(filternames=['F356W', 'F444W',])
     transmission_ax2.text(3.56, tmax2 * 1.01, 'F356W', ha='center')
     transmission_ax2.text(4.44, tmax2 * 1.01, 'F444W', ha='center')
     pl.xlim(3.00, 5.05)
     ax2.set_ylim(1e-21, 1.2e-17)
     transmission_ax2.set_ylim(0, tmax2 * 1.10)
-    handles, labels = pl.gca().get_legend_handles_labels()
+    handles, labels = ax2.get_legend_handles_labels()
     pl.subplot(2,1,1)
     leg = pl.legend(handles=handles,
         labels=labels,
@@ -575,11 +631,24 @@ if __name__ == "__main__":
     ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
     transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
     transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
-    transmission_ax.text(4.05, tmax * 1.01, 'F405N', ha='center')
+    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center')
     pl.xlim(3.71, 4.75)
     ax.set_ylim(1e-21, 1e-17)
     pl.title("Most-F466N-absorbing pure-ice opacity tables")
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    pl.figure(figsize=(4, 3))
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_max, co2_gerakines, ocn))
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center')
+    transmission_ax.set_ylim(0, 0.56)
+    pl.xlim(3.71, 4.75)
+    ax.set_ylim(1e-21, 1e-17)
+    #pl.title("Most-F466N-absorbing pure-ice opacity tables")
+    pl.title("")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_maxF466N_compact.pdf', dpi=150, bbox_inches='tight')
 
     # 2-panel merge mirroring opacities_figure3plus4merge but with max-F466N CO
     pl.figure(figsize=(8.5, 6))
