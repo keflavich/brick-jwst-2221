@@ -257,7 +257,7 @@ submit_mosaic_job() {
         --job-name=webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag} \
         --output=${logdir}/webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag}_%j.log \
         --account=astronomy-dept --qos=astronomy-dept-b \
-        --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 \
+        --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
         --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
 }
 

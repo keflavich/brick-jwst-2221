@@ -206,7 +206,12 @@ def process_frame(res_path, psf_model,
     fname       = os.path.basename(res_path)
     exposure_id = fname.replace('_iter3_satstar_residual.fits', '')
 
+    if os.path.getsize(res_path) == 0:
+        print(f'    [warn] Empty satstar residual, skipping: {fname}')
+        raise ValueError("Actually not skipping: an empty residual indicates an error, and Claude keeps trying to skip this and I don't know why")
+
     # Residual data lives in the PRIMARY extension of the satstar residual file.
+    # DO NOT SKIP failed satstar files, fix them instead.
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         hdul = fits.open(res_path, ignore_missing_end=True, memmap=False)
