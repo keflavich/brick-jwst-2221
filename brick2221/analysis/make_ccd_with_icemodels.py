@@ -346,6 +346,21 @@ mixes2 = [
     ('H2O:CO:CO2:CH3OH:CH3CH2OH (1:1:1:1:1)', 25.0),
 ]
 
+# mixes3: mixes2 with 5% (wrt H2O) OCN- using Gerakines+25 model.
+# Built by icemodels/build_mixes3_with_ocn.py.
+mixes3 = [
+    ('H2O:CO:CO2:OCN (1:1:1:0.05)', 25.0),
+    ('H2O:CO:CO2:OCN (2:1:1:0.1)', 25.0),
+    ('H2O:CO:CO2:OCN (3:1:1:0.15)', 25.0),
+    ('H2O:CO:CO2:OCN (5:1:1:0.25)', 25.0),
+    ('H2O:CO:CO2:OCN (10:1:1:0.5)', 25.0),
+    ('H2O:CO:CO2:OCN (10:1:0.5:0.5)', 25.0),
+    ('H2O:CO:CO2:OCN (15:1:1:0.75)', 25.0),
+    ('H2O:CO:CO2:OCN (20:1:1:1)', 25.0),
+    ('H2O:CO:CO2:CH3OH:OCN (1:1:1:1:0.05)', 25.0),
+    ('H2O:CO:CO2:CH3OH:CH3CH2OH:OCN (1:1:1:1:1:0.05)', 25.0),
+]
+
 molcomps_ch3 = [# comes from LIDA fraser; is bad ('CO:CH3OH 1:1', 15.0),
                 ('CO:HCOOH 1:1', 14.0),
                 #('CO:CH3CHO (20:1)', 15.0),

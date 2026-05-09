@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Backward-compat stub. Implementation moved to ``jwst-gc-pipeline``.
 
-This file's name contains a hyphen so it can only be invoked as a script.
+Filename has a hyphen, so this can only be invoked as a script.
 """
 import os
 import runpy

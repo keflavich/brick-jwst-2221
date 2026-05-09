@@ -76,6 +76,10 @@ def adjust_yaxis_for_legend_overlap(ax, margin_factor=1.1):
 #              'JWST/NIRCam.F444W', 'JWST/NIRCam.F405N']
 filter_ids = [fid for fid in jfilts['filterID'] if fid.startswith('JWST/NIRCam')]
 filter_data = {fid: float(jfilts.loc[fid]['ZeroPoint']) for fid in filter_ids}
+filter_effective_wavelengths = {
+    fid: u.Quantity(jfilts.loc[fid]['WavelengthEff'], u.AA).to(u.um)
+    for fid in filter_ids
+}
 transdata = {fid: SvoFps.get_transmission_data(fid) for fid in filter_ids}
 
 max_flux = 1*u.Jy
@@ -350,6 +354,12 @@ if __name__ == '__main__':
 
 
                 spectable['FLUX'][spectable['FLUX_ERROR'] > max_flux.value] = np.nan
+                nirspec_flxd = fluxes_in_filters(
+                    spectable['WAVELENGTH'].quantity,
+                    spectable['FLUX'].quantity,
+                    filterids=filter_ids,
+                    transdata=transdata,
+                )
 
                 sp = pyspeckit.Spectrum(xarr=spectable['WAVELENGTH'].quantity,
                                         data=spectable['FLUX'].quantity,
@@ -403,7 +413,14 @@ if __name__ == '__main__':
                     continue
                 sp.plotter()
                 ax = sp.plotter.axis
+                trans_ax = ax.twinx()
+                # not sure why we would want this? trans_ax.patch.set_alpha(0)
                 ax.set_xlabel("Wavelength [$\\mu m$]")
+                trans_ax.set_ylabel("Transmission")
+
+                max_transmission = max(np.nanmax(np.array(transdata[key]['Transmission'])) for key in filters)
+                transmission_axis_top = max_transmission / 0.25
+                trans_ax.set_ylim(0, transmission_axis_top)
 
                 try:
                     slit_coord = SkyCoord(fh[0].header['SLIT_RA'], fh[0].header['SLIT_DEC'], unit=(u.deg, u.deg))
@@ -426,9 +443,22 @@ if __name__ == '__main__':
                         ax.set_ylim(0, ax.get_ylim()[1])
                     if ax.get_ylim()[1] > max_flux.value:
                         ax.set_ylim(0, max_flux.value)
-                    mid = np.array(ax.get_ylim()).mean()
-                    ax.plot(transdata[key]['Wavelength']/1e4, transdata[key]['Transmission'] * mid, linewidth=0.5,
-                            label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -'
+                    filter_line, = trans_ax.plot(
+                        transdata[key]['Wavelength']/1e4,
+                        transdata[key]['Transmission'],
+                        linewidth=0.5,
+                        label=f"{key[-5:]}: {mag:0.2f}" if np.isfinite(mag) else f'{key[-5:]}: -',
+                    )
+                    flux_value = nirspec_flxd[key].to(u.Jy).value if hasattr(nirspec_flxd[key], 'to') else nirspec_flxd[key]
+                    if np.isfinite(flux_value) and flux_value > 0:
+                        ax.scatter(
+                            [filter_effective_wavelengths[key].to_value(u.um)],
+                            [flux_value],
+                            marker='s',
+                            s=36,
+                            color=filter_line.get_color(),
+                            edgecolors='none',
+                            zorder=filter_line.get_zorder() + 1,
                         )
                 if setname == '2221':
                     ax.plot([], [], label=f'[F182M] - [F212N] = {mags["F182M"] - mags["F212N"]:0.2f}', linestyle='none', color='k')
@@ -441,7 +471,10 @@ if __name__ == '__main__':
                     ax.plot([], [], label=f'[F200W] - [F356W] = {mags["F200W"] - mags["F356W"]:0.2f}', linestyle='none', color='k')
                     ax.plot([], [], label=f'[F356W] - [F444W] = {mags["F356W"] - mags["F444W"]:0.2f}', linestyle='none', color='k')
 
-                ax.legend(loc='upper left', fontsize=10);
+                #handles1, labels1 = ax.get_legend_handles_labels()
+                #handles2, labels2 = trans_ax.get_legend_handles_labels()
+                #ax.legend(handles1 + handles2, labels1 + labels2, loc='upper left', fontsize=10)
+                ax.legend(loc='upper left', fontsize=10)
                 adjust_yaxis_for_legend_overlap(ax)
 
                 # if row['bad']:

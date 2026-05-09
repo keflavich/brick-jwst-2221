@@ -79,7 +79,17 @@ def _format_author_label(author):
 
 def _format_species_label(species):
     species = str(species).strip()
+    # Drop "(1)" or trailing bare " 1" used as a single-component marker
     species = re.sub(r'\s*\(1\)\s*', ' ', species)
+    species = re.sub(r'\s+1\s*$', '', species)
+    # Normalize ratio parens: '(4 1)' / '(4 1 1)' / '(10  2  2)' -> '(4:1)' /
+    # '(4:1:1)' / '(10:2:2)'. Match a parenthesized run of integers
+    # separated by whitespace and rewrite with colons.
+    species = re.sub(
+        r'\(\s*(\d+(?:\s+\d+)+)\s*\)',
+        lambda m: '(' + ':'.join(m.group(1).split()) + ')',
+        species,
+    )
     species = re.sub(r'([A-Za-z])([0-9]+)', r'\1$_\2$', species)
     species = re.sub(r'\s+', ' ', species).strip()
     return species
@@ -129,9 +139,24 @@ def _opacity_label_from_meta(meta):
 
 def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins, co2_gerakines, ethanol, methanol, ocn, water_ammonia),
                         colors=None,
-                        ylim=(1e-21, 6e-18),
-                        legend=True
+                        ylim=None,
+                        legend=True,
+                        units='kappa_eff',
                         ):
+    """Overplot opacity profiles for a list of optical-constants tables.
+
+    Parameters
+    ----------
+    units : {'kappa_eff', 'kappa_mass'}
+        ``'kappa_eff'`` (default; preserves prior behavior) plots the
+        per-molecule opacity in cm² (i.e., ``τ = κ_eff · N(ice)``).
+        ``'kappa_mass'`` plots the per-mass opacity in cm² g⁻¹ (i.e.,
+        ``τ = κ · Σ_ice``); useful for comparison with dust opacity tools
+        like OpTool.
+    """
+    if ylim is None:
+        ylim = (1e-21, 6e-18) if units == 'kappa_eff' else (1, 1e5)
+
     for ii, tb in enumerate(opacity_tables):
 
         molwt = u.Quantity(composition_to_molweight(tb.meta['composition']), u.Da)
@@ -142,6 +167,11 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
         # calculated "tau" with unitless ice_column to get the same as calculated above
         opacity = absorbed_spectrum(xarr=tb['Wavelength'], ice_column=1, ice_model_table=tb, molecular_weight=molwt, return_tau=True).to(u.cm**2)
 
+        if units == 'kappa_mass':
+            opacity = opacity.value / molwt.to(u.g).value     # cm^2 / g
+        elif units != 'kappa_eff':
+            raise ValueError(f"units must be 'kappa_eff' or 'kappa_mass', not {units!r}")
+
         pl.plot(tb['Wavelength'],
                 opacity,
             label=_opacity_label(tb),
@@ -151,21 +181,47 @@ def plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co_hudgins
         # DEBUG if colors is not None:
         # DEBUG     print(f"table {ii} plotted with color {colors[ii]} [{tb.meta['composition']}].  colors={colors}")
     if legend:
-        pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+        leg = pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
+    else:
+        leg = None
     pl.xlabel("Wavelength ($\\mu$m)")
-    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    if units == 'kappa_mass':
+        pl.ylabel(r"$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)")
+    else:
+        pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
     pl.semilogy();
     pl.ylim(ylim);
+
+    return pl.gca(), leg
+
 
 def plot_filters(filternames=['F466N', 'F410M'], ymax=5e-18,
                  linestyles=['-', ':']):
     linestyle_cycle = itertools.cycle(linestyles)
-    
+
+    ax = pl.gca()
+    transmission_ax = ax.twinx()
+    tmax = 0
+
     for filtername, linestyle in zip(filternames, linestyle_cycle):
         wavelength_table = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
         xarr = wavelength_table['Wavelength'].quantity.to(u.um)
-        pl.plot(xarr, wavelength_table['Transmission']/wavelength_table['Transmission'].max() * ymax,
-                color='k', linewidth=3, alpha=0.5, zorder=-5, linestyle=linestyle)
+        transmission = wavelength_table['Transmission']
+        transmission_ax.plot(
+            xarr,
+            transmission,
+            color='k',
+            linewidth=2,
+            alpha=0.5,
+            #zorder=-5,
+            linestyle=linestyle,
+        )
+        tmax = max(tmax, wavelength_table['Transmission'].max())
+
+    transmission_ax.set_ylim(0, tmax * 1.05)
+    transmission_ax.set_ylabel('Transmission')
+
+    return ax, transmission_ax, tmax
 
 def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                                        'H2O': water_mastrapa,
@@ -178,9 +234,19 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
                         mixture={'CO': 1},
                         colors=None,
                         normalize_to_molecule=False,
-                        ylim=(1e-21, 6e-18),
+                        ylim=None,
                         legend=True,
+                        units='kappa_eff',
                         **kwargs):
+    """Plot opacity of an on-the-fly mixture of pure-component opacity tables.
+
+    Parameters
+    ----------
+    units : {'kappa_eff', 'kappa_mass'}
+        See :func:`plot_opacity_tables`.
+    """
+    if ylim is None:
+        ylim = (1e-21, 6e-18) if units == 'kappa_eff' else (1, 1e5)
 
     authors = {mol: tb.meta['author'] for mol, tb in opacity_tables.items()}
 
@@ -202,6 +268,11 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
         molfrac_mol = molval / total
         opacity = opacity * molfrac_mol
 
+    if units == 'kappa_mass':
+        opacity = opacity.value / molwt.to(u.g).value     # cm^2 / g
+    elif units != 'kappa_eff':
+        raise ValueError(f"units must be 'kappa_eff' or 'kappa_mass', not {units!r}")
+
     pl.plot(tb['Wavelength'],
             opacity,
             label=_opacity_label_from_meta(tb.meta),
@@ -213,7 +284,10 @@ def plot_mixed_opacity(opacity_tables={'CO': co_gerakines,
     if legend:
         pl.legend(loc='lower left', bbox_to_anchor=(0, 1, 0, 0))
     pl.xlabel("Wavelength ($\\mu$m)")
-    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]");
+    if units == 'kappa_mass':
+        pl.ylabel(r"$\kappa$ [cm$^{2}$ g$^{-1}$]  ($\tau = \kappa\,\Sigma_{ice}$)")
+    else:
+        pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
     pl.semilogy();
     pl.ylim(ylim);
 
@@ -245,13 +319,25 @@ if __name__ == "__main__":
     default_colors = list(pl.rcParams['axes.prop_cycle'].by_key()['color'])
     default_colors =['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
     print(f"default_colors: {default_colors}")
-    pl.figure()
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, ocn),
-                       colors=[default_colors[ii] for ii  in [0,1,3]]
-    )
-    plot_filters()
-    pl.xlim(4.55, 4.75);
-    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.pdf', dpi=150, bbox_inches='tight')
+    # Sized for a single-column 3.5" wide figure with ~10 pt text. Font sizes
+    # are absolute points, so keeping them at 10 with figsize=(3.5, ...) yields
+    # 10 pt text in the embedded PDF.
+    import matplotlib as _mpl
+    _withocn_rc = {
+        'font.size':       10,
+        'axes.labelsize':  10,
+        'axes.titlesize':  10,
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+        'legend.fontsize': 9,
+    }
+    with _mpl.rc_context(_withocn_rc):
+        pl.figure(figsize=(3.5, 2.6))
+        plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, ocn),
+                           colors=[default_colors[ii] for ii  in [0,1,3]])
+        plot_filters()
+        pl.xlim(4.55, 4.75);
+        pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_withocn.pdf', dpi=150, bbox_inches='tight')
 
 
 
@@ -263,13 +349,209 @@ if __name__ == "__main__":
 
     pl.figure(figsize=(8.5, 4))
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
-    plot_filters(['F466N', 'F410M', 'F405N'])
-    pl.text(4.66, 6e-18, 'F466N', ha='center')
-    pl.text(4.10, 6e-18, 'F410M', ha='center')
-    pl.text(4.05, 6e-18, 'F405N', ha='center')
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 1.01, 'F405N', ha='center')
     pl.xlim(3.71, 4.75);
-    pl.ylim(1e-21, 1e-17)
+    ax.set_ylim(1e-21, 1e-17)
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405.pdf', dpi=150, bbox_inches='tight')
+
+    # New figure: F466N, F410M, F405N with all valid pure-water-ice opacity tables.
+    # Phase classification (amorphous / crystalline / liquid) drives linestyle;
+    # author drives color. Tables with wavelength coverage that does not span
+    # [4.0, 4.7] um are skipped (e.g. Mukai 23K, which begins at 4.17 um).
+    import glob
+    import os as _os
+
+    # (filename glob pattern under optical_constants_cache_dir, phase, author_key)
+    # phase rules (from literature):
+    #   - Mastrapa et al. 2008/2009: T <= 100 K amorphous, T >= 110 K crystalline
+    #   - Hudgins et al. 1993: T <= 100 K amorphous, T >= 120 K crystalline
+    #   - Kitta, Leger, Mukai (cold deposit): amorphous
+    #   - Bertie 1969 (100 K, annealed): crystalline Ih
+    #   - Curtis 2005, Rajaram 2010 (>=106 K, annealed): crystalline
+    #   - Clapp 1995 (190 K): crystalline (cubic/Ih)
+    #   - Zhang 2013 (243 K): liquid
+    def _classify_water(author, temperature):
+        author = str(author).strip()
+        tstr = str(temperature).strip()
+        if tstr.lower().endswith('k'):
+            tstr = tstr[:-1].strip()
+        T = float(tstr)
+        if author == 'Mastrapa':
+            return 'amorphous' if T < 110 else 'crystalline'
+        if author == 'Hudgins':
+            return 'amorphous' if T <= 100 else 'crystalline'
+        if author in ('Kitta', 'Léger', 'Leger', 'Mukai'):
+            return 'amorphous'
+        if author in ('Bertie', 'Curtis', 'Rajaram', 'Clapp'):
+            return 'crystalline'
+        if author == 'Zhang':
+            return 'liquid'
+        return 'unknown'
+
+    phase_linestyle = {'amorphous': '-', 'crystalline': '--', 'liquid': ':', 'unknown': '-.'}
+    author_color = {
+        'Mastrapa':    '#1f77b4',
+        'Hudgins':     '#ff7f0e',
+        'Bertie':      '#2ca02c',
+        'Clapp':       '#d62728',
+        'Kitta':       '#9467bd',
+        'Léger':       '#8c564b',
+        'Leger':       '#8c564b',
+        'Mukai':       '#e377c2',
+        'Curtis':      '#7f7f7f',
+        'Rajaram':     '#bcbd22',
+        'Zhang':       '#17becf',
+    }
+
+    water_files = sorted(glob.glob(f'{optical_constants_cache_dir}/*_H2O_(1)_*K_*.txt'))
+    water_entries = []
+    for fn in water_files:
+        try:
+            tb_w = read_ocdb_file(fn)
+        except Exception as ex:
+            print(f"Skipping {fn}: read error {ex}")
+            continue
+        wl = np.asarray(tb_w['Wavelength'], dtype=float)
+        # Require coverage of both 4.05 and 4.66 um
+        if not (np.isfinite(wl).any() and wl.min() <= 4.0 and wl.max() >= 4.7):
+            print(f"Skipping {_os.path.basename(fn)}: wl range {wl.min():.2f}-{wl.max():.2f} um")
+            continue
+        author = tb_w.meta.get('author', '')
+        temperature = tb_w.meta.get('temperature', np.nan)
+        phase = _classify_water(author, temperature)
+        tstr = str(temperature).strip()
+        if tstr.lower().endswith('k'):
+            tstr = tstr[:-1].strip()
+        try:
+            T_num = float(tstr)
+        except ValueError:
+            T_num = np.nan
+        # Clapp 1995 H2O 190 K (OCDB id 5) has a single-channel spike at
+        # 4.165 um where k jumps to ~0.18 between neighbors at ~0.015-0.025.
+        # No real H2O ice feature exists at 4.16 um; the surrounding values
+        # are consistent with the smooth ν2+ν3 combination wing. Treat as
+        # a digitization error and drop the lone outlier point.
+        if author == 'Clapp':
+            wl_ = np.asarray(tb_w['Wavelength'], dtype=float)
+            kk_ = np.asarray(tb_w['k'], dtype=float)
+            spike = (wl_ > 4.13) & (wl_ < 4.20) & (kk_ > 0.05)
+            if spike.any():
+                tb_w = tb_w[~spike]
+                print(f"  Clapp 190K: dropped {spike.sum()} spurious 4.16-um spike point(s)")
+        water_entries.append((tb_w, author, T_num, phase))
+
+    # Group by (author, phase). For multi-T groups, plot a min/max envelope
+    # (fill_between) plus the median curve to keep the legend short. Single-T
+    # groups plot a single curve. Color = author, linestyle = phase.
+    from collections import defaultdict
+    from matplotlib.lines import Line2D
+
+    grid = np.linspace(3.7, 4.8, 1100)  # um, plot range
+
+    grouped = defaultdict(list)
+    for tb_w, author, T, phase in water_entries:
+        molwt = u.Quantity(composition_to_molweight(tb_w.meta['composition']), u.Da)
+        opacity = absorbed_spectrum(xarr=tb_w['Wavelength'], ice_column=1,
+                                    ice_model_table=tb_w, molecular_weight=molwt,
+                                    return_tau=True).to(u.cm**2).value
+        wl = np.asarray(tb_w['Wavelength'], dtype=float)
+        so = np.argsort(wl)
+        wl = wl[so]; opacity = opacity[so]
+        op_on_grid = np.interp(grid, wl, opacity, left=np.nan, right=np.nan)
+        grouped[(author, phase)].append((T, op_on_grid))
+
+    pl.figure(figsize=(9, 5))
+    phase_order = {'amorphous': 0, 'crystalline': 1, 'liquid': 2, 'unknown': 3}
+    legend_handles = []
+    for (author, phase), entries in sorted(grouped.items(),
+                                           key=lambda kv: (phase_order[kv[0][1]], kv[0][0])):
+        Ts = sorted(e[0] for e in entries)
+        stack = np.array([e[1] for e in entries])
+        color = author_color.get(author, None)
+        ls = phase_linestyle.get(phase, '-')
+        if len(entries) >= 2:
+            lo = np.nanmin(stack, axis=0)
+            hi = np.nanmax(stack, axis=0)
+            med = np.nanmedian(stack, axis=0)
+            pl.fill_between(grid, lo, hi, color=color, alpha=0.18, linewidth=0)
+            pl.plot(grid, med, color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({len(entries)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
+        else:
+            pl.plot(grid, stack[0], color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({Ts[0]:g} K)"
+        legend_handles.append(Line2D([0], [0], color=color, linestyle=ls,
+                                     linewidth=1.4, label=label))
+
+    pl.xlabel("Wavelength ($\\mu$m)")
+    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
+    pl.semilogy()
+    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax.set_ylim(1e-21, 1e-17)
+    # Phase legend (linestyle key)
+    phase_handles = [Line2D([0], [0], color='k', linestyle=ls, label=ph)
+                     for ph, ls in phase_linestyle.items()
+                     if any(e[3] == ph for e in water_entries)]
+    leg1 = ax.legend(handles=phase_handles, loc='upper left', fontsize=8, title='phase')
+    ax.add_artist(leg1)
+    # Group legend (author × phase)
+    ax.legend(handles=legend_handles, loc='upper left',
+              bbox_to_anchor=(1.08, 1.0), fontsize=8, frameon=True,
+              title='group (shaded = T range)')
+    pl.title("Pure H$_2$O ice opacities")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_water_versions.pdf', dpi=150, bbox_inches='tight')
+
+
+    pl.figure(figsize=(9, 5))
+    phase_order = {'amorphous': 0, 'crystalline': 1, 'liquid': 2, 'unknown': 3}
+    legend_handles = []
+    for (author, phase), entries in sorted(grouped.items(),
+                                           key=lambda kv: (phase_order[kv[0][1]], kv[0][0])):
+        Ts = sorted(e[0] for e in entries)
+        stack = np.array([e[1] for e in entries])
+        color = author_color.get(author, None)
+        ls = phase_linestyle.get(phase, '-')
+        if len(entries) >= 2:
+            lo = np.nanmin(stack, axis=0)
+            hi = np.nanmax(stack, axis=0)
+            med = np.nanmedian(stack, axis=0)
+            pl.fill_between(grid, lo, hi, color=color, alpha=0.18, linewidth=0)
+            pl.plot(grid, med, color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({len(entries)} T: {Ts[0]:g}–{Ts[-1]:g} K)"
+        else:
+            pl.plot(grid, stack[0], color=color, linestyle=ls, alpha=0.95, linewidth=1.4)
+            label = f"{author} {phase} ({Ts[0]:g} K)"
+        legend_handles.append(Line2D([0], [0], color=color, linestyle=ls,
+                                     linewidth=1.4, label=label))
+    pl.xlabel("Wavelength ($\\mu$m)")
+    pl.ylabel("$\\kappa_{eff}$ [$\\tau = \\kappa_{eff} * N(ice)$]")
+    pl.semilogy()
+    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(['F444W', 'F356W',])
+    transmission_ax.text(4.44, tmax * 1.01, 'F444W', ha='center')
+    transmission_ax.text(3.56, tmax * 1.01, 'F356W', ha='center')
+    pl.xlim(3.01, 4.85)
+    ax.set_ylim(1e-21, 1e-17)
+    # Phase legend (linestyle key)
+    phase_handles = [Line2D([0], [0], color='k', linestyle=ls, label=ph)
+                     for ph, ls in phase_linestyle.items()
+                     if any(e[3] == ph for e in water_entries)]
+    leg1 = ax.legend(handles=phase_handles, loc='upper left', fontsize=8, title='phase')
+    ax.add_artist(leg1)
+    # Group legend (author × phase)
+    ax.legend(handles=legend_handles, loc='upper left',
+              bbox_to_anchor=(1.08, 1.0), fontsize=8, frameon=True,
+              title='group (shaded = T range)')
+    pl.title("Pure H$_2$O ice opacities")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f444wf356w.pdf', dpi=150, bbox_inches='tight')
+
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,),
@@ -292,32 +574,180 @@ if __name__ == "__main__":
 
     # special: merge figure 3+4 for paper
     pl.figure(figsize=(8.5, 6))
+    # First subplot
     pl.subplot(2,1,1)
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn,  ))
-    plot_filters(['F466N', 'F410M', 'F405N'])
-    pl.text(4.66, 6e-18, 'F466N', ha='center')
-    pl.text(4.15, 6e-18, 'F410M', ha='center')
-    pl.text(4.05, 6e-18, 'F405N', ha='center')
-    pl.xlim(3.71, 4.75);
-    pl.ylim(1e-21, 1.2e-17)
+    ax1, leg1 = plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, ), legend=False)
+    ax1, transmission_ax1, tmax1 = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax1.text(4.66, tmax1 * 1.01, 'F466N', ha='center')
+    transmission_ax1.text(4.10, tmax1 * 1.01, 'F410M', ha='center')
+    transmission_ax1.text(4.05, tmax1 * 0.9, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax1.set_ylim(1e-21, 1.2e-17)
+    transmission_ax1.set_ylim(0, tmax1 * 1.10)
+    # Second subplot
     pl.subplot(2,1,2)
-    plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
-    plot_filters(filternames=['F356W', 'F444W',])# 'F466N', 'F410M'])
-    pl.text(3.56, 6e-18, 'F356W', ha='center')
-    pl.text(4.44, 6e-18, 'F444W', ha='center')
-    pl.xlim(3.00, 5.05);
-    pl.ylim(1e-21, 1.2e-17)
-    handles, labels = pl.gca().get_legend_handles_labels()
+    ax2, leg2 = plot_opacity_tables(opacity_tables=(co_gerakines, water_mastrapa, co2_gerakines,  ocn, methanol, ethanol, water_ammonia), legend=False)
+    ax2a, transmission_ax2, tmax2 = plot_filters(filternames=['F356W', 'F444W',])
+    transmission_ax2.text(3.56, tmax2 * 1.01, 'F356W', ha='center')
+    transmission_ax2.text(4.44, tmax2 * 1.01, 'F444W', ha='center')
+    pl.xlim(3.00, 5.05)
+    ax2.set_ylim(1e-21, 1.2e-17)
+    transmission_ax2.set_ylim(0, tmax2 * 1.10)
+    handles, labels = ax2.get_legend_handles_labels()
     pl.subplot(2,1,1)
     leg = pl.legend(handles=handles,
-            labels=labels,
-            loc='lower left',
-            bbox_to_anchor=(0, 1, 0, 0),
-            ncol=2,
-            mode=None,
+        labels=labels,
+        loc='lower left',
+        bbox_to_anchor=(0, 1, 0, 0),
+        ncol=2,
+        mode=None,
     )
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_figure3plus4merge.pdf', dpi=150, bbox_inches='tight')
 
+
+    # =====================================================================
+    # MAX-F466N variants of the paper figures.
+    #
+    # These mirror the previous opacity / SED figures but swap pure-CO from
+    # Gerakines2023 (25K, narrowest pristine deposit) to the broader / more
+    # F466N-absorbing pure-CO tables: Ehrenfreund 10K and 30K, Elsila 12K,
+    # Hudgins 10K (noisy floor). They also use Mastrapa 15K H2O (highest
+    # k(4.66 um) of the well-behaved water tables). The intent is to bracket
+    # the deepest-case ice scenario the published opacity tables can reach,
+    # to test whether broader CO matrices alone could explain the observed
+    # F466N depths without added water.
+    co_ehren10  = read_ocdb_file(f'{optical_constants_cache_dir}/34_CO_(1)_10K_Ehrenfreund.txt')
+    co_ehren30  = read_ocdb_file(f'{optical_constants_cache_dir}/35_CO_(1)_30K_Ehrenfreund.txt')
+    co_elsila12 = read_ocdb_file(f'{optical_constants_cache_dir}/43_CO_(1)_12K_Elsila.txt')
+    co_baratta  = read_ocdb_file(f'{optical_constants_cache_dir}/1_CO_(1)_12.5K_Baratta.txt')
+    co_hudgins10 = co_hudgins  # already loaded above
+    water_max = read_ocdb_file(f'{optical_constants_cache_dir}/239_H2O_(1)_15K_Mastrapa.txt')
+
+    max_co_set = (co_ehren10, co_ehren30, co_elsila12, co_baratta, co_hudgins10)
+
+    # Single-panel zoom on F405/F410/F466 with all max-F466N CO variants
+    pl.figure(figsize=(8.5, 4))
+    plot_opacity_tables(opacity_tables=max_co_set + (water_max, co2_gerakines, ocn))
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax.set_ylim(1e-21, 1e-17)
+    pl.title("Most-F466N-absorbing pure-ice opacity tables")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    pl.figure(figsize=(4, 3))
+    plot_opacity_tables(opacity_tables=(co_gerakines, water_max, co2_gerakines, ocn))
+    ax, transmission_ax, tmax = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax.text(4.66, tmax * 1.01, 'F466N', ha='center')
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.05, tmax * 0.9, 'F405N', ha='center')
+    transmission_ax.set_ylim(0, 0.56)
+    pl.xlim(3.71, 4.75)
+    ax.set_ylim(1e-21, 1e-17)
+    #pl.title("Most-F466N-absorbing pure-ice opacity tables")
+    pl.title("")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f466_f410_f405_maxF466N_compact.pdf', dpi=150, bbox_inches='tight')
+
+    # 2-panel merge mirroring opacities_figure3plus4merge but with max-F466N CO
+    pl.figure(figsize=(8.5, 6))
+    pl.subplot(2, 1, 1)
+    plot_opacity_tables(opacity_tables=max_co_set + (water_max, co2_gerakines, ocn))
+    ax1, transmission_ax1, tmax1 = plot_filters(['F466N', 'F410M', 'F405N'])
+    transmission_ax1.text(4.66, tmax1 * 1.01, 'F466N', ha='center')
+    transmission_ax1.text(4.15, tmax1 * 1.01, 'F410M', ha='center')
+    transmission_ax1.text(4.05, tmax1 * 1.01, 'F405N', ha='center')
+    pl.xlim(3.71, 4.75)
+    ax1.set_ylim(1e-21, 1.2e-17)
+    transmission_ax1.set_ylim(0, tmax1 * 1.10)
+
+    pl.subplot(2, 1, 2)
+    plot_opacity_tables(opacity_tables=max_co_set + (water_max, co2_gerakines, ocn,
+                                                      methanol, ethanol, water_ammonia),
+                        legend=False)
+    ax2, transmission_ax2, tmax2 = plot_filters(filternames=['F356W', 'F444W'])
+    transmission_ax2.text(3.56, tmax2 * 1.01, 'F356W', ha='center')
+    transmission_ax2.text(4.44, tmax2 * 1.01, 'F444W', ha='center')
+    pl.xlim(3.00, 5.05)
+    ax2.set_ylim(1e-21, 1.2e-17)
+    transmission_ax2.set_ylim(0, tmax2 * 1.10)
+    handles, labels = pl.gca().get_legend_handles_labels()
+    pl.subplot(2, 1, 1)
+    pl.legend(handles=handles, labels=labels,
+              loc='lower left', bbox_to_anchor=(0, 1, 0, 0), ncol=2)
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_figure3plus4merge_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    # Stellar SED with deepest-case ice absorption applied. Use Ehrenfreund
+    # 30K pure CO (most F466N-absorbing well-behaved table) and Mastrapa 15K
+    # H2O. Plot at several columns to show the band depth scaling.
+    from icemodels import atmo_model, absorbed_spectrum
+    from icemodels.core import composition_to_molweight
+    from astropy import units as u_
+    sed_xarr = np.linspace(2.0, 5.5, 4000) * u_.um
+    phx = atmo_model(4000, xarr=sed_xarr, logg=4.0)
+    base_flux = phx['fnu'].quantity
+
+    fig = pl.figure(figsize=(9, 6))
+    ax_sed = fig.add_subplot(111)
+    norm = base_flux.max()
+    ax_sed.plot(sed_xarr, base_flux / norm, color='k', lw=1.4, label='T=4000 K (no ice)')
+    co_columns = [1e17, 1e18, 5e18, 1e19]
+    h2o_columns = [c * 10 for c in co_columns]  # H2O:CO = 10:1
+    co_molwt = u_.Quantity(composition_to_molweight(co_ehren30.meta['composition']), u_.Da)
+    h2o_molwt = u_.Quantity(composition_to_molweight(water_max.meta['composition']), u_.Da)
+    cmap = pl.cm.viridis
+    for ii, (n_co, n_h2o) in enumerate(zip(co_columns, h2o_columns)):
+        spec = absorbed_spectrum(n_co * u_.cm**-2, co_ehren30,
+                                 molecular_weight=co_molwt,
+                                 spectrum=base_flux, xarr=sed_xarr)
+        spec = absorbed_spectrum(n_h2o * u_.cm**-2, water_max,
+                                 molecular_weight=h2o_molwt,
+                                 spectrum=spec, xarr=sed_xarr)
+        ax_sed.plot(sed_xarr, spec / norm, color=cmap(ii / max(1, len(co_columns) - 1)),
+                    lw=1.2,
+                    label=f"N(CO)={n_co:.0e}, N(H$_2$O)={n_h2o:.0e}")
+
+    ax_filt = ax_sed.twinx()
+    for filtername, ls in zip(['F405N', 'F410M', 'F466N'], ['-', ':', '--']):
+        wt = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
+        ax_filt.plot(wt['Wavelength'].quantity.to(u_.um), wt['Transmission'],
+                     color='gray', linestyle=ls, alpha=0.7, label=filtername)
+    ax_filt.set_ylabel('Filter transmission')
+    ax_sed.set_xlabel('Wavelength ($\\mu$m)')
+    ax_sed.set_ylabel('Normalized $F_\\nu$')
+    ax_sed.set_xlim(3.5, 5.0)
+    ax_sed.set_ylim(0, 1.1)
+    ax_sed.legend(loc='lower left', fontsize=8)
+    ax_filt.legend(loc='lower right', fontsize=8)
+    ax_sed.set_title("Stellar SED × Ehrenfreund-30K CO + Mastrapa-15K H$_2$O (10:1 ratio)")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/stellar_sed_iceabsorbed_maxF466N.pdf', dpi=150, bbox_inches='tight')
+
+    # Same but pure CO only (no water) — to demonstrate that even with the
+    # most-broad pure-CO table, F466N depth saturates well below observed.
+    fig = pl.figure(figsize=(9, 6))
+    ax_sed = fig.add_subplot(111)
+    ax_sed.plot(sed_xarr, base_flux / norm, color='k', lw=1.4, label='T=4000 K (no ice)')
+    for ii, n_co in enumerate([1e17, 1e18, 5e18, 1e19, 5e19]):
+        spec = absorbed_spectrum(n_co * u_.cm**-2, co_ehren30,
+                                 molecular_weight=co_molwt,
+                                 spectrum=base_flux, xarr=sed_xarr)
+        ax_sed.plot(sed_xarr, spec / norm, color=cmap(ii / 4),
+                    lw=1.2, label=f"N(CO)={n_co:.0e} (no H$_2$O)")
+    ax_filt = ax_sed.twinx()
+    for filtername, ls in zip(['F405N', 'F410M', 'F466N'], ['-', ':', '--']):
+        wt = SvoFps.get_transmission_data(f'{telescope}/{instrument}.{filtername}')
+        ax_filt.plot(wt['Wavelength'].quantity.to(u_.um), wt['Transmission'],
+                     color='gray', linestyle=ls, alpha=0.7, label=filtername)
+    ax_filt.set_ylabel('Filter transmission')
+    ax_sed.set_xlabel('Wavelength ($\\mu$m)')
+    ax_sed.set_ylabel('Normalized $F_\\nu$')
+    ax_sed.set_xlim(3.5, 5.0)
+    ax_sed.set_ylim(0, 1.1)
+    ax_sed.legend(loc='lower left', fontsize=8)
+    ax_filt.legend(loc='lower right', fontsize=8)
+    ax_sed.set_title("Stellar SED × pure CO (Ehrenfreund 30 K) only")
+    pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/stellar_sed_pureCO_maxF466N.pdf', dpi=150, bbox_inches='tight')
 
 
     ocn_mix1 = Table.read('/orange/adamginsburg/repos/icemodels/icemodels/data/mymixes/H2O:CO:OCN_(1:1:1).ecsv')
@@ -333,45 +763,45 @@ if __name__ == "__main__":
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
-    plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
-    pl.text(2.77, 6e-18, 'F277W', ha='center')
-    pl.text(3.23, 6e-18, 'F323N', ha='center')
-    pl.text(3.60, 6e-18, 'F360M', ha='center')
-    pl.text(4.80, 6e-18, 'F480M', ha='center')
-    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(filternames=['F277W', 'F323N', 'F360M', 'F480M'])
+    transmission_ax.text(2.77, tmax * 1.01, 'F277W', ha='center')
+    transmission_ax.text(3.23, tmax * 1.01, 'F323N', ha='center')
+    transmission_ax.text(3.60, tmax * 1.01, 'F360M', ha='center')
+    transmission_ax.text(4.80, tmax * 1.01, 'F480M', ha='center')
+    ax.set_ylim(1e-21, 1e-17)
     pl.xlim(2.00, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f323_f360_f480.pdf', dpi=150, bbox_inches='tight')
 
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia, co2_gerakines))
-    plot_filters(filternames=['F410M', 'F430M', 'F460M', 'F480M'])
-    pl.text(4.10, 6e-18, 'F410M', ha='center')
-    pl.text(4.30, 6e-18, 'F430M', ha='center')
-    pl.text(4.60, 6e-18, 'F460M', ha='center')
-    pl.text(4.80, 6e-18, 'F480M', ha='center')
-    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(filternames=['F410M', 'F430M', 'F460M', 'F480M'])
+    transmission_ax.text(4.10, tmax * 1.01, 'F410M', ha='center')
+    transmission_ax.text(4.30, tmax * 1.01, 'F430M', ha='center')
+    transmission_ax.text(4.60, tmax * 1.01, 'F460M', ha='center')
+    transmission_ax.text(4.80, tmax * 1.01, 'F480M', ha='center')
+    ax.set_ylim(1e-21, 1e-17)
     pl.xlim(3.80, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f410_f430_f460_f480.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
-    plot_filters(filternames=['F250M', 'F300M', 'F335M', 'F360M'])
-    pl.text(2.5, 6e-18, 'F250M', ha='center')
-    pl.text(3.0, 6e-18, 'F300M', ha='center')
-    pl.text(3.35, 6e-18, 'F335M', ha='center')
-    pl.text(3.6, 6e-18, 'F360M', ha='center')
-    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(filternames=['F250M', 'F300M', 'F335M', 'F360M'])
+    transmission_ax.text(2.5, tmax * 1.01, 'F250M', ha='center')
+    transmission_ax.text(3.0, tmax * 1.01, 'F300M', ha='center')
+    transmission_ax.text(3.35, tmax * 1.01, 'F335M', ha='center')
+    transmission_ax.text(3.6, tmax * 1.01, 'F360M', ha='center')
+    ax.set_ylim(1e-21, 1e-17)
     pl.xlim(2.30, 3.90);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f250_f300_f335_f360.pdf', dpi=150, bbox_inches='tight')
 
     pl.figure()
     plot_opacity_tables(opacity_tables=(water_mastrapa, ethanol, water_ammonia))
-    plot_filters(filternames=['F277W', 'F356W', 'F444W'])
-    pl.text(2.77, 6e-18, 'F277W', ha='center')
-    pl.text(3.56, 6e-18, 'F356W', ha='center')
-    pl.text(4.44, 6e-18, 'F444W', ha='center')
-    pl.ylim(1e-21, 1e-17)
+    ax, transmission_ax, tmax = plot_filters(filternames=['F277W', 'F356W', 'F444W'])
+    transmission_ax.text(2.77, tmax * 1.01, 'F277W', ha='center')
+    transmission_ax.text(3.56, tmax * 1.01, 'F356W', ha='center')
+    transmission_ax.text(4.44, tmax * 1.01, 'F444W', ha='center')
+    ax.set_ylim(1e-21, 1e-17)
     pl.xlim(2.20, 5.20);
     pl.savefig('/orange/adamginsburg/ice/colors_of_ices_overleaf/figures/opacities_on_f277_f356_f444.pdf', dpi=150, bbox_inches='tight')
 
