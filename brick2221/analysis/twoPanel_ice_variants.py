@@ -133,11 +133,7 @@ def _load_species_tables(species, require_overlap=None):
     files = sorted(glob.glob(pattern))
     out = []
     for fn in files:
-        try:
-            tb = read_ocdb_file(fn)
-        except Exception as ex:
-            print(f"  skip {os.path.basename(fn)}: read error: {ex}")
-            continue
+        tb = read_ocdb_file(fn)
         wl = np.asarray(tb['Wavelength'], dtype=float)
         if not (np.isfinite(wl).any() and
                 wl.min() <= require_overlap[0] and
@@ -279,31 +275,19 @@ def _color_vs_column_panel(ax, dmag_tbl, entries, species,
 
     grouped = defaultdict(list)
     for tb, author, T, phase in entries:
-        try:
-            mol_id = _resolve_single_mol_id(dmag_tbl, author, comp, T)
-        except Exception as ex:
-            print(f"  left-panel skip {author} {T:g}K: {ex}")
-            continue
-        try:
-            sub = (dmag_tbl
-                   .loc['mol_id', mol_id]
-                   .loc['composition', comp]
-                   .loc['temperature', float(T)])
-        except Exception as ex:
-            print(f"  left-panel slice failed for {author} {T:g}K: {ex}")
-            continue
+        mol_id = _resolve_single_mol_id(dmag_tbl, author, comp, T)
+        sub = (dmag_tbl
+               .loc['mol_id', mol_id]
+               .loc['composition', comp]
+               .loc['temperature', float(T)])
         if not len(sub):
             continue
         n_species = h2_grid * abundance_wrt_h2
-        try:
-            dmag = compute_dmag_from_column(
-                n_species, sub, icemol=species,
-                maxcol=1e22, filter1=color[0], filter2=color[1],
-                verbose=False,
-            )
-        except Exception as ex:
-            print(f"  left-panel dmag failed for {author} {T:g}K: {ex}")
-            continue
+        dmag = compute_dmag_from_column(
+            n_species, sub, icemol=species,
+            maxcol=1e22, filter1=color[0], filter2=color[1],
+            verbose=False,
+        )
         yvals = dmag + a_color
         grouped[(author, phase)].append((T, yvals))
 
@@ -442,24 +426,17 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
     for ii, (composition, T) in enumerate(mixes):
         c = cycle[ii % len(cycle)]
         # ----- left panel: color vs N(H2) -----
-        try:
-            sub = (dmag_tbl
-                   .loc['composition', composition]
-                   .loc['temperature', float(T)])
-        except Exception as ex:
-            print(f"  skip left {composition} {T}K: {ex}")
-            sub = None
+        sub = (dmag_tbl
+               .loc['composition', composition]
+               .loc['temperature', float(T)])
         if sub is not None and len(sub):
             n_icemol = h2_grid * abundance_wrt_h2
-            try:
-                dmag = compute_dmag_from_column(
-                    n_icemol, sub, icemol=icemol,
-                    maxcol=1e22, filter1=color[0], filter2=color[1],
-                    verbose=False)
-                ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
-                             label=f"{composition} {T:g}K")
-            except Exception as ex:
-                print(f"  left dmag failed {composition}: {ex}")
+            dmag = compute_dmag_from_column(
+                n_icemol, sub, icemol=icemol,
+                maxcol=1e22, filter1=color[0], filter2=color[1],
+                verbose=False)
+            ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
+                         label=f"{composition} {T:g}K")
 
         # ----- right panel: opacity vs wavelength -----
         # Use precomputed mymix file if it exists, else skip (rebuilding on
@@ -469,25 +446,18 @@ def make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes2, name='mixes2',
                      glob.glob(f"{mymix_dir}/{composition.replace(' ', '_')}.ecsv")
         op_tab = None
         for cand in candidates:
-            try:
-                op_tab = Table.read(cand)
-                break
-            except Exception:
-                continue
+            op_tab = Table.read(cand)
+            break
         if op_tab is None:
             print(f"  skip right {composition}: no mymix file")
             continue
         kk = op_tab['k₁'] if 'k₁' in op_tab.colnames else op_tab['k']
         molwt = u.Quantity(composition_to_molweight(composition), u.Da)
-        try:
-            op_per_mol = absorbed_spectrum(
-                xarr=op_tab['Wavelength'], ice_column=1,
-                ice_model_table=op_tab, molecular_weight=molwt,
-                return_tau=True).to(u.cm**2).value
-            op = op_per_mol / molwt.to(u.g).value     # cm^2 / g
-        except Exception as ex:
-            print(f"  right opacity failed {composition}: {ex}")
-            continue
+        op_per_mol = absorbed_spectrum(
+            xarr=op_tab['Wavelength'], ice_column=1,
+            ice_model_table=op_tab, molecular_weight=molwt,
+            return_tau=True).to(u.cm**2).value
+        op = op_per_mol / molwt.to(u.g).value     # cm^2 / g
         wl = np.asarray(op_tab['Wavelength'], dtype=float)
         so = np.argsort(wl)
         op_g = np.interp(grid, wl[so], op[so], left=np.nan, right=np.nan)
@@ -566,15 +536,7 @@ def _load_ehrenfreund_co_tables(require_overlap=(4.62, 4.70)):
 
     out = []
     for fn in candidates_ocdb:
-        try:
-            tb = read_ocdb_file(fn)
-        except Exception:
-            try:
-                from icemodels.core import read_lida_file
-                tb = read_lida_file(fn)
-            except Exception as ex:
-                print(f"  skip {os.path.basename(fn)}: read error: {ex}")
-                continue
+        tb = read_ocdb_file(fn)
         comp = tb.meta.get('composition', '')
         if 'CO' not in comp.upper():
             continue
@@ -589,11 +551,7 @@ def _load_ehrenfreund_co_tables(require_overlap=(4.62, 4.70)):
         out.append((tb, author, T, comp, fn))
 
     for fn in candidates_NK:
-        try:
-            tb = read_ehrenfreund_NK_file(fn)
-        except Exception as ex:
-            print(f"  skip {os.path.basename(fn)}: NK parse error: {ex}")
-            continue
+        tb = read_ehrenfreund_NK_file(fn)
         comp = tb.meta.get('composition', '')
         # Token-level CO check: skip CO2-only / pure-CO2 tables.
         comp_tokens = [tok.split('(')[0].strip()
@@ -648,36 +606,26 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
     for ii, (tb, author, T, comp, fn) in enumerate(entries):
         c = cycle[ii % len(cycle)]
         # ---- left panel: color vs N(H2) ----
-        try:
-            sub = (dmag_tbl
-                   .loc['composition', comp]
-                   .loc['temperature', float(T)])
-        except Exception:
-            sub = None
+        sub = (dmag_tbl
+               .loc['composition', comp]
+               .loc['temperature', float(T)])
         if sub is not None and len(sub):
             n_icemol = h2_grid * abundance_wrt_h2
-            try:
-                dmag = compute_dmag_from_column(
-                    n_icemol, sub, icemol=icemol, maxcol=1e22,
-                    filter1=color[0], filter2=color[1], verbose=False)
-                ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
-                             label=f"{comp} {T:g}K")
-            except Exception as ex:
-                print(f"  left dmag failed {comp} {T}K: {ex}")
+            dmag = compute_dmag_from_column(
+                n_icemol, sub, icemol=icemol, maxcol=1e22,
+                filter1=color[0], filter2=color[1], verbose=False)
+            ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
+                         label=f"{comp} {T:g}K")
         else:
             print(f"  no dmag entry for {comp} {T}K (skipped left panel)")
 
         # ---- right panel: opacity vs wavelength ----
-        try:
-            molwt = u.Quantity(composition_to_molweight(comp), u.Da)
-            op_per_mol = absorbed_spectrum(
-                xarr=tb['Wavelength'], ice_column=1,
-                ice_model_table=tb, molecular_weight=molwt,
-                return_tau=True).to(u.cm**2).value
-            op = op_per_mol / molwt.to(u.g).value      # cm^2 / g
-        except Exception as ex:
-            print(f"  right opacity failed {comp}: {ex}")
-            continue
+        molwt = u.Quantity(composition_to_molweight(comp), u.Da)
+        op_per_mol = absorbed_spectrum(
+            xarr=tb['Wavelength'], ice_column=1,
+            ice_model_table=tb, molecular_weight=molwt,
+            return_tau=True).to(u.cm**2).value
+        op = op_per_mol / molwt.to(u.g).value      # cm^2 / g
         wl = np.asarray(tb['Wavelength'], dtype=float)
         so = np.argsort(wl)
         op_g = np.interp(grid, wl[so], op[so], left=np.nan, right=np.nan)
@@ -765,11 +713,7 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
         f'{optical_constants_cache_dir}/bergner_*.txt'))
     entries = []
     for fn in files:
-        try:
-            tb = _read_bergner(fn)
-        except Exception as ex:
-            print(f"  skip {os.path.basename(fn)}: {ex}")
-            continue
+        tb = _read_bergner(fn)
         if 'k' not in tb.colnames:
             continue
         wl = np.asarray(tb['Wavelength'], dtype=float)
@@ -899,15 +843,11 @@ def make_two_panel_bergner(savedir, color=DEFAULT_COLOR,
         for tb, sname, T, comp, col_dens in sorted(group, key=lambda g: g[2]):
             molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
                                u.Da)
-            try:
-                op_per_mol = absorbed_spectrum(
-                    xarr=tb['Wavelength'], ice_column=1,
-                    ice_model_table=tb, molecular_weight=molwt,
-                    return_tau=True).to(u.cm**2).value
-                op = op_per_mol / molwt.to(u.g).value     # cm^2 / g
-            except Exception as ex:
-                print(f"    opacity failed {sample} {T}K: {ex}")
-                continue
+            op_per_mol = absorbed_spectrum(
+                xarr=tb['Wavelength'], ice_column=1,
+                ice_model_table=tb, molecular_weight=molwt,
+                return_tau=True).to(u.cm**2).value
+            op = op_per_mol / molwt.to(u.g).value     # cm^2 / g
             wl = np.asarray(tb['Wavelength'], dtype=float)
             so = np.argsort(wl)
             op_paths.append(np.interp(grid, wl[so], op[so],
@@ -1046,53 +986,50 @@ def make_two_panel_bluest_compare(dmag_tbl, savedir,
     # left-panel curve are guaranteed consistent.
     mymix_path = ('/blue/adamginsburg/adamginsburg/repos/icemodels/'
                   f'icemodels/data/mymixes/{comp.replace(" ", "_")}.ecsv')
-    try:
-        op_tab = Table.read(mymix_path)
-        if 'k' not in op_tab.colnames and 'k₁' in op_tab.colnames:
-            op_tab['k'] = op_tab['k₁']
-        molwt_m = u.Quantity(composition_to_molweight(comp), u.Da)
-        # right panel curve
-        op_m_per_mol = absorbed_spectrum(
-            xarr=op_tab['Wavelength'], ice_column=1,
-            ice_model_table=op_tab, molecular_weight=molwt_m,
-            return_tau=True).to(u.cm**2).value
-        op_m = op_m_per_mol / molwt_m.to(u.g).value     # cm^2 / g
-        wl_m = np.asarray(op_tab['Wavelength'], dtype=float)
-        so_m = np.argsort(wl_m)
-        op_m_g = np.interp(grid, wl_m[so_m], op_m[so_m],
-                           left=np.nan, right=np.nan)
-        ax_op.plot(grid, op_m_g, color='C3', linewidth=1.4,
-                   label=f"mixes2 {comp} {T:g} K")
-        # left panel: compute dmag on the fly from same k(lambda)
-        # mixes2 composition keeps mol_fractions; CO mol fraction:
-        from icemodels.core import molscomps
-        mols, comps = molscomps(comp)
-        co_frac = (comps[mols.index('CO')] / sum(comps)) if 'CO' in mols else 1.0
-        # tau at deposit ref column = 1 / cm^2 -> nonsense; instead pick
-        # n_ref = 1e18 cm^-2 *for CO* and back out the total ice column
-        # such that N(CO_in_mix) = 1e18.
-        n_co_ref = 1e18 / u.cm**2
-        n_total_ref = n_co_ref / co_frac
-        tau_m = absorbed_spectrum(xarr=op_tab['Wavelength'],
-                                  ice_column=n_total_ref,
-                                  ice_model_table=op_tab,
-                                  molecular_weight=molwt_m,
-                                  return_tau=True).value
-        # for each N(H2): N(CO_obs) = h2_grid * abundance, scale tau by
-        # N(CO_obs)/n_co_ref
-        scale_m = (h2_grid * abundance_wrt_h2) / 1e18
-        c1_m = np.empty_like(h2_grid)
-        c2_m = np.empty_like(h2_grid)
-        for ii, s in enumerate(scale_m):
-            c1_m[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_m*s, wl_m, color[0]))
-            c2_m[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_m*s, wl_m, color[1]))
-        diff_m_ice = c1_m - c2_m
-        ax_left.plot(h2_grid, diff_m_ice + a_color, color='C3', linewidth=1.6,
-                     label=f"mixes2 {comp} {T:g} K (ice + dust)")
-        ax_left.plot(h2_grid, diff_m_ice, color='C3', linewidth=1.0,
-                     linestyle=':', alpha=0.6, label="  ice-only")
-    except Exception as ex:
-        print(f"  could not load/compute mixes2: {ex}")
+    op_tab = Table.read(mymix_path)
+    if 'k' not in op_tab.colnames and 'k₁' in op_tab.colnames:
+        op_tab['k'] = op_tab['k₁']
+    molwt_m = u.Quantity(composition_to_molweight(comp), u.Da)
+    # right panel curve
+    op_m_per_mol = absorbed_spectrum(
+        xarr=op_tab['Wavelength'], ice_column=1,
+        ice_model_table=op_tab, molecular_weight=molwt_m,
+        return_tau=True).to(u.cm**2).value
+    op_m = op_m_per_mol / molwt_m.to(u.g).value     # cm^2 / g
+    wl_m = np.asarray(op_tab['Wavelength'], dtype=float)
+    so_m = np.argsort(wl_m)
+    op_m_g = np.interp(grid, wl_m[so_m], op_m[so_m],
+                       left=np.nan, right=np.nan)
+    ax_op.plot(grid, op_m_g, color='C3', linewidth=1.4,
+               label=f"mixes2 {comp} {T:g} K")
+    # left panel: compute dmag on the fly from same k(lambda)
+    # mixes2 composition keeps mol_fractions; CO mol fraction:
+    from icemodels.core import molscomps
+    mols, comps = molscomps(comp)
+    co_frac = (comps[mols.index('CO')] / sum(comps)) if 'CO' in mols else 1.0
+    # tau at deposit ref column = 1 / cm^2 -> nonsense; instead pick
+    # n_ref = 1e18 cm^-2 *for CO* and back out the total ice column
+    # such that N(CO_in_mix) = 1e18.
+    n_co_ref = 1e18 / u.cm**2
+    n_total_ref = n_co_ref / co_frac
+    tau_m = absorbed_spectrum(xarr=op_tab['Wavelength'],
+                              ice_column=n_total_ref,
+                              ice_model_table=op_tab,
+                              molecular_weight=molwt_m,
+                              return_tau=True).value
+    # for each N(H2): N(CO_obs) = h2_grid * abundance, scale tau by
+    # N(CO_obs)/n_co_ref
+    scale_m = (h2_grid * abundance_wrt_h2) / 1e18
+    c1_m = np.empty_like(h2_grid)
+    c2_m = np.empty_like(h2_grid)
+    for ii, s in enumerate(scale_m):
+        c1_m[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_m*s, wl_m, color[0]))
+        c2_m[ii] = -2.5*np.log10(_filter_avg_exp_tau(tau_m*s, wl_m, color[1]))
+    diff_m_ice = c1_m - c2_m
+    ax_left.plot(h2_grid, diff_m_ice + a_color, color='C3', linewidth=1.6,
+                 label=f"mixes2 {comp} {T:g} K (ice + dust)")
+    ax_left.plot(h2_grid, diff_m_ice, color='C3', linewidth=1.0,
+                 linestyle=':', alpha=0.6, label="  ice-only")
 
     # left panel cosmetics
     ax_left.set_xscale('log')
@@ -1161,10 +1098,7 @@ def make_bergner_ccd(savedir, color1, color2,
         f'{optical_constants_cache_dir}/bergner_*.txt'))
     by_sample = defaultdict(list)
     for fn in files:
-        try:
-            tb = _read_bergner(fn, baseline_subtract=baseline_subtract)
-        except Exception as ex:
-            continue
+        tb = _read_bergner(fn, baseline_subtract=baseline_subtract)
         if 'k' not in tb.colnames:
             continue
         cd = tb.meta.get('column_densities_1e15_per_cm2', {}) or {}
@@ -1216,13 +1150,10 @@ def make_bergner_ccd(savedir, color1, color2,
             n_ref = cd[sp] * 1e15 / u.cm**2
             molwt = u.Quantity(composition_to_molweight(tb.meta['composition']),
                                u.Da)
-            try:
-                tau1 = absorbed_spectrum(
-                    xarr=tb['Wavelength'], ice_column=n_ref,
-                    ice_model_table=tb, molecular_weight=molwt,
-                    return_tau=True).value
-            except Exception:
-                continue
+            tau1 = absorbed_spectrum(
+                xarr=tb['Wavelength'], ice_column=n_ref,
+                ice_model_table=tb, molecular_weight=molwt,
+                return_tau=True).value
             wl = np.asarray(tb['Wavelength'], dtype=float)
             scale = (h2_grid * ab) / (cd[sp] * 1e15)
             c1 = np.empty_like(h2_grid)
@@ -1294,6 +1225,9 @@ if __name__ == '__main__':
             for species in ('H2O', 'CO', 'CO2'):
                 make_two_panel(species, dmag_tbl, savedir, color=color)
             make_two_panel_mixes(dmag_tbl, savedir, color=color)
+            from icemodels.colorcolordiagrams import mixes3
+            make_two_panel_mixes(dmag_tbl, savedir, mixes=mixes3,
+                                 name='mixes3', color=color)
             make_two_panel_co_ehrenfreund(dmag_tbl, savedir, color=color)
             make_two_panel_bergner(savedir, color=color)
         # Bergner vs mixes2 at IDENTICAL component ratios (Polar-10-2-2 = 5:1:1)
