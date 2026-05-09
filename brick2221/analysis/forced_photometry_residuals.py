@@ -254,9 +254,12 @@ def process_frame(res_path, psf_model,
         det_x  = xf + x_offset
         det_y  = yf + y_offset
 
+        # _eval_psf interpolates the gridded PSF model at (det_x, det_y);
+        # out-of-grid coordinates raise ValueError, which we legitimately
+        # skip.  Any other exception type is a real bug -- let it raise.
         try:
             psf_stamp = _eval_psf(psf_model, det_x, det_y, npix)
-        except Exception:
+        except ValueError:
             continue
 
         sci_stamp, flag_edge = _extract_stamp(sci, xf, yf, npix)

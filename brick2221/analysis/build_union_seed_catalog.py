@@ -527,11 +527,16 @@ def append_residual_peak_seeds(out, residual_globs, fwhm_table,
             try:
                 filt = parts[parts.index('pipeline') - 1].upper()
             except ValueError:
-                filt = 'UNKNOWN'
-            try:
-                fwhm_as = fwhm_arcsec_for(filt, fwhm_table)
-            except KeyError:
-                fwhm_as = 0.10  # fallback
+                raise ValueError(
+                    f"Could not infer filter name from residual peak path "
+                    f"{path!r}: no 'pipeline' segment in path; expected "
+                    f"layout .../<FILTER>/pipeline/<file>.fits"
+                )
+            # Look up FWHM in the canonical fwhm table; missing entry is a
+            # configuration bug (fwhm table out of sync with filters in use)
+            # and a hard-coded fallback would silently use the wrong PSF
+            # size for residual peak detection.
+            fwhm_as = fwhm_arcsec_for(filt, fwhm_table)
             # Get pixel scale from filename convention or use a default
             # (SW: 0.031"/px for F187N/F210M; LW: 0.063"/px for the rest)
             is_sw = filt in ('F115W', 'F150W', 'F162M', 'F182M', 'F187N',

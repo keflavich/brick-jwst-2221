@@ -133,7 +133,24 @@ def _load_species_tables(species, require_overlap=None):
     files = sorted(glob.glob(pattern))
     out = []
     for fn in files:
-        tb = read_ocdb_file(fn)
+        try:
+            tb = read_ocdb_file(fn)
+        except UnicodeDecodeError:
+            # UnicodeDecodeError is a ValueError subclass; catch it first.
+            print(f"  skip {os.path.basename(fn)}: not a text file")
+            continue
+        except ValueError as ex:
+            # Known recoverable parse failures: file lacks the opacity
+            # column, lacks a wavelength column (e.g. corrupted/HTML
+            # download), or is otherwise mis-shaped. read_ocdb_file uses
+            # ValueError with these specific phrasings.
+            msg = str(ex).lower()
+            if ('no opacity column' in msg
+                    or 'no wavelength column' in msg
+                    or 'table had no' in msg):
+                print(f"  skip {os.path.basename(fn)}: {ex}")
+                continue
+            raise
         wl = np.asarray(tb['Wavelength'], dtype=float)
         if not (np.isfinite(wl).any() and
                 wl.min() <= require_overlap[0] and
@@ -534,11 +551,38 @@ def _load_ehrenfreund_co_tables(require_overlap=(4.62, 4.70)):
     candidates_NK = sorted(glob.glob(
         f'{optical_constants_cache_dir}/wayback_ehrenfreund_E*.NK'))
 
+    from icemodels.core import molscomps
     out = []
     for fn in candidates_ocdb:
-        tb = read_ocdb_file(fn)
+        try:
+            tb = read_ocdb_file(fn)
+        except UnicodeDecodeError:
+            # UnicodeDecodeError is a subclass of ValueError; handle it
+            # first. Cached glob picked up a binary file (e.g. raw .xlsx,
+            # .DS_Store).
+            print(f"  skip {os.path.basename(fn)}: not a text file")
+            continue
+        except ValueError as ex:
+            # Recoverable OCDB parse failures: missing wavelength/opacity
+            # columns or malformed header. Other ValueErrors propagate.
+            msg = str(ex).lower()
+            if ('no wavelength column' in msg
+                    or 'no opacity column' in msg
+                    or 'table had no' in msg):
+                print(f"  skip {os.path.basename(fn)}: {ex}")
+                continue
+            raise
         comp = tb.meta.get('composition', '')
-        if 'CO' not in comp.upper():
+        # Token-level CO check: substring match on 'CO' would also accept
+        # CO2-only compositions and downstream code (compute_dmag_from_column)
+        # would then raise because it parses molecules properly.
+        try:
+            mols, _ = molscomps(comp)
+        except (ValueError, IndexError):
+            # Unparseable composition string — can't tell if CO is in it.
+            print(f"  skip {os.path.basename(fn)} ({comp}): unparseable composition")
+            continue
+        if 'CO' not in mols:
             continue
         wl = np.asarray(tb['Wavelength'], dtype=float)
         if not (np.isfinite(wl).any() and wl.min() <= require_overlap[0]
@@ -606,9 +650,16 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
     for ii, (tb, author, T, comp, fn) in enumerate(entries):
         c = cycle[ii % len(cycle)]
         # ---- left panel: color vs N(H2) ----
-        sub = (dmag_tbl
-               .loc['composition', comp]
-               .loc['temperature', float(T)])
+        # `loc[index, key]` raises KeyError when the key isn't in the
+        # index (precomputed dmag table doesn't contain this composition).
+        # That is a real situation — skip the left panel for this entry.
+        try:
+            sub = (dmag_tbl
+                   .loc['composition', comp]
+                   .loc['temperature', float(T)])
+        except KeyError:
+            print(f"  no dmag entry for {comp} {T}K (skipped left panel)")
+            sub = None
         if sub is not None and len(sub):
             n_icemol = h2_grid * abundance_wrt_h2
             dmag = compute_dmag_from_column(
@@ -616,8 +667,8 @@ def make_two_panel_co_ehrenfreund(dmag_tbl, savedir,
                 filter1=color[0], filter2=color[1], verbose=False)
             ax_left.plot(h2_grid, dmag + a_color, color=c, linewidth=1.3,
                          label=f"{comp} {T:g}K")
-        else:
-            print(f"  no dmag entry for {comp} {T}K (skipped left panel)")
+        elif sub is not None:
+            print(f"  empty dmag slice for {comp} {T}K")
 
         # ---- right panel: opacity vs wavelength ----
         molwt = u.Quantity(composition_to_molweight(comp), u.Da)
