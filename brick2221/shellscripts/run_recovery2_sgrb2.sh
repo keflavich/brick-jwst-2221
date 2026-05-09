@@ -36,7 +36,7 @@ submit_pair_plain() {
         --job-name="webb-cat-${target}-${filter}-${module}-eachexp" \
         --output="${logdir}/webb-cat-${target}-${filter}-${module}-eachexp_%j-%A_%a.log" \
         --account=astronomy-dept --qos=astronomy-dept-b \
-        --ntasks=2 --nodes=1 --mem="${mem}" --time=96:00:00 \
+        --ntasks=1 --nodes=1 --mem="${mem}" --time=96:00:00 \
         --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} \
 --each-exposure --proposal_id=${proposal_id} --target=${target} \
 --each-suffix=${each_suffix} ${dao_args}")
@@ -49,7 +49,7 @@ submit_pair_plain() {
         --job-name="webb-cat-${target}-iter2-${filter}-${module}-eachexp" \
         --output="${logdir}/webb-cat-${target}-iter2-${filter}-${module}-eachexp_%j-%A_%a.log" \
         --account=astronomy-dept --qos=astronomy-dept-b \
-        --ntasks=2 --nodes=1 --mem="${mem}" --time=96:00:00 \
+        --ntasks=1 --nodes=1 --mem="${mem}" --time=96:00:00 \
         --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} \
 --each-exposure --proposal_id=${proposal_id} --target=${target} \
 --each-suffix=${each_suffix} ${dao_args} \

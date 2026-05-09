@@ -184,7 +184,7 @@ submit_catalog_job() {
         dep_args+=(--dependency="afterok:${dependency_jobid}")
     fi
 
-    submitted_array_jobid=$(sbatch --parsable "${dep_args[@]}" --array="${range}" --job-name=webb-cat-sickle-${filter}-${module}-eachexp --output=${logdir}/webb-cat-sickle-${filter}-${module}-eachexp_%j-%A_%a.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${dao} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
+    submitted_array_jobid=$(sbatch --parsable "${dep_args[@]}" --array="${range}" --job-name=webb-cat-sickle-${filter}-${module}-eachexp --output=${logdir}/webb-cat-sickle-${filter}-${module}-eachexp_%j-%A_%a.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${dao} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
     echo "Submitted array job ${submitted_array_jobid} (range=${range}) for ${filter} ${module} with args: ${dao}"
 }
 
@@ -243,7 +243,7 @@ submit_catalog_and_residual_mosaic() {
     fi
 
     local array_jobid
-    array_jobid=$(sbatch --parsable --array=0-23 --job-name=webb-cat-sickle-${filter}-${module}-eachexp --output=${logdir}/webb-cat-sickle-${filter}-${module}-eachexp_%j-%A_%a.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${dao}")
+    array_jobid=$(sbatch --parsable --array=0-23 --job-name=webb-cat-sickle-${filter}-${module}-eachexp --output=${logdir}/webb-cat-sickle-${filter}-${module}-eachexp_%j-%A_%a.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${dao}")
     
     echo "Submitted array job ${array_jobid} for ${filter} ${module} with args: ${dao}"
 

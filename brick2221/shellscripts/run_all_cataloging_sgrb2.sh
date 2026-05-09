@@ -95,7 +95,7 @@ for filter in F150W F182M F187N F210M F212N F300M F360M F405N F410M F466N F480M;
                     --job-name="webb-cat-sgrb2-${filter}-${module}${bgsub_tag}-eachexp" \
                     --output="${logdir}/webb-cat-sgrb2-${filter}-${module}${bgsub_tag}-eachexp_%j-%A_%a.log" \
                     --account=astronomy-dept --qos=astronomy-dept-b \
-                    --ntasks=2 --nodes=1 --mem="${mem}" --time=96:00:00 \
+                    --ntasks=1 --nodes=1 --mem="${mem}" --time=96:00:00 \
                     --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} \
 --each-exposure --proposal_id=${proposal_id} --target=${target} \
 --each-suffix=${each_suffix} ${dao_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
@@ -116,7 +116,7 @@ for filter in F150W F182M F187N F210M F212N F300M F360M F405N F410M F466N F480M;
                     --job-name="webb-cat-sgrb2-iter2-${filter}-${module}${bgsub_tag}-eachexp" \
                     --output="${logdir}/webb-cat-sgrb2-iter2-${filter}-${module}${bgsub_tag}-eachexp_%j-%A_%a.log" \
                     --account=astronomy-dept --qos=astronomy-dept-b \
-                    --ntasks=2 --nodes=1 --mem="${mem}" --time=96:00:00 \
+                    --ntasks=1 --nodes=1 --mem="${mem}" --time=96:00:00 \
                     --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} \
 --each-exposure --proposal_id=${proposal_id} --target=${target} \
 --each-suffix=${each_suffix} ${dao_args} \

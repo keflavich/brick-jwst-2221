@@ -166,7 +166,7 @@ submit_array() {
         --job-name=webb-cat-${target}-${iteration_label}-${filter}-${module}${chunk_tag}-eachexp \
         --output=${logdir}/webb-cat-${target}-${iteration_label}-${filter}-${module}${chunk_tag}-eachexp_%j-%A_%a.log \
         --account=astronomy-dept --qos=astronomy-dept-b \
-        --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 \
+        --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 \
         --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
     echo "Submitted ${iteration_label} array ${job} for ${target} ${filter} ${module}${chunk_tag}" >&2
     echo "${job}"

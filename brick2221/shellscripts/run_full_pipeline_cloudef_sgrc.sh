@@ -179,7 +179,7 @@ submit_target_flow() {
             --job-name="webb-cat-${target}-${filter}-eachexp" \
             --output="${logdir}/webb-cat-${target}-${filter}-eachexp_%j-%A_%a.log" \
             --account=astronomy-dept --qos=astronomy-dept-b \
-            --ntasks=2 --nodes=1 --mem=32gb --time=96:00:00 \
+            --ntasks=1 --nodes=1 --mem=32gb --time=96:00:00 \
             --wrap "${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --target=${target} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done")
         catalog_jobids+=("${cat_jobid}")
         echo "Submitted catalog array ${cat_jobid} for ${target} ${filter}"

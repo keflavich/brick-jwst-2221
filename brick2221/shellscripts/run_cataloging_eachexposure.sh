@@ -54,7 +54,7 @@ submit_catalog_and_residual_mosaic() {
     iter1_range=$(compute_array_range "${filter}" "${module}" "${dao}" "${proposal_id}" "${target}" "${each_suffix}" "")
     local array_jobid=""
     if [[ -n "${iter1_range}" ]]; then
-        array_jobid=$(sbatch --parsable --array="${iter1_range}" --job-name=webb-cat-${filter}-${module}-eachexp-${target} --output=${logdir}/webb-cat-${filter}-${module}-eachexp-${target}_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao} ${extra_args} --bundle-size=${bundle_size} --skip-if-done")
+        array_jobid=$(sbatch --parsable --array="${iter1_range}" --job-name=webb-cat-${filter}-${module}-eachexp-${target} --output=${logdir}/webb-cat-${filter}-${module}-eachexp-${target}_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao} ${extra_args} --bundle-size=${bundle_size} --skip-if-done")
     else
         echo "iter1 already complete for ${filter} ${module} ${target}; skipping iter1 submission."
     fi
@@ -66,7 +66,7 @@ submit_catalog_and_residual_mosaic() {
         if [[ -n "${iter2_range}" ]]; then
             local dep_arg=""
             if [[ -n "${array_jobid}" ]]; then dep_arg="--dependency=afterok:${array_jobid}"; fi
-            iter2_jobid=$(sbatch --parsable ${dep_arg} --array="${iter2_range}" --job-name=webb-cat-${filter}-${module}-eachexp-${target}-iter2 --output=${logdir}/webb-cat-${filter}-${module}-eachexp-${target}-iter2_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao} ${extra_args} --iteration-label=iter2 --postprocess-residuals --bundle-size=${bundle_size} --skip-if-done")
+            iter2_jobid=$(sbatch --parsable ${dep_arg} --array="${iter2_range}" --job-name=webb-cat-${filter}-${module}-eachexp-${target}-iter2 --output=${logdir}/webb-cat-${filter}-${module}-eachexp-${target}-iter2_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao} ${extra_args} --iteration-label=iter2 --postprocess-residuals --bundle-size=${bundle_size} --skip-if-done")
         else
             echo "iter2 already complete for ${filter} ${module} ${target}; skipping iter2 submission."
         fi

@@ -27,7 +27,7 @@ for filter in F115W; do
                 range=$(compute_array_range "${filter}" "${module}" "${dao}" "")
                 array_jobid=""
                 if [[ -n "${range}" ]]; then
-                    array_jobid=$(sbatch --parsable --array="${range}" --job-name=webb-cat-${filter}-${module}-eachexp --output=webb-cat-${filter}-${module}-eachexp_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao}  --proposal_id=1182 --target=brick --each-suffix=destreak_o004_crf --bundle-size=${bundle_size} --skip-if-done")
+                    array_jobid=$(sbatch --parsable --array="${range}" --job-name=webb-cat-${filter}-${module}-eachexp --output=webb-cat-${filter}-${module}-eachexp_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao}  --proposal_id=1182 --target=brick --each-suffix=destreak_o004_crf --bundle-size=${bundle_size} --skip-if-done")
                 fi
                 if [[ "${dao}" == *"--daophot"* ]]; then
                     iter2_range=$(compute_array_range "${filter}" "${module}" "${dao}" "iter2")
@@ -35,7 +35,7 @@ for filter in F115W; do
                     if [[ -n "${iter2_range}" ]]; then
                         dep_arg=""
                         [[ -n "${array_jobid}" ]] && dep_arg="--dependency=afterok:${array_jobid}"
-                        iter2_jobid=$(sbatch --parsable ${dep_arg} --array="${iter2_range}" --job-name=webb-cat-${filter}-${module}-eachexp-iter2 --output=webb-cat-${filter}-${module}-eachexp-iter2_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao}  --proposal_id=1182 --target=brick --each-suffix=destreak_o004_crf --iteration-label=iter2 --postprocess-residuals --bundle-size=${bundle_size} --skip-if-done")
+                        iter2_jobid=$(sbatch --parsable ${dep_arg} --array="${iter2_range}" --job-name=webb-cat-${filter}-${module}-eachexp-iter2 --output=webb-cat-${filter}-${module}-eachexp-iter2_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "${python_exe} ${analysis_script} --filternames=${filter} --modules=${module} --each-exposure ${dao}  --proposal_id=1182 --target=brick --each-suffix=destreak_o004_crf --iteration-label=iter2 --postprocess-residuals --bundle-size=${bundle_size} --skip-if-done")
                     fi
                     mosaic_dep=""
                     if [[ -n "${iter2_jobid}" ]]; then
@@ -53,7 +53,7 @@ done
 # for filter in F410M F405N F466N; do
 #     for module in nrca nrcb; do
 #         for dao in "--daophot --skip-crowdsource" " "; do
-#             sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
+#             sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
 #         done
 #     done
 # done
@@ -62,7 +62,7 @@ done
 #     for modnum in 1 2 3 4; do
 #         for module in nrca${modnum} nrcb${modnum}; do
 #             for dao in "--daophot --skip-crowdsource" " "; do
-#                 sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=2 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
+#                 sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
 #             done
 #         done
 #     done
