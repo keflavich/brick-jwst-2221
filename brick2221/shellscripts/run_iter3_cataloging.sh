@@ -148,7 +148,7 @@ case "${target}" in
         logdir=/blue/adamginsburg/adamginsburg/logs/sgrb2_jwst/
         modules_short=(nrca1 nrca2 nrca3 nrca4 nrcb1 nrcb2 nrcb3 nrcb4)
         modules_long=(nrcalong nrcblong)
-        module_long=""
+        module_long="merged"
         seed_path=${basepath}/catalogs/seed_union_iter3_sgrb2.fits
         mem_short=256gb
         mem_long=96gb
@@ -329,15 +329,16 @@ for filter in "${filters[@]}"; do
             fi
         done
     done
-    # Mosaic jobs.  sgrb2 SW: two mosaic families (nrca, nrcb); sgrb2 LW: one
-    # per long module.  Other targets: one aggregate module.
+    # Mosaic jobs.  sgrb2 SW: two mosaic families (nrca, nrcb) + combined merged;
+    # sgrb2 LW: one per long module + combined merged.  Other targets: one
+    # aggregate module.
     if [[ "${target}" == "sgrb2" ]]; then
         case "${filter}" in
             F115W|F150W|F182M|F187N|F200W|F210M|F212N)
-                mosaic_mods=(nrca nrcb)
+                mosaic_mods=(nrca nrcb merged)
                 ;;
             *)
-                mosaic_mods=("${modules_long[@]}")
+                mosaic_mods=("${modules_long[@]}" merged)
                 ;;
         esac
     else
