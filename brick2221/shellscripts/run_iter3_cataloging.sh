@@ -22,6 +22,8 @@ script=${analysis_dir}/crowdsource_catalogs_long.py
 seed_builder=${analysis_dir}/build_union_seed_catalog.py
 BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 ITER3_CPUS_PER_TASK=${ITER3_CPUS_PER_TASK:-4}
+SLURM_ACCOUNT_ITER3=${SLURM_ACCOUNT_ITER3:-astronomy-dept}
+SLURM_QOS_ITER3=${SLURM_QOS_ITER3:-astronomy-dept-b}
 
 # Per-target LW chunking.  Splits the union seed catalog into N image-pixel
 # tiles per LW frame (one SLURM array job per chunk index, gated together at
@@ -182,7 +184,7 @@ if [[ ${skip_seed_build} -eq 0 ]]; then
     seed_jobid=$(sbatch --parsable "${seed_dep_args[@]}" \
         --job-name=webb-seed-iter3-${target} \
         --output=${logdir}/webb-seed-iter3-${target}_%j.log \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=32gb --time=4:00:00 \
         --wrap "${python_exec} ${seed_builder} --target=${target} --output=${seed_path}${residual_peaks_arg}")
     echo "Submitted seed-builder job ${seed_jobid} for ${target} -> ${seed_path}"
@@ -241,7 +243,7 @@ submit_catalog_array() {
         --array="${range}" \
         --job-name=webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp \
         --output=${logdir}/webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp_%j-%A_%a.log \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --cpus-per-task=${ITER3_CPUS_PER_TASK} --nodes=1 --mem=${mem} --time=96:00:00 \
         --wrap "export OMP_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export MKL_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export OPENBLAS_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export NUMEXPR_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
     echo "Submitted iter3 array ${job} for ${target} ${filter} ${module} (${bgsub_opt}${chunk_tag}) range=${range}" >&2
@@ -257,7 +259,7 @@ submit_mosaic_job() {
     sbatch ${dep_arg} \
         --job-name=webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag} \
         --output=${logdir}/webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag}_%j.log \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
         --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
 }
@@ -366,7 +368,7 @@ if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
     merge_job=$(sbatch --parsable --dependency=afterok:${merge_dep} \
         --job-name=webb-cat-merge-${target}-iter3 \
         --output=${logdir}/webb-cat-merge-${target}-iter3_%j.log \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
         --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${target} --iteration-label=iter3")
     echo "Submitted iter3 merge job ${merge_job} for ${target}"
@@ -383,7 +385,7 @@ if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
     forced_job=$(sbatch --parsable --dependency=afterok:${forced_dep} \
         --job-name=webb-forced-phot-${target} \
         --output=${logdir}/webb-forced-phot-${target}_%j.log \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=32gb --time=8:00:00 \
         --wrap "${python_exec} ${forced_phot_script} --target=${target}")
     echo "Submitted forced photometry job ${forced_job} for ${target}"
