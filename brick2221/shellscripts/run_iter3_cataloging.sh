@@ -20,7 +20,8 @@ python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
 script=${analysis_dir}/crowdsource_catalogs_long.py
 seed_builder=${analysis_dir}/build_union_seed_catalog.py
-BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+BUNDLE_SIZE=${BUNDLE_SIZE:-1}
+ITER3_CPUS_PER_TASK=${ITER3_CPUS_PER_TASK:-4}
 
 # Per-target LW chunking.  Splits the union seed catalog into N image-pixel
 # tiles per LW frame (one SLURM array job per chunk index, gated together at
@@ -241,8 +242,8 @@ submit_catalog_array() {
         --job-name=webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp \
         --output=${logdir}/webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp_%j-%A_%a.log \
         --account=astronomy-dept --qos=astronomy-dept-b \
-        --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 \
-        --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
+        --ntasks=1 --cpus-per-task=${ITER3_CPUS_PER_TASK} --nodes=1 --mem=${mem} --time=96:00:00 \
+        --wrap "export OMP_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export MKL_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export OPENBLAS_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export NUMEXPR_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
     echo "Submitted iter3 array ${job} for ${target} ${filter} ${module} (${bgsub_opt}${chunk_tag}) range=${range}" >&2
     echo "${job}"
 }
