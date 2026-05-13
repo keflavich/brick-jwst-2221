@@ -400,7 +400,7 @@ if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
         --job-name=webb-forced-phot-${target} \
         --output=${logdir}/webb-forced-phot-${target}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
-        --ntasks=1 --nodes=1 --mem=32gb --time=8:00:00 \
+        --ntasks=1 --nodes=1 --mem=64gb --time=48:00:00 \
         --wrap "${python_exec} ${forced_phot_script} --target=${target}")
     echo "Submitted forced photometry job ${forced_job} for ${target}"
 fi

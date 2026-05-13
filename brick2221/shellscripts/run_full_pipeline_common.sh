@@ -137,7 +137,7 @@ submit_pipeline_filter_jobs() {
         jobid=$(sbatch --parsable ${dep_arg} \
             --job-name="webb-pipe-${name}-${filter}" \
             --output="${logdir}/webb-pipe-${name}-${filter}_%j.log" \
-            --account=astronomy-dept --qos=astronomy-dept-b \
+            --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
             --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 \
             --wrap "${wrap_cmd}")
         submitted+=("${jobid}")
@@ -161,7 +161,7 @@ submit_target_flow() {
     refcat_jobid=$(sbatch --parsable --dependency=afterok:${first_pass_dep} \
         --job-name="webb-refcat-${name}" \
         --output="${logdir}/webb-refcat-${name}_%j.log" \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
         --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
         --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${refcat_script} --target=${name} --proposal-id=${proposal_id} --field=${field} --filter=${ref_filter} --generate-catalogs")
     echo "Submitted reference-catalog job ${refcat_jobid} for ${name}"
@@ -188,7 +188,7 @@ submit_target_flow() {
             --array="0-${range_hi}" \
             --job-name="webb-cat-${name}-${filter}-eachexp" \
             --output="${logdir}/webb-cat-${name}-${filter}-eachexp_%j-%A_%a.log" \
-            --account=astronomy-dept --qos=astronomy-dept-b \
+            --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
             --ntasks=1 --nodes=1 --mem=32gb --time=96:00:00 \
             --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done")
         catalog_jobids+=("${cat_jobid}")
@@ -199,7 +199,7 @@ submit_target_flow() {
     merge_jobid=$(sbatch --parsable --dependency=afterok:${catalog_dep} \
         --job-name="webb-merge-${name}" \
         --output="${logdir}/webb-merge-${name}_%j.log" \
-        --account=astronomy-dept --qos=astronomy-dept-b \
+        --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
         --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
         --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource --target=${name}")
     echo "Submitted merge job ${merge_jobid} for ${name}"
