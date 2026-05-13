@@ -94,6 +94,10 @@ TARGETS = {
         filters  = ['F150W', 'F182M', 'F187N', 'F210M', 'F212N',
                     'F300M', 'F360M', 'F405N', 'F410M', 'F466N', 'F480M'],
     ),
+    'sgrc': dict(
+        basepath = '/orange/adamginsburg/jwst/sgrc',
+        filters  = ['F115W', 'F162M', 'F182M', 'F212N', 'F360M', 'F405N', 'F470N', 'F480M'],
+    ),
 }
 
 # Matches nrcb1-4, nrca1-4, nrcblong, nrcalong in per-frame filenames.

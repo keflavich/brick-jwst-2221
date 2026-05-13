@@ -82,6 +82,12 @@ TARGETS = {
         'satstar_glob': '/orange/adamginsburg/jwst/sgrb2/*/pipeline/*_iter2_satstar_catalog.fits',
         'output_path': '/orange/adamginsburg/jwst/sgrb2/catalogs/seed_union_iter3_sgrb2.fits',
     },
+    'sgrc': {
+        'catalog_dir': '/orange/adamginsburg/jwst/sgrc/catalogs',
+        'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
+        'satstar_glob': '/orange/adamginsburg/jwst/sgrc/*/pipeline/*destreak_o012_crf_iter2_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/sgrc/catalogs/seed_union_iter3_sgrc.fits',
+    },
 }
 
 

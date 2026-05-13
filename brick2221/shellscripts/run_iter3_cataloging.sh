@@ -156,6 +156,20 @@ case "${target}" in
         mem_short=256gb
         mem_long=96gb
         ;;
+    sgrc)
+        basepath=/orange/adamginsburg/jwst/sgrc
+        proposal_id=4147
+        field=012
+        each_suffix=destreak_o012_crf
+        default_filters=(F115W F162M F182M F212N F360M F405N F470N F480M)
+        logdir=/blue/adamginsburg/adamginsburg/logs/sgrc_jwst/
+        modules_short=(nrca1 nrca2 nrca3 nrca4 nrcb1 nrcb2 nrcb3 nrcb4)
+        modules_long=(nrcalong nrcblong)
+        module_long="merged"
+        seed_path=${basepath}/catalogs/seed_union_iter3_sgrc.fits
+        mem_short=128gb
+        mem_long=64gb
+        ;;
     *)
         echo "unknown target: ${target}" >&2
         exit 2
