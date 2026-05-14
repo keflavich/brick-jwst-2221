@@ -88,6 +88,30 @@ TARGETS = {
         'satstar_glob': '/orange/adamginsburg/jwst/sgrc/*/pipeline/*destreak_o012_crf_iter2_satstar_catalog.fits',
         'output_path': '/orange/adamginsburg/jwst/sgrc/catalogs/seed_union_iter3_sgrc.fits',
     },
+    'sgra': {
+        'catalog_dir': '/orange/adamginsburg/jwst/sgra/catalogs',
+        'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
+        'satstar_glob': '/orange/adamginsburg/jwst/sgra/*/pipeline/*destreak_o001_crf_iter2_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/sgra/catalogs/seed_union_iter3_sgra.fits',
+    },
+    'cloudef': {
+        'catalog_dir': '/orange/adamginsburg/jwst/cloudef/catalogs',
+        'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
+        'satstar_glob': '/orange/adamginsburg/jwst/cloudef/*/pipeline/*destreak_o005_crf_iter2_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/cloudef/catalogs/seed_union_iter3_cloudef.fits',
+    },
+    'arches': {
+        'catalog_dir': '/orange/adamginsburg/jwst/arches/catalogs',
+        'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
+        'satstar_glob': '/orange/adamginsburg/jwst/arches/*/pipeline/*destreak_o001_crf_iter2_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/arches/catalogs/seed_union_iter3_arches.fits',
+    },
+    'quintuplet': {
+        'catalog_dir': '/orange/adamginsburg/jwst/quintuplet/catalogs',
+        'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
+        'satstar_glob': '/orange/adamginsburg/jwst/quintuplet/*/pipeline/*destreak_o003_crf_iter2_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/quintuplet/catalogs/seed_union_iter3_quintuplet.fits',
+    },
 }
 
 
