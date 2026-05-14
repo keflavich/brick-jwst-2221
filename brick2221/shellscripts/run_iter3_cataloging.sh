@@ -120,6 +120,26 @@ case "${target}" in
         mem_short=96gb
         mem_long=64gb
         ;;
+    brick-1182)
+        # Brick proposal 1182 / field 004 covers the broadband filters
+        # not in the 2221 program (F115W, F200W, F356W, F444W).  The
+        # Python --target= remains "brick" so obs_filters / seed catalog
+        # lookups continue to work; only proposal_id, field, and
+        # each_suffix differ.
+        basepath=/blue/adamginsburg/adamginsburg/jwst/brick
+        proposal_id=1182
+        field=004
+        each_suffix=destreak_o004_crf
+        default_filters=(F115W F200W F356W F444W)
+        logdir=/blue/adamginsburg/adamginsburg/brick_logs
+        modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
+        modules_long=(merged)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_brick.fits
+        python_target=brick
+        mem_short=96gb
+        mem_long=64gb
+        ;;
     cloudc)
         basepath=/blue/adamginsburg/adamginsburg/jwst/cloudc
         # cloudc data is on proposal 2221 field 002 (per
@@ -176,6 +196,11 @@ case "${target}" in
         ;;
 esac
 
+# Default python_target to the launcher target name unless a target case
+# overrode it (e.g. brick-1182 uses python_target=brick so the Python
+# script's obs_filters / seed catalog lookups still work).
+python_target="${python_target:-${target}}"
+
 mkdir -p "${logdir}"
 
 if [[ ${#filters[@]} -eq 0 ]]; then
@@ -200,7 +225,7 @@ if [[ ${skip_seed_build} -eq 0 ]]; then
         --output=${logdir}/webb-seed-iter3-${target}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=32gb --time=4:00:00 \
-        --wrap "${python_exec} ${seed_builder} --target=${target} --output=${seed_path}${residual_peaks_arg}")
+        --wrap "${python_exec} ${seed_builder} --target=${python_target} --output=${seed_path}${residual_peaks_arg}")
     echo "Submitted seed-builder job ${seed_jobid} for ${target} -> ${seed_path}"
     seed_dep="--dependency=afterok:${seed_jobid}"
 else
@@ -217,7 +242,7 @@ compute_array_range() {
     local filter="$1" module="$2" cat_args="$3" filt_each_suffix="$4"
     "${python_exec}" "${script}" \
         --filternames="${filter}" --modules="${module}" --each-exposure \
-        --proposal_id="${proposal_id}" --target="${target}" --each-suffix="${filt_each_suffix}" \
+        --proposal_id="${proposal_id}" --target="${python_target}" --each-suffix="${filt_each_suffix}" \
         ${cat_args} --bundle-size="${BUNDLE_SIZE}" --list-missing-tasks 2>/dev/null \
         | awk -F: '/^__MISSING_TASKS__:/{sub(/^__MISSING_TASKS__:/,""); print; found=1} END{if(!found) print ""}'
 }
@@ -259,7 +284,7 @@ submit_catalog_array() {
         --output=${logdir}/webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp_%j-%A_%a.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --cpus-per-task=${ITER3_CPUS_PER_TASK} --nodes=1 --mem=${mem} --time=96:00:00 \
-        --wrap "export OMP_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export MKL_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export OPENBLAS_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export NUMEXPR_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
+        --wrap "export OMP_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export MKL_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export OPENBLAS_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export NUMEXPR_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${python_target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
     echo "Submitted iter3 array ${job} for ${target} ${filter} ${module} (${bgsub_opt}${chunk_tag}) range=${range}" >&2
     echo "${job}"
 }
@@ -275,7 +300,7 @@ submit_mosaic_job() {
         --output=${logdir}/webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
-        --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
+        --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${python_target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
 }
 
 all_iter3_jobids=()
@@ -310,7 +335,10 @@ for filter in "${filters[@]}"; do
             # Long-wavelength filters: one array per long module.
             mods=("${modules_long[@]}")
             mem=${mem_long}
-            n_chunks_var="N_SEED_CHUNKS_LW_${target}"
+            # Sanitize target name (e.g. brick-1182 -> brick_1182) so it's
+            # a legal bash variable; per-target chunks override env vars
+            # use the sanitized form.
+            n_chunks_var="N_SEED_CHUNKS_LW_${target//-/_}"
             n_chunks=${!n_chunks_var:-1}
             ;;
     esac
@@ -384,7 +412,7 @@ if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
         --output=${logdir}/webb-cat-merge-${target}-iter3_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
-        --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${target} --iteration-label=iter3")
+        --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter3")
     echo "Submitted iter3 merge job ${merge_job} for ${target}"
 fi
 
@@ -401,7 +429,7 @@ if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
         --output=${logdir}/webb-forced-phot-${target}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=64gb --time=48:00:00 \
-        --wrap "${python_exec} ${forced_phot_script} --target=${target}")
+        --wrap "${python_exec} ${forced_phot_script} --target=${python_target}")
     echo "Submitted forced photometry job ${forced_job} for ${target}"
 fi
 
