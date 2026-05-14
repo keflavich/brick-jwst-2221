@@ -176,6 +176,62 @@ case "${target}" in
         mem_short=256gb
         mem_long=96gb
         ;;
+    sgra)
+        basepath=/orange/adamginsburg/jwst/sgra
+        proposal_id=1939
+        field=001
+        each_suffix=destreak_o001_crf
+        default_filters=(F115W F212N F405N)
+        logdir=/blue/adamginsburg/adamginsburg/logs/sgra_jwst/
+        modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
+        modules_long=(nrcalong nrcblong)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_sgra.fits
+        mem_short=64gb
+        mem_long=48gb
+        ;;
+    cloudef)
+        basepath=/orange/adamginsburg/jwst/cloudef
+        proposal_id=2092
+        field=005
+        each_suffix=destreak_o005_crf
+        default_filters=(F162M F210M F360M F480M)
+        logdir=/blue/adamginsburg/adamginsburg/logs/cloudef_jwst/
+        modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
+        modules_long=(nrcalong nrcblong)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_cloudef.fits
+        mem_short=64gb
+        mem_long=48gb
+        ;;
+    arches)
+        basepath=/orange/adamginsburg/jwst/arches
+        proposal_id=2045
+        field=001
+        each_suffix=destreak_o001_crf
+        default_filters=(F212N F323N)
+        logdir=/blue/adamginsburg/adamginsburg/logs/arches_jwst/
+        modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
+        modules_long=(nrcalong nrcblong)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_arches.fits
+        mem_short=64gb
+        mem_long=48gb
+        ;;
+    quintuplet)
+        basepath=/orange/adamginsburg/jwst/quintuplet
+        proposal_id=2045
+        field=003
+        each_suffix=destreak_o003_crf
+        default_filters=(F212N F323N)
+        logdir=/blue/adamginsburg/adamginsburg/logs/quintuplet_jwst/
+        modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
+        modules_long=(nrcalong nrcblong)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_quintuplet.fits
+        mem_short=64gb
+        mem_long=48gb
+        ;;
     sgrc)
         basepath=/orange/adamginsburg/jwst/sgrc
         proposal_id=4147
