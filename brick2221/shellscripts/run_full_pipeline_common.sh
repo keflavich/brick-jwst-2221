@@ -105,6 +105,7 @@ ensure_target_setup() {
     fi
 
     mkdir -p "${basepath}/catalogs"
+    mkdir -p "${basepath}/psfs"
 
     local fov_file="${basepath}/regions_/nircam_${name}_fov.reg"
     if [[ ! -f "${fov_file}" ]]; then
