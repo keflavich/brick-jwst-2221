@@ -10,7 +10,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: $(basename "$0") <target>" >&2
-    echo "Targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra" >&2
+    echo "Targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211" >&2
     exit 2
 fi
 
@@ -71,8 +71,18 @@ set_target_defaults() {
             DEF_FILTERS=F115W,F212N,F405N
             DEF_REF_FILTER=F212N
             ;;
+        gc2211)
+            # Asteroid survey proposal 2211 has 5 GC pointings.  The
+            # default below covers obs=028 (F150W+F277W, 240 frames);
+            # the run_full_pipeline_gc2211.sh wrapper overrides FIELD
+            # and FILTERS per obs.  obs IDs: 023, 028, 046, 049, 050.
+            DEF_PROPOSAL_ID=2211
+            DEF_FIELD=028
+            DEF_FILTERS=F150W,F200W,F277W
+            DEF_REF_FILTER=F200W
+            ;;
         *)
-            echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra" >&2
+            echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211" >&2
             exit 2
             ;;
     esac
