@@ -201,7 +201,7 @@ submit_target_flow() {
             --output="${logdir}/webb-cat-${name}-${filter}-eachexp_%j-%A_%a.log" \
             --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
             --ntasks=1 --nodes=1 --mem=32gb --time=96:00:00 \
-            --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done")
+            --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --field=${field} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done")
         catalog_jobids+=("${cat_jobid}")
         echo "Submitted catalog array ${cat_jobid} for ${name} ${filter}"
     done

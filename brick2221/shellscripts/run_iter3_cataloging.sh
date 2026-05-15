@@ -340,7 +340,7 @@ submit_catalog_array() {
         --output=${logdir}/webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp_%j-%A_%a.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --cpus-per-task=${ITER3_CPUS_PER_TASK} --nodes=1 --mem=${mem} --time=96:00:00 \
-        --wrap "export OMP_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export MKL_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export OPENBLAS_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export NUMEXPR_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${python_target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
+        --wrap "export OMP_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export MKL_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export OPENBLAS_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; export NUMEXPR_NUM_THREADS=\${SLURM_CPUS_PER_TASK:-1}; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --field=${field} --target=${python_target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done")
     echo "Submitted iter3 array ${job} for ${target} ${filter} ${module} (${bgsub_opt}${chunk_tag}) range=${range}" >&2
     echo "${job}"
 }
@@ -356,7 +356,7 @@ submit_mosaic_job() {
         --output=${logdir}/webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
-        --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --target=${python_target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
+        --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --field=${field} --target=${python_target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
 }
 
 all_iter3_jobids=()
