@@ -29,7 +29,13 @@ fwhm_source=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/reduction/fwhm_
 DEFAULT_CRDS_PATH=/orange/adamginsburg/jwst/crds
 
 MODULES=${MODULES:-merged}
-ARRAY_RANGE=${ARRAY_RANGE:-0-23}
+# ARRAY_RANGE is only used as a fallback before destreak files exist
+# (first-pass scheduling).  Once the per-filter destreak files are on
+# disk the catalog array's size is auto-detected from the actual file
+# count (see submit_target_flow below); the fallback never determines
+# how many tasks actually run.  Override per-filter sizing with
+# ARRAY_RANGE_OVERRIDE if you need to.
+ARRAY_RANGE=${ARRAY_RANGE:-0-47}
 BUNDLE_SIZE=${BUNDLE_SIZE:-4}
 # Per-source PSF fitting parallelism for the catalog arrays.  Default 8
 # workers at 4GB/worker -> --cpus-per-task=8 --mem=32gb (matches the old
@@ -193,15 +199,37 @@ submit_target_flow() {
     local -a catalog_jobids=()
     local filter
     for filter in "${filters[@]}"; do
-        # Bundle BUNDLE_SIZE exposures per task to cut queued tasks; the
-        # original ARRAY_RANGE covered one exposure per task.
+        # Bundle BUNDLE_SIZE exposures per task to cut queued tasks.
+        # Auto-size the per-filter cat array from the actual destreak
+        # file count: dither pattern + detector layout varies by target,
+        # field, instrument, and wavelength, so the right value is just
+        # "however many destreak FITS this filter wrote".  Resolution
+        # order:
+        #   1) ARRAY_RANGE_OVERRIDE env var (manual override)
+        #   2) actual file count on disk (preferred)
+        #   3) ARRAY_RANGE env fallback (used only when files don't yet
+        #      exist, e.g. first-pass scheduling before pipeline runs)
+        # The cat script silently skips indices beyond the actual file
+        # count, so an oversize fallback is harmless apart from a few
+        # idle queued tasks.
         local range_hi
-        if [[ "${ARRAY_RANGE}" =~ ^0-([0-9]+)$ ]]; then
+        local n_files
+        n_files=$(ls "/orange/adamginsburg/jwst/${name}/${filter}/pipeline/"*"${each_suffix}.fits" 2>/dev/null | wc -l)
+        if [[ -n "${ARRAY_RANGE_OVERRIDE:-}" && "${ARRAY_RANGE_OVERRIDE}" =~ ^0-([0-9]+)$ ]]; then
+            local total=$(( ${BASH_REMATCH[1]} + 1 ))
+            range_hi=$(( (total + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
+        elif (( n_files > 0 )); then
+            range_hi=$(( (n_files + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
+        elif [[ "${ARRAY_RANGE}" =~ ^0-([0-9]+)$ ]]; then
             local total=$(( ${BASH_REMATCH[1]} + 1 ))
             range_hi=$(( (total + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
         else
+            # Final-resort fallback if ARRAY_RANGE is malformed.  Caller
+            # should fix the env var; we just keep submitting a sane
+            # default rather than 0 tasks.
             range_hi=$(( 24 / BUNDLE_SIZE - 1 ))
         fi
+        echo "Cat array for ${name} ${filter}: n_files=${n_files} array=0-${range_hi} (bundle=${BUNDLE_SIZE})" >&2
         local cat_mem_gb=$(( MEM_PER_WORKER_GB * PARALLEL_WORKERS ))
         local parallel_args=""
         if (( PARALLEL_WORKERS > 1 )); then
