@@ -46,10 +46,13 @@ MAX_GROUP_SIZE_ITER3=${MAX_GROUP_SIZE_ITER3:-15}
 
 usage() {
     cat <<'EOF'
-Usage: run_iter3_cataloging.sh --target <sickle|brick|cloudc|sgrb2> [--skip-seed-build] [--residual-peaks] [--bgsub] [FILTER ...]
+Usage: run_iter3_cataloging.sh --target <NAME> [--skip-seed-build] [--residual-peaks] [--bgsub] [FILTER ...]
 
 Options:
-  --target NAME        Required. One of: sickle, brick, cloudc, sgrb2.
+  --target NAME        Required. One of: sickle, brick, brick-1182, cloudc,
+                       sgrb2, sgra, cloudef, arches, quintuplet, sgrc,
+                       gc2211-023, gc2211-028, gc2211-046, gc2211-049,
+                       gc2211-050.
   --skip-seed-build    Do not rebuild the union seed catalog; reuse existing file.
   --residual-peaks     Pass --residual-peaks to the seed builder to inject bright
                        peaks from iter3 residual mosaics as additional seeds.
@@ -245,6 +248,29 @@ case "${target}" in
         seed_path=${basepath}/catalogs/seed_union_iter3_sgrc.fits
         mem_short=128gb
         mem_long=64gb
+        ;;
+    gc2211-023|gc2211-028|gc2211-046|gc2211-049|gc2211-050)
+        # Proposal 2211 is an asteroid survey with 5 GC pointings.  Each
+        # obs is its own field; treat each as a separate launcher target
+        # (gc2211-<obs>) so the per-field paths, suffixes, and filter sets
+        # work.  The Python --target= stays "gc2211" so reg_to_field and
+        # obs_filters lookups still work.
+        basepath=/orange/adamginsburg/jwst/gc2211
+        proposal_id=2211
+        field="${target#gc2211-}"
+        each_suffix="destreak_o${field}_crf"
+        case "${field}" in
+            028) default_filters=(F150W F277W) ;;
+            023|046|049|050) default_filters=(F200W F277W) ;;
+        esac
+        logdir=/blue/adamginsburg/adamginsburg/logs/gc2211_jwst/
+        modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
+        modules_long=(nrcalong nrcblong)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_gc2211_o${field}.fits
+        python_target=gc2211
+        mem_short=128gb
+        mem_long=128gb
         ;;
     *)
         echo "unknown target: ${target}" >&2
