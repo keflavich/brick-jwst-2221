@@ -272,6 +272,9 @@ case "${target}" in
         module_long=merged
         seed_path=${basepath}/catalogs/seed_union_iter3_gc2211_o${field}.fits
         python_target=gc2211
+        # merge_catalogs default ref_filter=f405n; gc2211 has no F405N.
+        # Pick the only filter common to all 5 gc2211 obs IDs: F277W.
+        merge_ref_filter=f277w
         mem_short=128gb
         mem_long=128gb
         ;;
