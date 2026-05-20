@@ -101,6 +101,9 @@ case "${target}" in
         field=007
         each_suffix=destreak_o007_crf
         default_filters=(F187N F210M F335M F470N F480M)
+        # merge_catalogs default is f405n; sickle has no F405N so use F470N
+        # (longest narrow band present).
+        merge_ref_filter=f470n
         logdir=/blue/adamginsburg/adamginsburg/logs/sickle_jwst/
         modules_short=(nrcb1 nrcb2 nrcb3 nrcb4)
         modules_long=(nrcb)
@@ -489,12 +492,16 @@ done
 
 if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
     merge_dep=$(IFS=:; echo "${all_iter3_jobids[*]}")
+    merge_ref_arg=""
+    if [[ -n "${merge_ref_filter:-}" ]]; then
+        merge_ref_arg="--ref-filter=${merge_ref_filter}"
+    fi
     merge_job=$(sbatch --parsable --dependency=afterok:${merge_dep} \
         --job-name=webb-cat-merge-${target}-iter3 \
         --output=${logdir}/webb-cat-merge-${target}-iter3_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
-        --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter3")
+        --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter3 ${merge_ref_arg}")
     echo "Submitted iter3 merge job ${merge_job} for ${target}"
 fi
 
