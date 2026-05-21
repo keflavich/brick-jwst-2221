@@ -112,6 +112,17 @@ TARGETS = {
         'satstar_glob': '/orange/adamginsburg/jwst/quintuplet/*/pipeline/*destreak_o003_crf_iter2_satstar_catalog.fits',
         'output_path': '/orange/adamginsburg/jwst/quintuplet/catalogs/seed_union_iter3_quintuplet.fits',
     },
+    'gc2211': {
+        # 5 GC pointings (obs 023/028/046/049/050) share the same target;
+        # the iter3 launcher invokes the seed builder with --target=gc2211
+        # for each obs and writes per-obs seed FITS files.  The merged
+        # catalogs live in a single per-target catalogs/ dir.
+        'catalog_dir': '/orange/adamginsburg/jwst/gc2211/catalogs',
+        'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
+        # Initial-pass satstar catalogs (no _iter2_ suffix) across all 5 obs.
+        'satstar_glob': '/orange/adamginsburg/jwst/gc2211/*/pipeline/*destreak_o*_crf_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/gc2211/catalogs/seed_union_iter3_gc2211.fits',
+    },
 }
 
 

@@ -330,7 +330,7 @@ compute_array_range() {
     local filter="$1" module="$2" cat_args="$3" filt_each_suffix="$4"
     "${python_exec}" "${script}" \
         --filternames="${filter}" --modules="${module}" --each-exposure \
-        --proposal_id="${proposal_id}" --target="${python_target}" --each-suffix="${filt_each_suffix}" \
+        --proposal_id="${proposal_id}" --field="${field}" --target="${python_target}" --each-suffix="${filt_each_suffix}" \
         ${cat_args} --bundle-size="${BUNDLE_SIZE}" --list-missing-tasks 2>/dev/null \
         | awk -F: '/^__MISSING_TASKS__:/{sub(/^__MISSING_TASKS__:/,""); print; found=1} END{if(!found) print ""}'
 }
@@ -475,8 +475,16 @@ for filter in "${filters[@]}"; do
                 ;;
         esac
     else
+        # Default mosaic aggregate module = the per-target "combined"
+        # token (``module_long``).  For most targets that is "merged",
+        # which lets the mosaic glob match per-detector files via the
+        # module-expansion logic in get_filenames().  Targets like
+        # sickle override module_long to a specific LW detector group
+        # (e.g. nrcb).  Use module_long uniformly for both SW and LW
+        # filters -- the previous "if SW use modules_long[0]" rule
+        # picked the wrong LW-only token (e.g. nrcalong) for SW data
+        # and made the mosaic find zero residual files.
         agg_module="${module_long}"
-        [[ "${mods[*]}" == "${modules_short[*]}" ]] && agg_module="${modules_long[0]:-${module_long}}"
         mosaic_mods=("${agg_module}")
     fi
     for agg_mod in "${mosaic_mods[@]}"; do
