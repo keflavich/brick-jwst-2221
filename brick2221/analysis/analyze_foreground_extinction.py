@@ -11,6 +11,7 @@ This script performs multiple extinction-based CMD analyses on JWST Brick and Cl
 6. Cloud C F182M-F212N diagonal Av slices (G23)
 """
 
+import functools
 import os
 import sys
 import numpy as np
@@ -18,6 +19,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 from matplotlib.path import Path
 from astropy.io import fits
+from astropy.nddata import Cutout2D
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
@@ -29,6 +31,16 @@ from dust_extinction.averages import CT06_MWGC
 BASEPATH = '/orange/adamginsburg/jwst/brick'
 BRICK_CATALOG_PATH = f'{BASEPATH}/catalogs/basic_merged_indivexp_photometry_tables_merged_ok2221or1182_20251211.fits'
 CLOUDC_JWSTPLOTS_PATH = '/home/savannahgramze/orange_link/adamginsburg/jwst/cloudc/lactea-filament/lactea-filament'
+ACES_MUSTANG_CONTINUUM_PATH = (
+    '/orange/adamginsburg/ACES/v2.1_continuum_data_release_August2024/'
+    '12m_continuum_commonbeam_circular_reimaged_mosaic_MUSTANGfeathered.fits'
+)
+ACES_HCOP_MOM0_PATH = (
+    '/orange/adamginsburg/ACES/mosaics/cubes/moments/structures/'
+    'HCOP_CubeMosaic_mom0.fits'
+)
+BRICK_CENTER_GALACTIC = (0.253, 0.016)
+BRICK_CUTOUT_SIZE_ARCMIN = 8.0
 OUTDIR = f'{BASEPATH}/distance'
 NTH_NEIGHBOR = 10
 MAP_PIXELS = 220
@@ -43,6 +55,140 @@ os.makedirs(OUTDIR, exist_ok=True)
 # ============================================================================
 # Utility Functions
 # ============================================================================
+
+@functools.lru_cache(maxsize=1)
+def _load_brick_aces_mustang_cutout():
+    """Load Brick-region cutout of ACES 12m+MUSTANG-feathered continuum.
+
+    Returns (data_K, ra_deg_2d, dec_deg_2d) or None on failure.
+    """
+    try:
+        with fits.open(ACES_MUSTANG_CONTINUUM_PATH, memmap=True) as hdul:
+            hdu = hdul[0]
+            header = hdu.header.copy()
+            wcs_full = WCS(header).celestial
+            data = hdu.data
+            while data.ndim > 2:
+                data = data[0]
+            center = SkyCoord(
+                BRICK_CENTER_GALACTIC[0] * u.deg,
+                BRICK_CENTER_GALACTIC[1] * u.deg,
+                frame='galactic',
+            )
+            cutout = Cutout2D(
+                data,
+                position=center,
+                size=BRICK_CUTOUT_SIZE_ARCMIN * u.arcmin,
+                wcs=wcs_full,
+                copy=True,
+            )
+    except Exception as exc:
+        print(f"[brick-contour] Could not load ACES/MUSTANG continuum: {exc}")
+        return None
+
+    ny, nx = cutout.data.shape
+    yy, xx = np.mgrid[0:ny, 0:nx]
+    sky = cutout.wcs.pixel_to_world(xx, yy)
+    sky_icrs = sky.icrs
+    return cutout.data, sky_icrs.ra.deg, sky_icrs.dec.deg
+
+
+@functools.lru_cache(maxsize=1)
+def _load_brick_aces_hcop_cutout():
+    """Brick-region cutout of ACES HCO+ mom0 image."""
+    try:
+        with fits.open(ACES_HCOP_MOM0_PATH, memmap=True) as hdul:
+            hdu = hdul[0]
+            header = hdu.header.copy()
+            wcs_full = WCS(header).celestial
+            data = hdu.data
+            while data.ndim > 2:
+                data = data[0]
+            center = SkyCoord(
+                BRICK_CENTER_GALACTIC[0] * u.deg,
+                BRICK_CENTER_GALACTIC[1] * u.deg,
+                frame='galactic',
+            )
+            cutout = Cutout2D(
+                data,
+                position=center,
+                size=BRICK_CUTOUT_SIZE_ARCMIN * u.arcmin,
+                wcs=wcs_full,
+                copy=True,
+            )
+    except Exception as exc:
+        print(f"[brick-hcop] Could not load ACES HCO+ mom0: {exc}")
+        return None
+
+    ny, nx = cutout.data.shape
+    yy, xx = np.mgrid[0:ny, 0:nx]
+    sky = cutout.wcs.pixel_to_world(xx, yy)
+    sky_icrs = sky.icrs
+    return cutout.data, sky_icrs.ra.deg, sky_icrs.dec.deg
+
+
+def overlay_brick_hcop_contour(ax, level=0.073, color='magenta',
+                               linewidth=0.8, alpha=0.9):
+    """Overlay a single ACES HCO+ mom0 contour on an RA/Dec axis."""
+    payload = _load_brick_aces_hcop_cutout()
+    if payload is None:
+        return
+    data, ra, dec = payload
+    if not np.any(np.isfinite(data)):
+        return
+
+    xlims = ax.get_xlim()
+    ylims = ax.get_ylim()
+    ra_lo, ra_hi = min(xlims), max(xlims)
+    dec_lo, dec_hi = min(ylims), max(ylims)
+    if (np.nanmax(ra) < ra_lo or np.nanmin(ra) > ra_hi or
+            np.nanmax(dec) < dec_lo or np.nanmin(dec) > dec_hi):
+        return
+
+    ax.contour(ra, dec, data, levels=[level],
+               colors=color, linewidths=linewidth, alpha=alpha, zorder=6)
+    ax.set_xlim(*xlims)
+    ax.set_ylim(*ylims)
+
+
+def overlay_brick_aces_mustang_contour(ax, levels=None, color='white',
+                                       linewidth=0.6, alpha=0.8):
+    """Overlay ACES/MUSTANG Brick continuum contours on an RA/Dec axis.
+
+    No-op if the cutout has no overlap with the current axis extent, so it is
+    safe to call on Cloud-C plots too.
+    """
+    payload = _load_brick_aces_mustang_cutout()
+    if payload is None:
+        return
+    data, ra, dec = payload
+    finite = np.isfinite(data)
+    if not np.any(finite):
+        return
+
+    xlims = ax.get_xlim()
+    ylims = ax.get_ylim()
+    ra_lo, ra_hi = min(xlims), max(xlims)
+    dec_lo, dec_hi = min(ylims), max(ylims)
+    if (np.nanmax(ra) < ra_lo or np.nanmin(ra) > ra_hi or
+            np.nanmax(dec) < dec_lo or np.nanmin(dec) > dec_hi):
+        return
+
+    if levels is None:
+        finite_vals = data[finite]
+        vmax = float(np.nanpercentile(finite_vals, 99.5))
+        vlo = float(max(np.nanpercentile(finite_vals, 90.0), 0.0))
+        if vmax <= vlo:
+            return
+        # Single contour at the lowest of the previously-rendered 5-level set
+        levels = [vlo + 0.15 * (vmax - vlo)]
+
+    ax.contour(ra, dec, data, levels=levels,
+               colors=color, linewidths=linewidth, alpha=alpha, zorder=5)
+    # Restore limits in case contour expanded them.
+    ax.set_xlim(*xlims)
+    ax.set_ylim(*ylims)
+
 
 def load_brick_catalog():
     """Load the Brick catalog."""
@@ -158,7 +304,7 @@ def create_field_figure(
     """Create 1x2 figure with density map and CMD."""
     fig, (ax_density, ax_cmd) = plt.subplots(1, 2, figsize=(14, 6), constrained_layout=True)
 
-    im = ax_density.pcolormesh(x_edges, y_edges, np.log10(density_map), shading='auto', 
+    im = ax_density.pcolormesh(x_edges, y_edges, np.log10(density_map), shading='auto',
                                cmap='viridis', vmin=vmin, vmax=vmax)
     ax_density.set_xlim(np.max(x_edges), np.min(x_edges))
     ax_density.set_aspect('equal')
@@ -167,6 +313,7 @@ def create_field_figure(
     ax_density.set_ylabel('Dec (deg)')
     cbar = fig.colorbar(im, ax=ax_density)
     cbar.set_label(r'log10(surface density [deg$^{-2}$])')
+    overlay_brick_aces_mustang_contour(ax_density)
 
     mag_num_all = filled_float(table_all[color_num_col])
     mag_den_all = filled_float(table_all[color_den_col])
@@ -421,6 +568,7 @@ def run_polygon_av_slices(
         ax_dens.set_ylabel('Dec (deg)')
         cbar = fig.colorbar(im, ax=ax_dens)
         cbar.set_label(r'log10(surface density [deg$^{-2}$])')
+        overlay_brick_aces_mustang_contour(ax_dens)
 
         ax_cmd.scatter(color[base_mask], mag[base_mask], s=1, alpha=0.1, color='gray', label='All stars')
         ax_cmd.scatter(color[in_bin], mag[in_bin], s=3, alpha=0.8, color='blue', label=f'Av [{av_lo:.0f}, {av_hi:.0f}) selection')
@@ -989,6 +1137,185 @@ def analyze_cloudc_f182m_f212n_diagonal_av(cloudc_all, nth_neighbor=NTH_NEIGHBOR
     )
 
 
+def analyze_foreground_color_layers(
+    brick_all,
+    f182m_f212n_lo=0.3,
+    f182m_f212n_hi=0.5,
+    n_layers=4,
+    mag_cut_f182m=18,
+    mag_cut_f115w=20,
+    mag_cut_f200w=17,
+    nth_neighbor=NTH_NEIGHBOR,
+    outdir=OUTDIR,
+):
+    """
+    Foreground (low-extinction) spatial density layers.
+
+    Selects stars in 0.3 < F182M-F212N < 0.5 (bluer than the GC red clump),
+    splits into n_layers narrow color sub-bins, and makes spatial density
+    plots for each sub-bin. The 0.3-0.5 F182M-F212N range is converted to an
+    A_V range via CT06 and then translated to extinction-equivalent color
+    ranges in F115W-F200W (G23, Rv=3.1) and F200W-F444W (CT06). Intrinsic
+    color is assumed to be zero for the mapping.
+
+    Output filenames: fg_layers_{filter_pair}_{lo}_{hi}_mag{cut}_knn{N}_brick.png
+    """
+    print("\n" + "=" * 80)
+    print(f"FOREGROUND COLOR LAYERS: {f182m_f212n_lo} < F182M-F212N < {f182m_f212n_hi}, n_layers={n_layers}")
+    print("=" * 80)
+
+    ct06 = CT06_MWGC()
+    g23 = G23(Rv=3.1)
+    k182_ct06 = float(ct06(1.82 * u.um))
+    k212_ct06 = float(ct06(2.12 * u.um))
+    k200_ct06 = float(ct06(2.00 * u.um))
+    k444_ct06 = float(ct06(4.44 * u.um))
+    k115_g23 = float(g23(1.15 * u.um))
+    k200_g23 = float(g23(2.00 * u.um))
+
+    dcolor_dAv_182_212 = k182_ct06 - k212_ct06
+    dcolor_dAv_115_200 = k115_g23 - k200_g23
+    dcolor_dAv_200_444 = k200_ct06 - k444_ct06
+
+    av_lo = f182m_f212n_lo / dcolor_dAv_182_212
+    av_hi = f182m_f212n_hi / dcolor_dAv_182_212
+
+    print(f"CT06: k182={k182_ct06:.4f}, k212={k212_ct06:.4f}, dcolor/dAv(182-212)={dcolor_dAv_182_212:.4f}")
+    print(f"G23:  k115={k115_g23:.4f}, k200={k200_g23:.4f}, dcolor/dAv(115-200)={dcolor_dAv_115_200:.4f}")
+    print(f"CT06: k200={k200_ct06:.4f}, k444={k444_ct06:.4f}, dcolor/dAv(200-444)={dcolor_dAv_200_444:.4f}")
+    print(f"A_V range from F182M-F212N in [{f182m_f212n_lo}, {f182m_f212n_hi}]: [{av_lo:.2f}, {av_hi:.2f}] mag")
+
+    f182m_f212n_edges = np.linspace(f182m_f212n_lo, f182m_f212n_hi, n_layers + 1)
+    av_edges = f182m_f212n_edges / dcolor_dAv_182_212
+    f115_f200_edges = av_edges * dcolor_dAv_115_200
+    f200_f444_edges = av_edges * dcolor_dAv_200_444
+
+    pairs = [
+        dict(
+            label='f182m_f212n',
+            color_num_col='mag_ab_f182m',
+            color_den_col='mag_ab_f212n',
+            mag_col='mag_ab_f182m',
+            edges=f182m_f212n_edges,
+            mag_cut=mag_cut_f182m,
+            cmd_xlim=(0.0, 1.0),
+            color_label='F182M - F212N (mag)',
+            mag_label='F182M (mag)',
+            field_name='Brick F182M-F212N foreground layer',
+            outprefix='fg_layers_182m212n',
+        ),
+        dict(
+            label='f115w_f200w',
+            color_num_col='mag_ab_f115w',
+            color_den_col='mag_ab_f200w',
+            mag_col='mag_ab_f115w',
+            edges=f115_f200_edges,
+            mag_cut=mag_cut_f115w,
+            cmd_xlim=(0.0, max(f115_f200_edges[-1] * 1.5, 8.0)),
+            color_label='F115W - F200W (mag)',
+            mag_label='F115W (mag)',
+            field_name='Brick F115W-F200W foreground layer',
+            outprefix='fg_layers_115w200w',
+        ),
+        dict(
+            label='f200w_f444w',
+            color_num_col='mag_ab_f200w',
+            color_den_col='mag_ab_f444w',
+            mag_col='mag_ab_f200w',
+            edges=f200_f444_edges,
+            mag_cut=mag_cut_f200w,
+            cmd_xlim=(-0.5, max(f200_f444_edges[-1] * 1.5, 4.0)),
+            color_label='F200W - F444W (mag)',
+            mag_label='F200W (mag)',
+            field_name='Brick F200W-F444W foreground layer',
+            outprefix='fg_layers_200w444w',
+        ),
+    ]
+
+    print(f"\nLayer edges (A_V mag): {np.round(av_edges, 3).tolist()}")
+    for p in pairs:
+        print(f"  {p['label']} edges: {np.round(p['edges'], 3).tolist()}")
+
+    for pair in pairs:
+        mag_num = filled_float(brick_all[pair['color_num_col']])
+        mag_den = filled_float(brick_all[pair['color_den_col']])
+        mag = filled_float(brick_all[pair['mag_col']])
+        color = mag_num - mag_den
+        finite = np.isfinite(mag_num) & np.isfinite(mag_den) & np.isfinite(mag)
+
+        edges = pair['edges']
+        layer_selections = []
+        layer_densities = []
+        layer_grids = []
+
+        for ii in range(n_layers):
+            c_lo = edges[ii]
+            c_hi = edges[ii + 1]
+            layer_mask = finite & (color >= c_lo) & (color < c_hi) & (mag < pair['mag_cut'])
+            layer_tbl = brick_all[layer_mask]
+            n_layer = len(layer_tbl)
+            if n_layer < nth_neighbor:
+                print(f"  {pair['label']} layer [{c_lo:.3f}, {c_hi:.3f}): N={n_layer} < knn — skipping")
+                layer_selections.append(None)
+                layer_densities.append(None)
+                layer_grids.append(None)
+                continue
+
+            xe, ye, dens = knn_density_map(layer_tbl, nth_neighbor=nth_neighbor, map_pixels=MAP_PIXELS)
+            layer_selections.append(layer_tbl)
+            layer_densities.append(dens)
+            layer_grids.append((xe, ye))
+
+        good_dens = [d for d in layer_densities if d is not None]
+        if len(good_dens) == 0:
+            print(f"  {pair['label']}: no layers with enough stars — skipping pair")
+            continue
+
+        all_log = np.concatenate([np.log10(d[np.isfinite(d)]) for d in good_dens])
+        vmin = np.nanpercentile(all_log, 5)
+        vmax = np.nanpercentile(all_log, 99)
+
+        for ii, (layer_tbl, dens, grid) in enumerate(zip(layer_selections, layer_densities, layer_grids)):
+            if layer_tbl is None:
+                continue
+            c_lo = edges[ii]
+            c_hi = edges[ii + 1]
+            av_layer_lo = av_edges[ii]
+            av_layer_hi = av_edges[ii + 1]
+            xe, ye = grid
+
+            fig = create_field_figure(
+                layer_tbl,
+                brick_all,
+                xe, ye, dens,
+                f"{pair['field_name']} [{c_lo:.3f}, {c_hi:.3f})  A_V~[{av_layer_lo:.2f}, {av_layer_hi:.2f}]",
+                nth_neighbor,
+                vmin, vmax,
+                color_num_col=pair['color_num_col'],
+                color_den_col=pair['color_den_col'],
+                mag_col=pair['mag_col'],
+                color_bounds=(c_lo, c_hi),
+                mag_cut=pair['mag_cut'],
+                cmd_xlim=pair['cmd_xlim'],
+                color_label=pair['color_label'],
+                mag_label=pair['mag_label'],
+                selection_label=f'Layer {ii + 1}/{n_layers}',
+            )
+            # HCO+ mom0 contour overlay for the lower-reddening fg-layer plots
+            overlay_brick_hcop_contour(fig.axes[0], level=0.073)
+            tag_lo = f"{c_lo:.2f}".replace('.', 'p')
+            tag_hi = f"{c_hi:.2f}".replace('.', 'p')
+            outpath = (
+                f"{outdir}/{pair['outprefix']}_{tag_lo}_{tag_hi}"
+                f"_mag{pair['mag_cut']}_knn{nth_neighbor}_brick.png"
+            )
+            fig.savefig(outpath, dpi=220)
+            plt.close(fig)
+            print(f"  {pair['label']} layer {ii + 1}/{n_layers} "
+                  f"[{c_lo:.3f}, {c_hi:.3f}) A_V~[{av_layer_lo:.2f}, {av_layer_hi:.2f}]: "
+                  f"{len(layer_tbl):,} stars → {outpath}")
+
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================
@@ -1002,6 +1329,7 @@ def main():
     print(f"Cloud C: {len(cloudc_all):,} stars")
 
     # Run analyses
+    analyze_foreground_color_layers(brick_all, nth_neighbor=NTH_NEIGHBOR, outdir=OUTDIR)
     analyze_f200w_f444w_av_slices_ct06(brick_all, nth_neighbor=NTH_NEIGHBOR, outdir=OUTDIR)
     print("Done with F200W-F444W Av-slice analysis. Moving on...")
     analyze_simple_narrow_color_bins(brick_all, cloudc_all, nth_neighbor=NTH_NEIGHBOR, outdir=OUTDIR)
