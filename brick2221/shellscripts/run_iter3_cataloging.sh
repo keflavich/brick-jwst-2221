@@ -216,6 +216,8 @@ case "${target}" in
         field=001
         each_suffix=destreak_o001_crf
         default_filters=(F212N F323N)
+        # merge_catalogs default ref_filter=f405n; arches lacks F405N.
+        merge_ref_filter=f212n
         logdir=/blue/adamginsburg/adamginsburg/logs/arches_jwst/
         modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
         modules_long=(nrcalong nrcblong)
@@ -230,6 +232,8 @@ case "${target}" in
         field=003
         each_suffix=destreak_o003_crf
         default_filters=(F212N F323N)
+        # merge_catalogs default ref_filter=f405n; quintuplet lacks F405N.
+        merge_ref_filter=f212n
         logdir=/blue/adamginsburg/adamginsburg/logs/quintuplet_jwst/
         modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
         modules_long=(nrcalong nrcblong)
@@ -524,12 +528,21 @@ fi
 forced_phot_script=${analysis_dir}/forced_photometry_residuals.py
 if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
     forced_dep=$(IFS=:; echo "${all_iter3_jobids[*]}")
+    # forced_photometry_residuals.py defaults to seed_path
+    # ${basepath}/catalogs/seed_union_iter3_${target}.fits, which is
+    # wrong for any target with per-obs seed catalogs (e.g. gc2211 has
+    # one per pointing).  ``seed_path`` is set per-target in the case
+    # block at the top of this script -- pass it through explicitly.
+    forced_seed_arg=""
+    if [[ -n "${seed_path:-}" && -f "${seed_path}" ]]; then
+        forced_seed_arg="--union-catalog=${seed_path}"
+    fi
     forced_job=$(sbatch --parsable --dependency=afterok:${forced_dep} \
         --job-name=webb-forced-phot-${target} \
         --output=${logdir}/webb-forced-phot-${target}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=64gb --time=48:00:00 \
-        --wrap "${python_exec} ${forced_phot_script} --target=${python_target}")
+        --wrap "${python_exec} ${forced_phot_script} --target=${python_target} ${forced_seed_arg}")
     echo "Submitted forced photometry job ${forced_job} for ${target}"
 fi
 

@@ -26,7 +26,7 @@ python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
 script=${analysis_dir}/crowdsource_catalogs_long.py
 bgmap_builder=${analysis_dir}/make_iter3_residual_bgmaps.py
-BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 
 # Per-target LW chunking + group-size cap.  Mirrors run_iter3_cataloging.sh
 # so iter3residbg (which fits the same union seed) doesn't hit the same

@@ -36,7 +36,7 @@ MODULES=${MODULES:-merged}
 # how many tasks actually run.  Override per-filter sizing with
 # ARRAY_RANGE_OVERRIDE if you need to.
 ARRAY_RANGE=${ARRAY_RANGE:-0-47}
-BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 # Per-source PSF fitting parallelism for the catalog arrays.  Default 8
 # workers at 4GB/worker -> --cpus-per-task=8 --mem=32gb (matches the old
 # serial 32gb but spreads compute over 8 cores).  Set PARALLEL_WORKERS=1
@@ -47,12 +47,18 @@ PARALLEL_CHUNK_SIZE=${PARALLEL_CHUNK_SIZE:-100}
 
 set_target_defaults() {
     local name="$1"
+    # DEF_MERGE_REF_FILTER = the filter used as astrometric reference
+    # when merge_catalogs.py builds cross-filter matches.  Defaults to
+    # f405n (correct for brick/sgrb2/sgrc-class targets that include
+    # F405N).  Targets without F405N must override.
+    DEF_MERGE_REF_FILTER=f405n
     case "${name}" in
         cloudef)
             DEF_PROPOSAL_ID=2092
             DEF_FIELD=005
             DEF_FILTERS=F162M,F210M,F360M,F480M
             DEF_REF_FILTER=F210M
+            DEF_MERGE_REF_FILTER=f360m
             ;;
         sgrc)
             DEF_PROPOSAL_ID=4147
@@ -71,12 +77,14 @@ set_target_defaults() {
             DEF_FIELD=001
             DEF_FILTERS=F212N,F323N
             DEF_REF_FILTER=F212N
+            DEF_MERGE_REF_FILTER=f212n
             ;;
         quintuplet)
             DEF_PROPOSAL_ID=2045
             DEF_FIELD=003
             DEF_FILTERS=F212N,F323N
             DEF_REF_FILTER=F212N
+            DEF_MERGE_REF_FILTER=f212n
             ;;
         sgra)
             DEF_PROPOSAL_ID=1939
@@ -93,6 +101,7 @@ set_target_defaults() {
             DEF_FIELD=028
             DEF_FILTERS=F150W,F200W,F277W
             DEF_REF_FILTER=F200W
+            DEF_MERGE_REF_FILTER=f277w
             ;;
         *)
             echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211" >&2
@@ -247,12 +256,16 @@ submit_target_flow() {
     done
 
     catalog_dep=$(IFS=:; echo "${catalog_jobids[*]}")
+    local merge_ref_arg=""
+    if [[ -n "${DEF_MERGE_REF_FILTER:-}" ]]; then
+        merge_ref_arg="--ref-filter=${DEF_MERGE_REF_FILTER}"
+    fi
     merge_jobid=$(sbatch --parsable --dependency=afterok:${catalog_dep} \
         --job-name="webb-merge-${name}" \
         --output="${logdir}/webb-merge-${name}_%j.log" \
         --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
         --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
-        --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao,daoiterative --skip-crowdsource --target=${name}")
+        --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao,daoiterative --skip-crowdsource --target=${name} ${merge_ref_arg}")
     echo "Submitted merge job ${merge_jobid} for ${name}"
 }
 

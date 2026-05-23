@@ -86,7 +86,10 @@ max_flux = 1*u.Jy
 
 
 nirspec_dir = '/orange/adamginsburg/jwst/spectra/mastDownload/JWST/'
-checklist = Table.read(f'{nirspec_dir}/jwst_archive_spectra_checklist.csv')
+checklist = Table.read(f'{nirspec_dir}/jwst_archive_spectra_checklist.csv', fill_values=[])
+for _c in checklist.colnames:
+    if checklist[_c].dtype.kind in ('U','S','O'):
+        checklist[_c] = np.array([str(x).strip() for x in checklist[_c]])
 
 def make_nirspec_spectra_as_fluxes_table():
     nirspec_data = []
@@ -98,7 +101,15 @@ def make_nirspec_spectra_as_fluxes_table():
             except OSError as ex:
                 print(f'{fn} failed to open: {ex} (it should be deleted or re-downloaded)')
                 continue
-            spectable = Table.read(fn, hdu=1)
+            if fh[0].header.get('INSTRUME') != 'NIRSPEC':
+                continue
+            if not fh[0].header.get('GRATING'):
+                continue
+            try:
+                spectable = Table.read(fn, hdu=1)
+            except (OSError, astropy.io.registry.base.IORegistryError) as ex:
+                print(f'{fn} table read failed: {ex}')
+                continue
 
             namestart = "_".join(os.path.basename(fn).split("_")[:-3])
             other_gratings = glob.glob(f'{nirspec_dir}/{namestart}*/*x1d.fits')
@@ -176,15 +187,12 @@ def make_nirspec_spectra_as_fluxes_table():
             else:
                 nirspec_mags['Grating2'] = ''
 
-            try:
-                nirspec_mags['Object'] = fh[1].header['SRCNAME']
-            except KeyError:
-                try:
-                    nirspec_mags['Object'] = fh[1].header['SRCALIAS']
-                except KeyError:
-                    if nirspec_mags['Target'] == 'Serpens_Targets':
-                        raise ValueError(f'Serpens_Targets has no SRCNAME or SRCALIAS: {fn}')
-                    nirspec_mags['Object'] = nirspec_mags['Target']
+            _obj = fh[1].header.get('SRCNAME') or fh[1].header.get('SRCALIAS')
+            if _obj is None:
+                if nirspec_mags['Target'] == 'Serpens_Targets':
+                    raise ValueError(f'Serpens_Targets has no SRCNAME or SRCALIAS: {fn}')
+                _obj = nirspec_mags['Target']
+            nirspec_mags['Object'] = _obj
 
             slitid = fn.split("_")[-4]
             if slitid.startswith('s'):
@@ -224,7 +232,8 @@ def make_nirspec_spectra_as_fluxes_table():
     # 'Grating', 'Grating2',
     common_keys = ['Target', 'Program', 'Object', 'SlitID',
                    'Observation', 'Visit', 'VisitGroup', 'Filename']
-    checklist['SlitID'][checklist['SlitID'].mask] = ''
+    if hasattr(checklist['SlitID'], 'mask'):
+        checklist['SlitID'][checklist['SlitID'].mask] = ''
     tbl['Program'] = tbl['Program'].astype(int)
     tbl['Observation'] = tbl['Observation'].astype(int)
     tbl['Visit'] = tbl['Visit'].astype(int)
@@ -317,6 +326,10 @@ if __name__ == '__main__':
                 except OSError as ex:
                     print(f'{fn} failed to open: {ex} (it should be deleted or re-downloaded)')
                     continue
+                if fh[0].header.get('INSTRUME') != 'NIRSPEC':
+                    continue
+                if not fh[0].header.get('GRATING'):
+                    continue
 
                 targ = fh[0].header["TARGNAME"]
                 if targ == '':
@@ -324,9 +337,24 @@ if __name__ == '__main__':
                 if targ is None or targ == '':
                     targ = os.path.basename(fn).split('x1d')[0]
                 grating = fh[0].header['GRATING']
-                srcname = fh[1].header.get('SRCNAME', targ)
-                srcalias = fh[1].header.get('SRCALIAS', srcname)
-                spectable = Table.read(fn, hdu=1)
+                srcname = fh[1].header.get('SRCNAME') or targ
+                srcalias = fh[1].header.get('SRCALIAS') or srcname
+                # Skip if PNG already produced for this (target, srcname, grating, setname, obs, visit, vg, prog)
+                _slitid = fn.split('_')[-4]
+                if not _slitid.startswith('s'):
+                    _slitid = ''
+                _obs = fh[0].header.get('OBSERVTN', '')
+                _vis = fh[0].header.get('VISIT', '')
+                _vg = fh[0].header.get('VISITGRP', '')
+                _prog = fh[0].header.get('PROGRAM', '')
+                _candidate = f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}*_{setname}_{_slitid}_o{_obs}_v{_vis}_vg{_vg}_p{_prog}.png'
+                if glob.glob(_candidate):
+                    continue
+                try:
+                    spectable = Table.read(fn, hdu=1)
+                except (OSError, astropy.io.registry.base.IORegistryError) as ex:
+                    print(f'{fn} table read failed: {ex}')
+                    continue
 
                 namestart = "_".join(os.path.basename(fn).split("_")[:-3])
                 other_gratings = glob.glob(f'{nirspec_dir}/{namestart}*/*x1d.fits')
@@ -366,39 +394,46 @@ if __name__ == '__main__':
                                         header=fh[0].header
                                     )
                 if targ not in tbl['Target']:
-                    print(f'{fn} has target {targ} not in {tbl["Target"]}')
+                    print(f'{fn} has target {targ} not in tbl')
                     continue
-                row = tbl.loc[('Target', targ)]
+                try:
+                    row = tbl.loc[('Target', targ)]
+                except KeyError:
+                    print(f'skip {fn}: target lookup failed')
+                    continue
                 if grating not in row['Grating']:
                     print(f'{fn} has grating {grating} not in {row["Grating"]} for target {targ}')
                     continue
-                if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Grating', grating)]
-                if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Object', srcname)]
-
+                def _narrow(row, key, val):
+                    if isinstance(row, Table) and len(row) > 0:
+                        try:
+                            return row.loc[(key, val)]
+                        except KeyError:
+                            return row
+                    return row
+                row = _narrow(row, 'Grating', grating)
+                row = _narrow(row, 'Object', srcname)
 
                 program = fh[0].header['PROGRAM']
                 obsid = fh[0].header['OBSERVTN']
                 visitid = fh[0].header['VISIT']
                 visitgroupid = fh[0].header['VISITGRP']
-                if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Observation', int(obsid))]
-                if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Visit', int(visitid))]
-                if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('VisitGroup', int(visitgroupid))]
-                if isinstance(row, Table) and len(row) > 0:
-                    row = row.loc[('Filename', fn)]
+                row = _narrow(row, 'Observation', int(obsid))
+                row = _narrow(row, 'Visit', int(visitid))
+                row = _narrow(row, 'VisitGroup', int(visitgroupid))
+                row = _narrow(row, 'Filename', fn)
 
                 slitid = fn.split("_")[-4]
                 if isinstance(row, Table) and len(row) > 0:
                     if slitid.startswith('s'):
-                        row = row.loc[('SlitID', slitid)]
+                        try:
+                            row = row.loc[('SlitID', slitid)]
+                        except (KeyError, ValueError):
+                            print(f'skip {fn}: no checklist row for slitid={slitid}')
+                            continue
                     else:
-                        print(fn)
-                        print(row)
-                        raise ValueError(f"There are multiple rows matching target={targ}, grating={grating}, object={srcname}.  There was no slitid {slitid} to distinguish them.")
+                        print(f'skip {fn}: multiple rows for target={targ} grating={grating} object={srcname}, no slitid to disambiguate')
+                        continue
 
                 if 'MSA_Cat' in targ:
                     sp.specname = f'{program} {srcalias} {grating} {grating2}'
@@ -428,7 +463,9 @@ if __name__ == '__main__':
                     slit_coord = SkyCoord(fh[1].header['SLIT_RA'], fh[1].header['SLIT_DEC'], unit=(u.deg, u.deg))
                 ax.set_title(f'{sp.specname}\n{slit_coord.to_string(sep=":", style="hmsdms", decimal=False)}')
 
-                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.pdf', dpi=150)
+                _basepath = f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}'
+                pl.savefig(f'{_basepath}.pdf', dpi=150)
+                pl.savefig(f'{_basepath}.png', dpi=150)
 
                 mags = {}
                 for key in filters:
@@ -486,5 +523,7 @@ if __name__ == '__main__':
                 #     pl.plot([xlim[0], xlim[1]], [ylim[0], ylim[1]], 'r-', linewidth=2, alpha=0.7)
                 #     pl.plot([xlim[0], xlim[1]], [ylim[1], ylim[0]], 'r-', linewidth=2, alpha=0.7)
 
-                pl.savefig(f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}.pdf', dpi=150)
+                _basepath = f'{nirspec_dir}/pngs/{targ}_{srcname}_{grating}{grating2}_{setname}_{slitid}_o{obsid}_v{visitid}_vg{visitgroupid}_p{program}'
+                pl.savefig(f'{_basepath}.pdf', dpi=150)
+                pl.savefig(f'{_basepath}.png', dpi=150)
                 pl.close('all')

@@ -127,9 +127,9 @@ def _load_brick_aces_hcop_cutout():
     return cutout.data, sky_icrs.ra.deg, sky_icrs.dec.deg
 
 
-def overlay_brick_hcop_contour(ax, level=0.073, color='magenta',
+def overlay_brick_hcop_contour(ax, levels=(0.54, 0.96), color='magenta',
                                linewidth=0.8, alpha=0.9):
-    """Overlay a single ACES HCO+ mom0 contour on an RA/Dec axis."""
+    """Overlay ACES HCO+ mom0 contours on an RA/Dec axis."""
     payload = _load_brick_aces_hcop_cutout()
     if payload is None:
         return
@@ -145,7 +145,7 @@ def overlay_brick_hcop_contour(ax, level=0.073, color='magenta',
             np.nanmax(dec) < dec_lo or np.nanmin(dec) > dec_hi):
         return
 
-    ax.contour(ra, dec, data, levels=[level],
+    ax.contour(ra, dec, data, levels=list(sorted(levels)),
                colors=color, linewidths=linewidth, alpha=alpha, zorder=6)
     ax.set_xlim(*xlims)
     ax.set_ylim(*ylims)
@@ -1302,7 +1302,7 @@ def analyze_foreground_color_layers(
                 selection_label=f'Layer {ii + 1}/{n_layers}',
             )
             # HCO+ mom0 contour overlay for the lower-reddening fg-layer plots
-            overlay_brick_hcop_contour(fig.axes[0], level=0.073)
+            overlay_brick_hcop_contour(fig.axes[0], levels=(0.54, 0.96))
             tag_lo = f"{c_lo:.2f}".replace('.', 'p')
             tag_hi = f"{c_hi:.2f}".replace('.', 'p')
             outpath = (

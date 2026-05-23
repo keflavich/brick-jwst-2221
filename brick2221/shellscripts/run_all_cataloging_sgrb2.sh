@@ -21,7 +21,7 @@ target=sgrb2
 field=001
 short_mem=48gb
 long_mem=32gb
-BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 
 compute_array_range() {
     local filter="$1" module="$2" dao_args="$3" filt_each_suffix="$4" iter_label="$5"

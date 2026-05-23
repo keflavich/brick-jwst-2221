@@ -10,7 +10,7 @@
 daoloop=("--daophot --skip-crowdsource")
 # daoloop=("--daophot --skip-crowdsource" " ")
 mem=16gb
-bundle_size=${BUNDLE_SIZE:-4}
+bundle_size=${BUNDLE_SIZE:-1}
 
 export STPSF_PATH=/orange/adamginsburg/repos/webbpsf/data/
 logdir=/blue/adamginsburg/adamginsburg/brick_logs/

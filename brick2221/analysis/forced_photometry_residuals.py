@@ -98,6 +98,14 @@ TARGETS = {
         basepath = '/orange/adamginsburg/jwst/sgrc',
         filters  = ['F115W', 'F162M', 'F182M', 'F212N', 'F360M', 'F405N', 'F470N', 'F480M'],
     ),
+    # gc2211 asteroid survey -- 5 GC pointings (obs 023/028/046/049/050)
+    # all share the same Python target name; F277W is the only filter
+    # common to all 5 obs IDs (028 has F150W+F277W, the others have
+    # F200W+F277W).
+    'gc2211': dict(
+        basepath = '/orange/adamginsburg/jwst/gc2211',
+        filters  = ['F150W', 'F200W', 'F277W'],
+    ),
 }
 
 # Matches nrcb1-4, nrca1-4, nrcblong, nrcalong in per-frame filenames.

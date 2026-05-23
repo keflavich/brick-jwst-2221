@@ -65,7 +65,7 @@ target=sickle
 field=007
 dao_catalog_jobids=()
 local_catalog_jobs=0
-BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 
 compute_array_range() {
     local filter="$1" module="$2" dao_args="$3" iter_label="$4"

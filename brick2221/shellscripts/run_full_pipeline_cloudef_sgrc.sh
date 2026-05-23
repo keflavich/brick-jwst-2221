@@ -69,7 +69,7 @@ SGRA_REF_FILTER=${SGRA_REF_FILTER:-F212N}
 
 MODULES=${MODULES:-merged}
 ARRAY_RANGE=${ARRAY_RANGE:-0-23}
-BUNDLE_SIZE=${BUNDLE_SIZE:-4}
+BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 
 ensure_target_setup() {
     local target="$1"

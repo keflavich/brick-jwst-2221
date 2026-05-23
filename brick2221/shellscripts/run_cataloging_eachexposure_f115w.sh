@@ -2,7 +2,7 @@
 # enables modifying globally whether you're doing just crowdsource or both (" " = crowdsource only)
 # daoloop=("--daophot --skip-crowdsource")
 daoloop=("--daophot --skip-crowdsource" " ")
-bundle_size=${BUNDLE_SIZE:-4}
+bundle_size=${BUNDLE_SIZE:-1}
 
 python_exe=/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python
 analysis_script=/blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py
