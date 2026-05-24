@@ -653,6 +653,42 @@ def append_residual_peak_seeds(out, residual_globs, fwhm_table,
     return combined_out
 
 
+def check_seed_staleness(target, seed_path=None):
+    """Exit 0 if the existing seed is newer than all input catalogs (fresh),
+    exit 3 if any input is newer (stale; must rebuild), exit 2 if no seed
+    exists.  Used by the iter3 launcher before --skip-seed-build to guard
+    against re-using a seed built against now-overwritten per-filter catalogs
+    (see project_seed_union_stale_data: bright stars get bad positions when
+    seed inherits old merged-catalog state)."""
+    import datetime as _dt
+    cfg = TARGETS[target]
+    sp = seed_path or cfg['output_path']
+    if not os.path.exists(sp):
+        print(f'[seed-stale-check] no seed at {sp}', file=sys.stderr)
+        return 2
+    seed_mt = os.stat(sp).st_mtime
+    filters, files = discover_filters(cfg)
+    newer = []
+    for f, p in zip(filters, files):
+        if os.stat(p).st_mtime > seed_mt:
+            newer.append((f.upper(), p, os.stat(p).st_mtime))
+    for p in sorted(glob.glob(cfg['satstar_glob'])):
+        if os.stat(p).st_mtime > seed_mt:
+            newer.append(('SATSTAR', p, os.stat(p).st_mtime))
+    if newer:
+        print(f'[seed-stale-check] STALE: {sp} '
+              f'(mtime={_dt.datetime.fromtimestamp(seed_mt)}) is older '
+              f'than {len(newer)} input catalog(s):', file=sys.stderr)
+        for f, p, mt in newer[:10]:
+            print(f'  [{f}] {os.path.basename(p)} '
+                  f'mtime={_dt.datetime.fromtimestamp(mt)}', file=sys.stderr)
+        if len(newer) > 10:
+            print(f'  ... ({len(newer) - 10} more)', file=sys.stderr)
+        return 3
+    print(f'[seed-stale-check] fresh: {sp} newer than all input catalogs')
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--target', required=True, choices=sorted(TARGETS.keys()))
@@ -660,6 +696,11 @@ def main(argv=None):
                    help='output FITS path (default: per-target convention)')
     p.add_argument('--dry-run', action='store_true',
                    help='compute clusters but do not write output')
+    p.add_argument('--check-stale', action='store_true',
+                   help='exit 0 if existing seed is newer than all input '
+                        'catalogs, 3 if stale (any input newer than seed), '
+                        '2 if seed missing.  Used as a gate before '
+                        '--skip-seed-build in the iter3 launcher.')
     p.add_argument('--residual-peaks', action='store_true',
                    help='detect bright peaks in iter3 residual mosaics and inject '
                         'unmatched ones as additional seeds (general fix for missed '
@@ -677,6 +718,9 @@ def main(argv=None):
                    metavar='GLOB',
                    help='override the residual mosaic glob patterns for --residual-peaks')
     args = p.parse_args(argv)
+
+    if args.check_stale:
+        return check_seed_staleness(args.target, args.output)
 
     out, cfg = build_union(args.target)
     out_path = args.output or cfg['output_path']

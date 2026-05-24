@@ -325,7 +325,18 @@ else
         echo "--skip-seed-build specified but ${seed_path} does not exist" >&2
         exit 2
     fi
-    echo "Reusing existing seed catalog ${seed_path}"
+    # Refuse stale seed: any input catalog newer than the seed means the
+    # per-filter merges were re-run after seed_union built; seed positions
+    # may not correspond to current catalog content (see
+    # project_seed_union_stale_data 2026-05-23 sickle F480M incident).
+    if ! "${python_exec}" "${seed_builder}" --target="${python_target}" \
+            --output="${seed_path}" --check-stale; then
+        rc=$?
+        echo "ERROR: --skip-seed-build refused (rc=${rc}); seed is stale or missing." >&2
+        echo "  rebuild it (drop --skip-seed-build) or delete and re-run." >&2
+        exit ${rc}
+    fi
+    echo "Reusing existing seed catalog ${seed_path} (passed staleness check)"
 fi
 
 # --- 2. Per-filter iter3 catalog arrays + residual mosaics ------------------
