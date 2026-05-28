@@ -106,6 +106,22 @@ TARGETS = {
         basepath = '/orange/adamginsburg/jwst/gc2211',
         filters  = ['F150W', 'F200W', 'F277W'],
     ),
+    'arches': dict(
+        basepath = '/orange/adamginsburg/jwst/arches',
+        filters  = ['F212N', 'F323N'],
+    ),
+    'quintuplet': dict(
+        basepath = '/orange/adamginsburg/jwst/quintuplet',
+        filters  = ['F212N', 'F323N'],
+    ),
+    'sgra': dict(
+        basepath = '/orange/adamginsburg/jwst/sgra',
+        filters  = ['F115W', 'F212N', 'F405N'],
+    ),
+    'cloudef': dict(
+        basepath = '/orange/adamginsburg/jwst/cloudef',
+        filters  = ['F162M', 'F210M', 'F360M', 'F480M'],
+    ),
 }
 
 # Matches nrcb1-4, nrca1-4, nrcblong, nrcalong in per-frame filenames.
