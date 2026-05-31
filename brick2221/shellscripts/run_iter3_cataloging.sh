@@ -429,7 +429,7 @@ for filter in "${filters[@]}"; do
     # filenames.
     n_chunks=1
     case "${filter}" in
-        F115W|F150W|F182M|F187N|F200W|F210M|F212N)
+        F115W|F150W|F162M|F182M|F187N|F200W|F210M|F212N)
             # Short-wavelength filters: one array per detector module.
             mods=("${modules_short[@]}")
             mem=${mem_short}
@@ -482,7 +482,7 @@ for filter in "${filters[@]}"; do
     # aggregate module.
     if [[ "${target}" == "sgrb2" ]]; then
         case "${filter}" in
-            F115W|F150W|F182M|F187N|F200W|F210M|F212N)
+            F115W|F150W|F162M|F182M|F187N|F200W|F210M|F212N)
                 mosaic_mods=(nrca nrcb merged)
                 ;;
             *)
