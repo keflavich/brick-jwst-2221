@@ -202,6 +202,8 @@ case "${target}" in
         field=005
         each_suffix=destreak_o005_crf
         default_filters=(F162M F210M F360M F480M)
+        # merge_catalogs default ref_filter=f405n; cloudef lacks F405N.
+        merge_ref_filter=f210m
         logdir=/blue/adamginsburg/adamginsburg/logs/cloudef_jwst/
         modules_short=(nrcb1 nrcb2 nrcb3 nrcb4 nrca1 nrca2 nrca3 nrca4)
         modules_long=(nrcalong nrcblong)
