@@ -75,9 +75,12 @@ def satstar_to_table(sat_path: Path) -> Table | None:
     # aper_total_flux / isophotal_flux / segment_flux / flux / source_sum.
     # Provide both `flux` (passes gating) and `aper_total_flux` (used by
     # read_and_normalize for actual brightness ordering).
+    # Write `sky_centroid` as a SkyCoord column so it matches the regular
+    # _cat.ecsv schema exactly (ICRS frame). Plain RA/DEC cols would be
+    # reloaded as FK5 by mkref's _extract_skycoord, causing a vstack frame
+    # mismatch.
     out = Table({
-        "sky_centroid.ra": sky.ra.deg,
-        "sky_centroid.dec": sky.dec.deg,
+        "sky_centroid": sky,
         "flux": flux_fit,
         "aper_total_flux": flux_fit,
         "aper_total_flux_err": flux_err,
@@ -85,8 +88,6 @@ def satstar_to_table(sat_path: Path) -> Table | None:
         "flux_err": flux_err,
         "qfit": qfit,
     })
-    out["sky_centroid.ra"].unit = u.deg
-    out["sky_centroid.dec"].unit = u.deg
     out["aper_total_flux"].unit = u.Jy
     out["aper_total_flux_err"].unit = u.Jy
     out["flux"].unit = u.Jy
