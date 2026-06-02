@@ -71,22 +71,25 @@ def satstar_to_table(sat_path: Path) -> Table | None:
     flux_fit = np.asarray(t["flux_fit"], dtype=float)[ok] if "flux_fit" in t.colnames else np.full(ok.sum(), np.nan)
     flux_err = np.asarray(t["flux_err"], dtype=float)[ok] if "flux_err" in t.colnames else np.full(ok.sum(), np.nan)
     qfit = np.asarray(t["qfit"], dtype=float)[ok] if "qfit" in t.colnames else np.full(ok.sum(), np.nan)
-    # mkref's has_supported_flux_column accepts aper30_flux / aper50_flux /
-    # aper70_flux / aper_total_flux (standard JWST SourceCatalogStep cols).
-    # Provide aper30_flux so the satstar ECSV passes schema gating.
+    # mkref schema gating requires sky_centroid or RA,DEC AND one of:
+    # aper_total_flux / isophotal_flux / segment_flux / flux / source_sum.
+    # Provide both `flux` (passes gating) and `aper_total_flux` (used by
+    # read_and_normalize for actual brightness ordering).
     out = Table({
         "sky_centroid.ra": sky.ra.deg,
         "sky_centroid.dec": sky.dec.deg,
-        "aper30_flux": flux_fit,
-        "aper30_flux_err": flux_err,
+        "flux": flux_fit,
+        "aper_total_flux": flux_fit,
+        "aper_total_flux_err": flux_err,
         "flux_fit": flux_fit,
         "flux_err": flux_err,
         "qfit": qfit,
     })
     out["sky_centroid.ra"].unit = u.deg
     out["sky_centroid.dec"].unit = u.deg
-    out["aper30_flux"].unit = u.Jy
-    out["aper30_flux_err"].unit = u.Jy
+    out["aper_total_flux"].unit = u.Jy
+    out["aper_total_flux_err"].unit = u.Jy
+    out["flux"].unit = u.Jy
     out.meta["frame_filename"] = str(crf_path.name)
     return out
 
