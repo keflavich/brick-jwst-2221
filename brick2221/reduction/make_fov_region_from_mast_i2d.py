@@ -26,7 +26,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build target FOV region from MAST i2d footprints")
     parser.add_argument("--target", required=True, help="Target name (e.g. cloudef, sgrc, sgrb2)")
     parser.add_argument("--proposal-id", required=True, help="JWST proposal id (e.g. 2092)")
-    parser.add_argument("--field", required=True, help="Field id without o-prefix (e.g. 005)")
+    parser.add_argument(
+        "--field",
+        required=True,
+        help=(
+            "Field id without o-prefix (e.g. 005). Multi-pointing targets may "
+            "supply a comma-separated list (e.g. 002,005 for cloudef = "
+            "Cloud E + Cloud F); the output FOV encloses the union."
+        ),
+    )
     parser.add_argument(
         "--basepath",
         default=None,
@@ -123,10 +131,14 @@ def main() -> None:
         print(f"FOV region already exists, skipping: {output}")
         return
 
-    i2d_files = find_i2d_files(mast_root, args.proposal_id, args.field)
+    fields = [f.strip() for f in args.field.split(",") if f.strip()]
+    i2d_files: list[Path] = []
+    for fld in fields:
+        i2d_files.extend(find_i2d_files(mast_root, args.proposal_id, fld))
+    i2d_files = sorted(set(i2d_files))
     if len(i2d_files) == 0:
         raise FileNotFoundError(
-            f"No matching NIRCam i2d files found under {mast_root} for proposal={args.proposal_id} field={args.field}"
+            f"No matching NIRCam i2d files found under {mast_root} for proposal={args.proposal_id} field(s)={fields}"
         )
 
     footprints = [footprint_from_file(path) for path in i2d_files]

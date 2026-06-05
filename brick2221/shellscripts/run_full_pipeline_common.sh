@@ -121,6 +121,10 @@ ensure_target_setup() {
     local name="$1"
     local proposal_id="$2"
     local field="$3"
+    # Optional 4th arg: CSV of all fields for multi-pointing targets
+    # (e.g. cloudef 002,005).  Falls back to single ``field`` so existing
+    # call sites are unaffected.
+    local fields_csv="${4:-${field}}"
     local basepath="/orange/adamginsburg/jwst/${name}"
 
     if [[ ! -d "${basepath}" ]]; then
@@ -149,7 +153,7 @@ ensure_target_setup() {
     local fov_file="${basepath}/regions_/nircam_${name}_fov.reg"
     if [[ ! -f "${fov_file}" ]]; then
         echo "No FOV region found for ${name}. Building from MAST i2d footprints..."
-        "${python_exec}" "${fov_script}" --target="${name}" --proposal-id="${proposal_id}" --field="${field}"
+        "${python_exec}" "${fov_script}" --target="${name}" --proposal-id="${proposal_id}" --field="${fields_csv}"
     fi
 }
 
@@ -201,7 +205,7 @@ submit_target_flow() {
     # per field (each_suffix=destreak_o<field>_crf is field-specific).
     local fields_csv="${6:-${field}}"
 
-    ensure_target_setup "${name}" "${proposal_id}" "${field}"
+    ensure_target_setup "${name}" "${proposal_id}" "${field}" "${fields_csv}"
 
     first_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "" "")
 
