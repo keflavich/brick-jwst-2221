@@ -245,7 +245,10 @@ submit_target_flow() {
         # idle queued tasks.
         local range_hi
         local n_files
-        n_files=$(ls "/orange/adamginsburg/jwst/${name}/${filter}/pipeline/"*"${each_suffix}.fits" 2>/dev/null | wc -l)
+        # Use shopt nullglob via a subshell so an empty match doesn't
+        # trip set -e / pipefail (ls returns 1 on no-match, killing the
+        # whole flow before cat arrays are submitted).
+        n_files=$( (shopt -s nullglob; files=( "/orange/adamginsburg/jwst/${name}/${filter}/pipeline/"*"${each_suffix}.fits" ); echo ${#files[@]}) )
         if [[ -n "${ARRAY_RANGE_OVERRIDE:-}" && "${ARRAY_RANGE_OVERRIDE}" =~ ^0-([0-9]+)$ ]]; then
             local total=$(( ${BASH_REMATCH[1]} + 1 ))
             range_hi=$(( (total + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
