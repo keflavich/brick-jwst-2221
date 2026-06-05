@@ -199,7 +199,13 @@ case "${target}" in
     cloudef)
         basepath=/orange/adamginsburg/jwst/cloudef
         proposal_id=2092
+        # cloudef merges Cloud E (obs 002) + Cloud F (obs 005) as two
+        # adjacent pointings.  ``field`` stays the primary obs label for
+        # tooling that wants a single value; the per-filter loop iterates
+        # ``fields`` so catalog arrays / mosaic jobs are submitted once
+        # per (filter, module, obs).
         field=005
+        fields=(002 005)
         each_suffix=destreak_o005_crf
         default_filters=(F162M F210M F360M F480M)
         # merge_catalogs default ref_filter=f405n; cloudef lacks F405N.
@@ -294,6 +300,14 @@ esac
 # overrode it (e.g. brick-1182 uses python_target=brick so the Python
 # script's obs_filters / seed catalog lookups still work).
 python_target="${python_target:-${target}}"
+
+# Targets that span more than one obs id (e.g. cloudef = obs 002 + 005)
+# pre-populate ``fields``; everything else defaults to the single
+# ``field`` value so the per-filter loop below issues one cataloging
+# pass per obs.
+if [[ -z "${fields+x}" ]]; then
+    fields=("${field}")
+fi
 
 mkdir -p "${logdir}"
 
@@ -409,6 +423,16 @@ submit_mosaic_job() {
 }
 
 all_iter3_jobids=()
+# ``fields`` is a single-element array for almost every target.  cloudef
+# is the exception: obs 002 + 005 are reduced separately (different
+# destreak_o<NNN>_crf suffixes) and then merged.  Loop over fields so
+# the per-filter catalog arrays and mosaic jobs cover every obs.  The
+# global ``field`` / ``each_suffix`` are reassigned per iteration so
+# helper functions that read them inline (submit_catalog_array,
+# submit_mosaic_job) pick up the right obs id.
+for current_field in "${fields[@]}"; do
+    field="${current_field}"
+    each_suffix="destreak_o${field}_crf"
 for filter in "${filters[@]}"; do
     # Determine per-filter each_suffix (sgrb2 has two suffix types)
     if [[ "${target}" == "sgrb2" ]]; then
@@ -514,6 +538,7 @@ for filter in "${filters[@]}"; do
             submit_mosaic_job "${filter}" "${agg_mod}" "--bgsub" "${bgsub_dep_ids}"
         fi
     done
+done
 done
 
 # --- 3. Merge job gated on every iter3 catalog array ------------------------

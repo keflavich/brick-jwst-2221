@@ -55,7 +55,14 @@ set_target_defaults() {
     case "${name}" in
         cloudef)
             DEF_PROPOSAL_ID=2092
+            # Cloud E (obs 002, t001) and Cloud F (obs 005, t002) are two
+            # adjacent NIRCam pointings that must be reduced + cataloged
+            # together to produce a single merged cloudef catalog.  Field
+            # 005 stays the "primary" field (used as metadata label by
+            # mkref and for the FOV region build); FIELDS drives the
+            # pipeline + cataloging loop.
             DEF_FIELD=005
+            DEF_FIELDS=002,005
             DEF_FILTERS=F162M,F210M,F360M,F480M
             DEF_REF_FILTER=F210M
             DEF_MERGE_REF_FILTER=f360m
@@ -186,10 +193,17 @@ submit_target_flow() {
     local field="$3"
     local filters_csv="$4"
     local ref_filter="$5"
+    # Optional 6th arg: CSV of extra fields to also flow through the
+    # pipeline + per-exposure cataloging (e.g. cloudef obs 002 + 005).
+    # When set, pipeline submissions get --field=<csv> (the pipeline
+    # itself iterates fields), mkref still uses the primary ${field} as a
+    # metadata label, and the per-exposure catalog array is duplicated
+    # per field (each_suffix=destreak_o<field>_crf is field-specific).
+    local fields_csv="${6:-${field}}"
 
     ensure_target_setup "${name}" "${proposal_id}" "${field}"
 
-    first_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${field}" "${filters_csv}" "${MODULES}" "" "")
+    first_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "" "")
 
     refcat_jobid=$(sbatch --parsable --dependency=afterok:${first_pass_dep} \
         --job-name="webb-refcat-${name}" \
@@ -199,14 +213,18 @@ submit_target_flow() {
         --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${refcat_script} --target=${name} --proposal-id=${proposal_id} --field=${field} --filter=${ref_filter} --generate-catalogs")
     echo "Submitted reference-catalog job ${refcat_jobid} for ${name}"
 
-    second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${field}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${refcat_jobid}")
+    second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${refcat_jobid}")
 
-    local each_suffix="destreak_o${field}_crf"
+    local -a fields=()
+    IFS=',' read -r -a fields <<< "${fields_csv}"
     local -a filters=()
     IFS=',' read -r -a filters <<< "${filters_csv}"
 
     local -a catalog_jobids=()
     local filter
+    local fld
+    for fld in "${fields[@]}"; do
+    local each_suffix="destreak_o${fld}_crf"
     for filter in "${filters[@]}"; do
         # Bundle BUNDLE_SIZE exposures per task to cut queued tasks.
         # Auto-size the per-filter cat array from the actual destreak
@@ -238,7 +256,7 @@ submit_target_flow() {
             # default rather than 0 tasks.
             range_hi=$(( 24 / BUNDLE_SIZE - 1 ))
         fi
-        echo "Cat array for ${name} ${filter}: n_files=${n_files} array=0-${range_hi} (bundle=${BUNDLE_SIZE})" >&2
+        echo "Cat array for ${name} ${filter} obs ${fld}: n_files=${n_files} array=0-${range_hi} (bundle=${BUNDLE_SIZE})" >&2
         local cat_mem_gb=$(( MEM_PER_WORKER_GB * PARALLEL_WORKERS ))
         local parallel_args=""
         if (( PARALLEL_WORKERS > 1 )); then
@@ -246,13 +264,14 @@ submit_target_flow() {
         fi
         cat_jobid=$(sbatch --parsable --dependency=afterok:${second_pass_dep} \
             --array="0-${range_hi}" \
-            --job-name="webb-cat-${name}-${filter}-eachexp" \
-            --output="${logdir}/webb-cat-${name}-${filter}-eachexp_%j-%A_%a.log" \
+            --job-name="webb-cat-${name}-${filter}-o${fld}-eachexp" \
+            --output="${logdir}/webb-cat-${name}-${filter}-o${fld}-eachexp_%j-%A_%a.log" \
             --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
             --ntasks=1 --cpus-per-task=${PARALLEL_WORKERS} --nodes=1 --mem=${cat_mem_gb}gb --time=96:00:00 \
-            --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --field=${field} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done ${parallel_args}")
+            --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --field=${fld} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done ${parallel_args}")
         catalog_jobids+=("${cat_jobid}")
-        echo "Submitted catalog array ${cat_jobid} for ${name} ${filter}"
+        echo "Submitted catalog array ${cat_jobid} for ${name} ${filter} obs ${fld}"
+    done
     done
 
     catalog_dep=$(IFS=:; echo "${catalog_jobids[*]}")
@@ -273,6 +292,7 @@ set_target_defaults "${target}"
 
 PROPOSAL_ID=${PROPOSAL_ID:-${DEF_PROPOSAL_ID}}
 FIELD=${FIELD:-${DEF_FIELD}}
+FIELDS=${FIELDS:-${DEF_FIELDS:-${FIELD}}}
 FILTERS=${FILTERS:-${DEF_FILTERS}}
 REF_FILTER=${REF_FILTER:-${DEF_REF_FILTER}}
 CRDS_PATH=${CRDS_PATH:-${DEFAULT_CRDS_PATH}}
@@ -282,4 +302,4 @@ if [[ ! -d "${CRDS_PATH}" ]]; then
     exit 1
 fi
 
-submit_target_flow "${target}" "${PROPOSAL_ID}" "${FIELD}" "${FILTERS}" "${REF_FILTER}"
+submit_target_flow "${target}" "${PROPOSAL_ID}" "${FIELD}" "${FILTERS}" "${REF_FILTER}" "${FIELDS}"
