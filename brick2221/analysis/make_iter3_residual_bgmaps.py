@@ -1,20 +1,28 @@
 #!/usr/bin/env python
-"""Build per-frame background images from the iter3 photometry residual.
+"""Build the MERGED background image from the iter3 photometry residual.
 
-Input:  ``<frame>_iter3_daophot_iterative_residual.fits`` (per-frame
-        iter3 residual; the data minus iter3 satstar model minus iter3
+Input:  ``...-merged_iter3_daophot_iterative_residual_i2d.fits`` (the
+        whole-field merged iter3 residual mosaic produced by
+        ``mosaic_each_exposure_residuals`` -- the co-add of every
+        exposure's residual: data minus iter3 satstar model minus iter3
         photutils model).
 
-Output: ``<frame>_iter3_daophot_iterative_residual_smoothed_bg.fits``
-        (3x3 median-filter of the input).  Same WCS/header.
+Output: ``...-merged_iter3_daophot_iterative_residual_smoothed_bg_i2d.fits``
+        (median-filter of the input).  Same WCS/header.
 
-This file is consumed by the iter4-residbg / iter5-residbg photometry
-runs, which use it as the background estimate (in place of running
-``Background2D`` on the data itself).  The rationale: the iter3 model
-already accounts for every fittable point source, so what remains is
-either real diffuse background or per-pixel noise; a 3x3 median filter
-suppresses the noise while preserving genuine background structure on
-the PSF scale.
+This file is consumed by the iter*-residbg photometry runs
+(``crowdsource_catalogs_long.py --use-iter3-residual-bg``), which
+reproject it onto each exposure's pixel grid and use it as the
+background estimate (in place of running ``Background2D`` on the data
+itself).  The rationale: the iter3 model already accounts for every
+fittable point source, so what remains is either real diffuse
+background or per-pixel noise; a median filter suppresses the noise
+while preserving genuine background structure on the PSF scale.
+
+2026-06-06: switched from per-frame residuals to the MERGED residual
+mosaic.  The merged residual co-adds all exposures, so its background
+has much higher S/N than any single frame; the consumer reprojects it
+back onto each exposure grid.
 
 Usage:
     python make_iter3_residual_bgmaps.py --target sickle
@@ -38,10 +46,16 @@ TARGET_BASEPATHS = {
     'sgrb2':  '/orange/adamginsburg/jwst/sgrb2',
 }
 
-# Suffix appended to the per-frame residual filename to produce the
+# Suffix inserted into the merged residual mosaic filename to produce the
 # smoothed background filename.  Mirror this token in the consumer
-# (crowdsource_catalogs_long.py --use-iter3-residual-bg path).
+# (crowdsource_catalogs_long.py --use-iter3-residual-bg path), which
+# rebuilds the same name to find this file.
 SMOOTHED_BG_SUFFIX = '_smoothed_bg'
+
+# Glob for the whole-field merged iter3 residual mosaic (module='merged',
+# iterative kind, no flag tokens).  Excludes the per-detector merges
+# (nrcalong/nrcblong/...) and the _infilled_ / _smoothed_bg_ variants.
+MERGED_RESIDUAL_GLOB = '*-merged_iter3_daophot_iterative_residual_i2d.fits'
 
 
 def smooth_one(in_path, out_path, median_size=3, overwrite=False):
@@ -97,15 +111,24 @@ def main(argv=None):
 
     n_done = 0
     n_skipped = 0
+    n_missing = 0
     for filt_dir in filt_dirs:
         if not os.path.isdir(filt_dir):
             continue
-        # Per-frame iter3 residuals live in <filt>/pipeline/
-        pat = os.path.join(filt_dir, 'pipeline',
-                           '*_iter3_daophot_iterative_residual.fits')
+        # The merged iter3 residual mosaic lives in <filt>/pipeline/.
+        pat = os.path.join(filt_dir, 'pipeline', MERGED_RESIDUAL_GLOB)
         infiles = sorted(glob.glob(pat))
+        if not infiles:
+            n_missing += 1
+            print(f'  no merged iter3 residual mosaic in {filt_dir}/pipeline '
+                  f'(expected {MERGED_RESIDUAL_GLOB}); run '
+                  f'mosaic_each_exposure_residuals for module=merged first',
+                  file=sys.stderr)
+            continue
         for infile in infiles:
-            outfile = infile.replace('.fits', f'{SMOOTHED_BG_SUFFIX}.fits')
+            # ..._residual_i2d.fits -> ..._residual_smoothed_bg_i2d.fits
+            outfile = infile.replace('_residual_i2d.fits',
+                                     f'_residual{SMOOTHED_BG_SUFFIX}_i2d.fits')
             try:
                 wrote = smooth_one(infile, outfile,
                                    median_size=args.median_size,
@@ -115,11 +138,11 @@ def main(argv=None):
                 continue
             if wrote:
                 n_done += 1
-                if n_done % 20 == 0:
-                    print(f'  ... wrote {n_done} smoothed bg files')
+                print(f'  wrote {outfile}')
             else:
                 n_skipped += 1
-    print(f'[{args.target}] done.  wrote={n_done}  skipped (existed)={n_skipped}')
+    print(f'[{args.target}] done.  wrote={n_done}  skipped (existed)={n_skipped}'
+          f'  filters_missing_merged={n_missing}')
 
 
 if __name__ == '__main__':
