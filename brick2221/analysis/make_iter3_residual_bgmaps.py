@@ -52,10 +52,15 @@ TARGET_BASEPATHS = {
 # rebuilds the same name to find this file.
 SMOOTHED_BG_SUFFIX = '_smoothed_bg'
 
-# Glob for the whole-field merged iter3 residual mosaic (module='merged',
-# iterative kind, no flag tokens).  Excludes the per-detector merges
-# (nrcalong/nrcblong/...) and the _infilled_ / _smoothed_bg_ variants.
-MERGED_RESIDUAL_GLOB = '*-merged_iter3_daophot_iterative_residual_i2d.fits'
+# Glob for whole-field iter3 residual mosaics (iterative kind, no flag
+# tokens), for ANY module token.  Targets whose whole-field co-add is a
+# single detector name it after that detector (e.g. sickle LW = 'nrcb');
+# multi-detector co-adds use 'merged'.  The trailing ``_residual_i2d.fits``
+# excludes the ``_infilled_i2d`` / ``_i2d_smoothed`` / ``_smoothed_bg_i2d``
+# variants.  The consumer (crowdsource_catalogs_long.py
+# --use-iter3-residual-bg) selects which module's smoothed bg to read via
+# --resbg-mosaic-module.
+RESIDUAL_MOSAIC_GLOB = '*_iter3_daophot_iterative_residual_i2d.fits'
 
 
 def smooth_one(in_path, out_path, median_size=3, overwrite=False):
@@ -115,14 +120,14 @@ def main(argv=None):
     for filt_dir in filt_dirs:
         if not os.path.isdir(filt_dir):
             continue
-        # The merged iter3 residual mosaic lives in <filt>/pipeline/.
-        pat = os.path.join(filt_dir, 'pipeline', MERGED_RESIDUAL_GLOB)
+        # The iter3 residual mosaic(s) live in <filt>/pipeline/.
+        pat = os.path.join(filt_dir, 'pipeline', RESIDUAL_MOSAIC_GLOB)
         infiles = sorted(glob.glob(pat))
         if not infiles:
             n_missing += 1
-            print(f'  no merged iter3 residual mosaic in {filt_dir}/pipeline '
-                  f'(expected {MERGED_RESIDUAL_GLOB}); run '
-                  f'mosaic_each_exposure_residuals for module=merged first',
+            print(f'  no iter3 residual mosaic in {filt_dir}/pipeline '
+                  f'(expected {RESIDUAL_MOSAIC_GLOB}); run '
+                  f'mosaic_each_exposure_residuals first',
                   file=sys.stderr)
             continue
         for infile in infiles:
