@@ -126,11 +126,6 @@ covered as two separate launcher targets (`brick` for proposal 2221 +
 `brick-1182` for the broadband proposal 1182) because the per-frame
 `destreak_o<NNN>_crf` suffix is obs-specific.
 
-**Known gap (audit 2026-06-07):**  proposal 1182 also has obs 001 on disk
-(`mastDownload/jw01182001001/`), but no launcher case currently runs
-the iter1+ chain on it.  If obs 001 is brick, add a `brick-1182-001`
-target case to `submit_full_chain.sh` and `run_iter3_cataloging.sh`.
-
 ## Reduction process
 
  1. Pipeline files are in `reduction/`.
