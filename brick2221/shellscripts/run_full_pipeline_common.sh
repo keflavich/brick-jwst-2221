@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Common end-to-end runner for one target:
+# Common end-to-end runner for one target (cloudef, sgrc, sgrb2, arches,
+# quintuplet, sgra, gc2211 -- brick has its own historical runner).
+#
+# Iteration coverage of this script (vs README "Iter1 / Iter2 / Iter3 /
+# Iter4 cataloging cycle" section):
+#   pipeline (Detector1/Image2/Image3): yes (first-pass + refcat + second-pass)
+#   iter1: yes (per-frame DAO catalogs, --each-exposure --daophot)
+#   iter2: NO  (run submit_full_chain.sh or run_iter3_cataloging.sh next)
+#   iter3: NO
+#   iter4: NO
+#
+# Stages:
 # 1) First-pass pipeline (no reference catalog)
 # 2) Build reference catalog from first-pass products
 # 3) Second-pass pipeline (skip step1/2, now with reference catalog)
-# 4) Per-exposure cataloging (DAO)
-# 5) Merge single-field catalogs
+# 4) Per-exposure iter1 cataloging (DAO)
+# 5) Merge single-field iter1 catalogs
+#
+# Multi-obs targets must populate DEF_FIELDS (CSV).  cloudef sets
+# DEF_FIELDS=002,005; gc2211 obs id is provided per-launch by
+# run_full_pipeline_gc2211.sh via FIELD env var.
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: $(basename "$0") <target>" >&2

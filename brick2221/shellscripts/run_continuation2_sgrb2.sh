@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# OBSOLETE: one-off sgrb2 continuation #2 with hardcoded historical job
+# IDs.  Use submit_full_chain.sh / run_full_pipeline_sgrb2.sh going
+# forward.  Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete (sgrb2 one-off continuation); use submit_full_chain.sh" >&2
+    exit 0
+fi
+
 # Continuation 2 for sgrb2: F150W bgsub recovery + F212N + LW filters + merges.
 # Run this after the recovery script jobs have started clearing (~45 min after recovery).
 #

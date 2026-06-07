@@ -1,3 +1,13 @@
+#!/usr/bin/env bash
+# OBSOLETE: pre-submit_full_chain per-exposure cataloging driver for
+# brick/cloudc only.  Iter1/iter2 are now handled by submit_full_chain.sh
+# (per-target + per-obs) and run_full_pipeline_common.sh.
+# Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete; use submit_full_chain.sh <target> <filter> <module>" >&2
+    exit 0
+fi
+
 # Submit per-exposure cataloging jobs for brick/cloudc, using bundle_size to
 # fold K consecutive exposures into one SLURM array task and a single
 # --finalize-only mosaic job per config (covers iter=None and iter=iter2).

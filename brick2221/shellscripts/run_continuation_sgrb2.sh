@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# OBSOLETE: one-off continuation of a specific sgrb2 iter1/iter2 run with
+# hardcoded historical job IDs that no longer exist.  Use
+# submit_full_chain.sh / run_full_pipeline_sgrb2.sh going forward.
+# Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete (sgrb2 one-off continuation); use submit_full_chain.sh" >&2
+    exit 0
+fi
+
 # Submit remaining sgrb2 filters not covered by the first run, plus iter1/iter2 merges
 # gated on ALL plain iter1/iter2 job IDs (old + new).
 #

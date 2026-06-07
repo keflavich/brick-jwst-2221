@@ -1,3 +1,13 @@
+#!/usr/bin/env bash
+# OBSOLETE: pre-iter1 raw-sbatch cataloging driver using python310 paths.
+# Superseded by submit_full_chain.sh + run_full_pipeline_<target>.sh
+# (see README "Iter1 / Iter2 / Iter3 / Iter4 cataloging cycle").
+# Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete; see README iter1-4 section" >&2
+    exit 0
+fi
+
 sbatch --job-name=webb-cat-F444W --output=web-cat-F444W%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F444W --proposal_id=1182 --modules=merged --daophot"
 sbatch --job-name=webb-cat-F356W --output=web-cat-F356W%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F356W --proposal_id=1182 --modules=merged --daophot"
 sbatch --job-name=webb-cat-F200W --output=web-cat-F200W%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python310/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F200W --proposal_id=1182 --modules=merged --daophot"

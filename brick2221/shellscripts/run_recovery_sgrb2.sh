@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# OBSOLETE: one-off sgrb2 recovery script tied to a specific historical
+# OOM/PSF incident.  Use submit_full_chain.sh / run_full_pipeline_sgrb2.sh
+# going forward.  Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete (sgrb2 one-off recovery); use submit_full_chain.sh" >&2
+    exit 0
+fi
+
 # Recovery + continuation for sgrb2 iter1/iter2 pipeline.
 #
 # Resubmits modules that had OOM kills at 48gb (now 96gb):

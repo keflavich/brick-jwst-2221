@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# OBSOLETE: one-off sgrb2 recovery #2 tied to a historical visualization-bug
+# OOM incident.  Use submit_full_chain.sh / run_full_pipeline_sgrb2.sh
+# going forward.  Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete (sgrb2 one-off recovery); use submit_full_chain.sh" >&2
+    exit 0
+fi
+
 # Recovery for sgrb2 after visualization-bug OOM kills:
 #   - F212N all 8 modules plain iter1+iter2 (OOM in zoomcut_list before PSF fitting)
 #   - LW nrcalong F300M/F360M/F405N/F466N/F480M plain iter1+iter2 (same)

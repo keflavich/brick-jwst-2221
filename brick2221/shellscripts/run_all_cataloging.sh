@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# OBSOLETE: legacy 'merged' mosaic combinatorial sweep on brick.
+# Per-frame iter1/iter2 are now handled by submit_full_chain.sh
+# (per-target + per-obs).  Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete; use submit_full_chain.sh brick <filter> merged" >&2
+    exit 0
+fi
+
 # Legacy 'merged' mosaic cataloging sweep.  The full (group, blur, bgsub)
 # combinatorial explosion is OFF by default (it submitted 120 identical
 # 256GB jobs; we now only run on individual frames, so this sweep is rarely

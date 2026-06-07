@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Submit the iter2-residbg + iter3-residbg cascade for one target.
 #
+# Iteration coverage of this script (vs README "Iter1 / Iter2 / Iter3 /
+# Iter4 cataloging cycle" section):
+#   pipeline / iter1: NO  (must already exist on disk)
+#   iter2: variant only (--iteration-label=iter2residbg, residual-bg-subtracted)
+#   iter3: variant only (--iteration-label=iter3residbg, residual-bg-subtracted)
+#   iter4: NO  (use run_iter4resbgrefit.sh)
+# The plain iter2 / iter3 / iter4 outputs are NOT touched.
+#
 # Workflow (assumes iter3 photometry + per-frame residuals are
 # complete on disk):
 #

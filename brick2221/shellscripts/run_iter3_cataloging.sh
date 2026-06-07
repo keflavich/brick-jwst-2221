@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
-# Submit the iter3 cross-band union-seeded photometry for one of the
-# three NIRCam targets (sickle / brick / cloudc).  Assumes iter2 has
-# already been run and its per-filter daoiterative cross-exposure
-# merges exist (they're what feeds the union seed builder).
+# Submit the iter3 cross-band union-seeded photometry for a NIRCam target.
+#
+# Iteration coverage of this script (vs README "Iter1 / Iter2 / Iter3 /
+# Iter4 cataloging cycle" section):
+#   pipeline:  NO  (must already be on disk)
+#   iter1:     NO
+#   iter2:     NO  (assumes per-filter daoiterative cross-exposure merges
+#                  exist on disk; submit_full_chain.sh produces these)
+#   iter3:     yes (union seed build + per-frame fit + per-frame mosaic
+#                  + per-target merge + forced photometry on satstar
+#                  residuals)
+#   iter4:     NO  (use run_iter4resbgrefit.sh after iter3 completes)
+#
+# Supports multi-obs targets (cloudef = obs 002 + 005, gc2211 = 5 separate
+# pointings as gc2211-{023,028,046,049,050}) by looping over fields in the
+# per-filter catalog/mosaic submission loop.
 #
 # The script:
 #   1. Builds/refreshes ``seed_union_iter3_{target}.fits`` via

@@ -1,3 +1,12 @@
+#!/usr/bin/env bash
+# OBSOLETE: F115W-only pre-submit_full_chain cataloging driver.  Iter1/iter2
+# are now handled by submit_full_chain.sh (per-target + per-obs).
+# Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete; use submit_full_chain.sh brick-1182 F115W merged" >&2
+    exit 0
+fi
+
 #dao="--daophot --skip-crowdsource"
 # enables modifying globally whether you're doing just crowdsource or both (" " = crowdsource only)
 # daoloop=("--daophot --skip-crowdsource")

@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# OBSOLETE: date-stamped one-off rerun script from 2026-04-20.  The job
+# IDs and indices it references are stale.  Use the normal iter1->iter3
+# chain (submit_full_chain.sh / run_iter3_cataloging.sh) with
+# --skip-if-done to recover missing per-frame outputs.
+# Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete (one-off from 2026-04-20); use submit_full_chain.sh with --skip-if-done" >&2
+    exit 0
+fi
+
 # Resubmit only failed array indices from earlier failed runs.
 
 sbatch --parsable --array=22 --job-name=webb-cat-sickle-F210M-nrcb1-eachexp-rerun \

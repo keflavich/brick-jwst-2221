@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# OBSOLETE: legacy 'merged' mosaic F115W combinatorial sweep.
+# Per-frame iter1/iter2 are now handled by submit_full_chain.sh
+# (per-target + per-obs).  Set ALLOW_OBSOLETE=1 to bypass.
+if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
+    echo "this code is obsolete; use submit_full_chain.sh brick-1182 F115W merged" >&2
+    exit 0
+fi
+
 # Cataloging on 'merged' mosaic for F115W (and legacy siblings).
 #
 # The full combinatorial (group, blur, bgsub) sweep is OFF by default
