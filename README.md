@@ -190,30 +190,115 @@ Current first-pass/second-pass behavior:
  * If the configured reference catalog does not exist yet, `PipelineRerunNIRCAM-LONG.py` now runs a first pass and skips reference-catalog realignment steps.
  * After building a reference catalog, rerun with `--skip_step1and2` to reuse existing `_cal` products and perform the aligned second pass.
 
-### Full Pipeline For cloudef/sgrc/sgrb2/arches/quintuplet/sgra
+### Full Pipeline runners
 
-Use:
+The "full pipeline" for one target is the end-to-end dependency tree:
 
- * `brick2221/shellscripts/run_full_pipeline_cloudef_sgrc.sh`
-
-This script submits an end-to-end dependency tree for each target:
-
- 1. First-pass pipeline jobs for all configured filters.
+ 1. First-pass pipeline jobs for all configured filters (no refcat).
  2. Reference-catalog build via `make_reference_from_pipeline_catalogs.py`.
  3. Second-pass pipeline jobs with `--skip_step1and2`.
- 4. Per-exposure DAO cataloging arrays via `crowdsource_catalogs_long.py`.
+ 4. Per-exposure iter1 DAO cataloging arrays via `crowdsource_catalogs_long.py`.
  5. Cross-filter merge via `merge_catalogs.py --merge-singlefields`.
 
-Defaults:
+Iter2/iter3/iter4 are NOT included — run `submit_full_chain.sh` /
+`run_iter3_cataloging.sh` / `run_iter4resbgrefit.sh` afterwards.
 
- * cloudef: proposal `2092`, fields `002,005` (Cloud E + Cloud F), filters `F162M,F210M,F360M,F480M`, reference filter `F210M`
- * sgrc: proposal `4147`, field `012`, filters `F115W,F162M,F182M,F212N,F360M,F405N,F470N,F480M`, reference filter `F212N`
- * sgrb2: proposal `5365`, field `001`, filters `F150W,F182M,F187N,F210M,F212N,F300M,F360M,F405N,F410M,F466N,F480M`, reference filter `F210M`
- * arches: proposal `2045`, field `001`, filters `F212N,F323N`, reference filter `F212N`
- * quintuplet: proposal `2045`, field `003`, filters `F212N,F323N`, reference filter `F212N`
- * sgra: proposal `1939`, field `001`, filters `F115W,F212N,F405N`, reference filter `F212N`
+**Entry points (one per target):**
 
-You can override these with environment variables before launching, for example:
+ * `run_full_pipeline_common.sh <target>` — generic per-target runner.
+   Supports `cloudef sgrc sgrb2 arches quintuplet sgra gc2211`.
+ * `run_full_pipeline_<target>.sh` — thin per-target wrappers
+   (`arches`, `cloudef`, `quintuplet`, `sgra`, `sgrb2`, `sgrc`).
+ * `run_full_pipeline_gc2211.sh` — wraps `_common.sh` and loops over the
+   5 gc2211 obs IDs (one full pipeline per obs).  Required because each
+   gc2211 obs is a separate field with its own filter set.
+ * `run_full_pipeline_cloudef_sgrc.sh` — multi-target launcher.  Despite
+   the name, runs the full pipeline for whatever target list you pass
+   on the command line, OR a default list of
+   `cloudef sgrc sgrb2 arches quintuplet sgra` when called with no
+   args.  **Does NOT include brick or gc2211 in its default list** —
+   brick is reduced separately (see below), and gc2211 needs its own
+   per-obs wrapper.
+
+**Brick is handled separately.**  Proposal 2221 (narrowband) and
+proposal 1182 (broadband) have historical per-frame outputs already on
+disk under `/orange/adamginsburg/jwst/brick/`.  There is no
+`run_full_pipeline_brick.sh`; bring brick through `submit_full_chain.sh`
+(handles iter1/iter2/merge/iter3) once per (target, filter, module),
+where `target` is `brick` (2221) or `brick-1182` (1182).  See the
+**iter1+ cataloging** example below.
+
+#### Copy-pastable run examples
+
+From `brick2221/shellscripts/`:
+
+```bash
+# --- Per-target full pipeline (steps 1-5: pipeline + refcat + iter1 merge) ---
+
+bash run_full_pipeline_cloudef.sh        # cloudef (auto-loops obs 002 + 005)
+bash run_full_pipeline_sgrc.sh           # sgrc
+bash run_full_pipeline_sgrb2.sh          # sgrb2
+bash run_full_pipeline_arches.sh         # arches
+bash run_full_pipeline_quintuplet.sh     # quintuplet
+bash run_full_pipeline_sgra.sh           # sgra
+bash run_full_pipeline_gc2211.sh         # gc2211 (auto-loops obs 023 028 046 049 050)
+
+# Single gc2211 obs only:
+GC2211_OBS=028 bash run_full_pipeline_gc2211.sh
+
+# Multi-target convenience launcher (default list: cloudef sgrc sgrb2 arches quintuplet sgra):
+bash run_full_pipeline_cloudef_sgrc.sh
+# Or a custom subset:
+bash run_full_pipeline_cloudef_sgrc.sh cloudef sgrc
+
+# --- iter1 + iter2 + iter2-merge + iter3-launch chain (per filter+module) ---
+# submit_full_chain.sh <target> <filter> <module> [tag] [extra_dep]
+
+bash submit_full_chain.sh brick        F405N merged V8   # proposal 2221 narrowband
+bash submit_full_chain.sh brick-1182   F115W merged V8   # proposal 1182 broadband
+bash submit_full_chain.sh cloudc       F410M merged V8
+bash submit_full_chain.sh cloudef      F480M merged V8   # auto-loops obs 002 + 005
+bash submit_full_chain.sh sickle       F470N nrcb  V8
+bash submit_full_chain.sh sgrb2        F212N merged V8
+bash submit_full_chain.sh sgra         F212N merged V8
+bash submit_full_chain.sh arches       F212N merged V8
+bash submit_full_chain.sh quintuplet   F212N merged V8
+bash submit_full_chain.sh sgrc         F212N merged V8
+bash submit_full_chain.sh gc2211-028   F277W merged V8   # per-obs (one of 023/028/046/049/050)
+
+# --- iter3 launch only (assumes iter2 done) ---
+bash run_iter3_cataloging.sh --target brick
+bash run_iter3_cataloging.sh --target brick-1182
+bash run_iter3_cataloging.sh --target cloudef           # loops obs 002 + 005
+bash run_iter3_cataloging.sh --target gc2211-046
+
+# --- iter4 refinement (assumes iter3 done) ---
+bash run_iter4resbgrefit.sh --target sickle
+bash run_iter4resbgrefit.sh --target brick
+bash run_iter4resbgrefit.sh --target sgrb2
+```
+
+#### Defaults (full pipeline runners + `submit_full_chain.sh`)
+
+Proposal id / field(s) / filters / reference filter used when no env-var
+override is given.  Multi-obs targets are marked **bold**.
+
+ * **brick**:       proposal `2221`, field `001`, filters `F182M,F187N,F212N,F405N,F410M,F466N`, reference filter `F405N`
+ * **brick-1182**:  proposal `1182`, field `004`, filters `F115W,F200W,F356W,F444W`, reference filter `F405N` (cross-proposal — brick narrowband seed)
+ * **cloudc**:      proposal `2221`, field `002`, filters `F182M,F187N,F212N,F405N,F410M,F466N`, reference filter `F405N`
+ * **cloudef**:     proposal `2092`, fields **`002,005`** (Cloud E + Cloud F), filters `F162M,F210M,F360M,F480M`, reference filter `F210M` (`merge_ref_filter=f360m`)
+ * **sgrc**:        proposal `4147`, field `012`, filters `F115W,F162M,F182M,F212N,F360M,F405N,F470N,F480M`, reference filter `F212N`
+ * **sgrb2**:       proposal `5365`, field `001`, filters `F150W,F182M,F187N,F210M,F212N,F300M,F360M,F405N,F410M,F466N,F480M`, reference filter `F210M`
+ * **sgra**:        proposal `1939`, field `001`, filters `F115W,F212N,F405N`, reference filter `F212N`
+ * **arches**:      proposal `2045`, field `001`, filters `F212N,F323N`, reference filter `F212N`
+ * **quintuplet**:  proposal `2045`, field `003`, filters `F212N,F323N`, reference filter `F212N`
+ * **sickle**:      proposal `3958`, field `007`, filters `F187N,F210M,F335M,F470N,F480M`, reference filter `F470N`
+ * **gc2211**:      proposal `2211`, obs **`023, 028, 046, 049, 050`** (each is its own field; launched per-obs by `run_full_pipeline_gc2211.sh`).
+   - obs 028: filters `F150W,F277W`, reference filter `F150W`
+   - obs 023/046/049/050: filters `F200W,F277W`, reference filter `F200W`
+   - `merge_ref_filter=F277W` (only filter common to all five obs)
+
+Override defaults with env vars before launching, e.g.:
 
  * `CLOUDEF_FIELD`, `CLOUDEF_FIELDS` (CSV for multi-obs), `CLOUDEF_FILTERS`, `CLOUDEF_REF_FILTER`
  * `SGRC_FIELD`, `SGRC_FILTERS`, `SGRC_REF_FILTER`
@@ -221,5 +306,6 @@ You can override these with environment variables before launching, for example:
  * `ARCHES_FIELD`, `ARCHES_FILTERS`, `ARCHES_REF_FILTER`
  * `QUINTUPLET_FIELD`, `QUINTUPLET_FILTERS`, `QUINTUPLET_REF_FILTER`
  * `SGRA_FIELD`, `SGRA_FILTERS`, `SGRA_REF_FILTER`
+ * `GC2211_OBS` (CSV subset of `023,028,046,049,050`)
  * `MODULES` (default `merged`)
- * `ARRAY_RANGE` (default `0-23`)
+ * `ARRAY_RANGE` (default `0-23`; auto-sized from destreak file count once those exist)
