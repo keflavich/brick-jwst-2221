@@ -30,36 +30,55 @@
 #
 # ----- Per-target examples -----
 #
-# brick (2221 narrowband):
-#   submit_manual_pipeline.sh brick F405N merged
-#   # multi-filter cross-band seed engages iter7 (m7):
+# IMPORTANT: the <filter> argument is passed verbatim to --filternames.
+# Pass a SINGLE filter for a single-filter run (no m7 cross-band seed)
+# or a COMMA-SEPARATED list to engage the m7 cross-band seed across all
+# given filters.  The canonical full-coverage call for each target is
+# shown FIRST below; minimal single-filter calls are also shown for
+# quick smoke-tests.
+#
+# brick (2221 narrowband, 6 filters):
 #   submit_manual_pipeline.sh brick F182M,F187N,F212N,F405N,F410M,F466N merged
+#   # single-filter smoke test:
+#   submit_manual_pipeline.sh brick F405N merged
 #
-# brick-1182 (1182 broadband; outputs land under /jwst/brick/):
-#   submit_manual_pipeline.sh brick-1182 F115W merged
+# brick-1182 (1182 broadband, 4 filters; outputs under /jwst/brick/):
 #   submit_manual_pipeline.sh brick-1182 F115W,F200W,F356W,F444W merged
+#   # single-filter:
+#   submit_manual_pipeline.sh brick-1182 F115W merged
 #
-# cloudc (2221 obs 002):
+# cloudc (2221 obs 002, 6 filters):
+#   submit_manual_pipeline.sh cloudc F182M,F187N,F212N,F405N,F410M,F466N merged
 #   submit_manual_pipeline.sh cloudc F410M merged
 #
-# sickle (3958 obs 007; ref filter f470n):
+# sickle (3958 obs 007, 5 filters):
+#   submit_manual_pipeline.sh sickle F187N,F210M,F335M,F470N,F480M nrcb
 #   submit_manual_pipeline.sh sickle F470N nrcb
 #
-# sgrb2 (SPECIAL: LW uses align_o001_crf, SW uses destreak_o001_crf):
-#   submit_manual_pipeline.sh sgrb2 F212N nrcb         # SW
-#   submit_manual_pipeline.sh sgrb2 F360M nrcb         # LW
-#   # Mixed SW+LW in ONE call is rejected; split per family:
-#   submit_manual_pipeline.sh sgrb2 F210M,F212N nrcb           # SW family
-#   submit_manual_pipeline.sh sgrb2 F300M,F360M,F405N,F410M,F466N,F480M nrcb  # LW family
+# sgrb2 (SPECIAL: LW uses align_o001_crf, SW uses destreak_o001_crf).
+#   Multi-filter calls that mix SW+LW families are REJECTED; split into
+#   two calls.  Per-family canonical full coverage:
+#     SW: submit_manual_pipeline.sh sgrb2 F150W,F182M,F187N,F210M,F212N nrcb
+#     LW: submit_manual_pipeline.sh sgrb2 F300M,F360M,F405N,F410M,F466N,F480M nrcb
+#   # single-filter:
+#     submit_manual_pipeline.sh sgrb2 F212N nrcb         # SW
+#     submit_manual_pipeline.sh sgrb2 F360M nrcb         # LW
 #
-# sgra (1939):
+# sgra (1939, 3 filters):
+#   submit_manual_pipeline.sh sgra F115W,F212N,F405N merged
 #   submit_manual_pipeline.sh sgra F212N merged
 #
-# arches / quintuplet (2045):
+# arches (2045 obs 001, 2 filters):
+#   submit_manual_pipeline.sh arches F212N,F323N merged
+#   # single-filter (NO m7 seed):
 #   submit_manual_pipeline.sh arches F212N merged
+#
+# quintuplet (2045 obs 003, 2 filters):
+#   submit_manual_pipeline.sh quintuplet F212N,F323N merged
 #   submit_manual_pipeline.sh quintuplet F212N merged
 #
-# sgrc (4147):
+# sgrc (4147 obs 012, 8 filters):
+#   submit_manual_pipeline.sh sgrc F115W,F162M,F182M,F212N,F360M,F405N,F470N,F480M merged
 #   submit_manual_pipeline.sh sgrc F212N merged
 #
 # cloudef (SPECIAL: TWO obs 002 + 005 reduced together).

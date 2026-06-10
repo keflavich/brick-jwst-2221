@@ -217,37 +217,53 @@ submit_manual_pipeline.sh <target> <filter[,filter,...]> <module> [tag] [extra_d
   SW filters and `nrcblong` for LW filters within one run.
 - Use `merged` to process all detectors via the module-merging codepath.
 
-**Multi-filter cross-band seed (m7)**: pass multiple filters
-comma-separated.  m7 unions the per-filter vetted m6 catalogs into a
-cross-band seed before the final pass.  Multi-filter calls must share
-the same `each_suffix` family — sgrb2 LW/SW mixes are rejected (split
-into two calls; see below).
+**The `<filter>` argument is passed verbatim to `--filternames`.**  A
+single filter token = single-filter run (no m7 cross-band seed).
+COMMA-SEPARATED filters engage the m7 cross-band seed across all given
+filters.  The full-coverage call for each target is **multi-filter**;
+single-filter calls are only useful for smoke tests on one band.
+
+Multi-filter calls must share the same `each_suffix` family — sgrb2
+LW/SW mixes are rejected by the script (split into two calls; see
+"Special-case targets" below).
 
 #### Per-target copy-pastable examples
 
+The first line for each target is the canonical full-coverage call
+(multi-filter, engages m7).  The second line is a single-filter
+smoke-test.
+
 ```bash
-# brick (proposal 2221 narrowband)
-bash submit_manual_pipeline.sh brick F405N merged
+# brick (proposal 2221 narrowband, 6 filters)
 bash submit_manual_pipeline.sh brick F182M,F187N,F212N,F405N,F410M,F466N merged
+bash submit_manual_pipeline.sh brick F405N merged
 
-# brick-1182 (proposal 1182 broadband; outputs land under /jwst/brick/)
-bash submit_manual_pipeline.sh brick-1182 F115W merged
+# brick-1182 (proposal 1182 broadband, 4 filters; outputs under /jwst/brick/)
 bash submit_manual_pipeline.sh brick-1182 F115W,F200W,F356W,F444W merged
+bash submit_manual_pipeline.sh brick-1182 F115W merged
 
-# cloudc (proposal 2221 obs 002)
+# cloudc (proposal 2221 obs 002, 6 filters)
+bash submit_manual_pipeline.sh cloudc F182M,F187N,F212N,F405N,F410M,F466N merged
 bash submit_manual_pipeline.sh cloudc F410M merged
 
-# sickle (proposal 3958 obs 007)
+# sickle (proposal 3958 obs 007, 5 filters)
+bash submit_manual_pipeline.sh sickle F187N,F210M,F335M,F470N,F480M nrcb
 bash submit_manual_pipeline.sh sickle F470N nrcb
 
-# sgra (proposal 1939)
+# sgra (proposal 1939, 3 filters)
+bash submit_manual_pipeline.sh sgra F115W,F212N,F405N merged
 bash submit_manual_pipeline.sh sgra F212N merged
 
-# arches / quintuplet (proposal 2045)
+# arches (proposal 2045 obs 001, 2 filters)
+bash submit_manual_pipeline.sh arches F212N,F323N merged
 bash submit_manual_pipeline.sh arches F212N merged
+
+# quintuplet (proposal 2045 obs 003, 2 filters)
+bash submit_manual_pipeline.sh quintuplet F212N,F323N merged
 bash submit_manual_pipeline.sh quintuplet F212N merged
 
-# sgrc (proposal 4147)
+# sgrc (proposal 4147 obs 012, 8 filters)
+bash submit_manual_pipeline.sh sgrc F115W,F162M,F182M,F212N,F360M,F405N,F470N,F480M merged
 bash submit_manual_pipeline.sh sgrc F212N merged
 ```
 
@@ -258,10 +274,13 @@ use `destreak_o001_crf`.  Multi-filter calls that mix LW + SW are
 rejected by the script; split into two calls per family:
 
 ```bash
-# SW family
-bash submit_manual_pipeline.sh sgrb2 F210M,F212N nrcb
-# LW family
+# SW family (canonical full coverage, 5 filters)
+bash submit_manual_pipeline.sh sgrb2 F150W,F182M,F187N,F210M,F212N nrcb
+# LW family (canonical full coverage, 6 filters)
 bash submit_manual_pipeline.sh sgrb2 F300M,F360M,F405N,F410M,F466N,F480M nrcb
+# Single-filter smoke tests
+bash submit_manual_pipeline.sh sgrb2 F212N nrcb   # SW
+bash submit_manual_pipeline.sh sgrb2 F360M nrcb   # LW
 ```
 
 **cloudef** (proposal 2092) — two obs (`002` Cloud E, `005` Cloud F)
