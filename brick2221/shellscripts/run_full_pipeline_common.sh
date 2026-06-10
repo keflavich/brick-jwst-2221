@@ -25,7 +25,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: $(basename "$0") <target>" >&2
-    echo "Targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211" >&2
+    echo "Targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211, wd1, wd2" >&2
     exit 2
 fi
 
@@ -125,8 +125,32 @@ set_target_defaults() {
             DEF_REF_FILTER=F200W
             DEF_MERGE_REF_FILTER=f277w
             ;;
+        wd1)
+            # Westerlund 1 (Guarcello prop 1905, Cycle 1).  obs=001 is the
+            # main cluster pointing.  obs=003 is a control field (CF) ~10
+            # arcmin off-cluster, much shallower coverage (F115W+F277W).
+            # Default to obs=001 for the full filter set.  Wd1 is at
+            # l~339, b~-0.4 -- outside the deep Galactic Center, so Gaia
+            # DR3 is the right astrometric reference (NOT GNS).
+            DEF_PROPOSAL_ID=1905
+            DEF_FIELD=001
+            DEF_FILTERS=F115W,F150W,F164N,F187N,F200W,F212N,F277W,F323N,F405N,F444W,F466N
+            DEF_REF_FILTER=F212N
+            DEF_MERGE_REF_FILTER=f405n
+            ;;
+        wd2)
+            # Westerlund 2 (Guarcello prop 3523, Cycle 2).  obs=005 is
+            # the main cluster; obs=003 is the control field.  Wd2 sits in
+            # the Carina arm (l~284, b~-0.3), far from the GC -- Gaia DR3
+            # is the correct astrometric reference.
+            DEF_PROPOSAL_ID=3523
+            DEF_FIELD=005
+            DEF_FILTERS=F115W,F150W,F162M,F164N,F182M,F187N,F200W,F212N,F250M,F277W,F300M,F323N,F335M,F405N,F410M,F444W,F466N
+            DEF_REF_FILTER=F212N
+            DEF_MERGE_REF_FILTER=f405n
+            ;;
         *)
-            echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211" >&2
+            echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211, wd1, wd2" >&2
             exit 2
             ;;
     esac
