@@ -259,15 +259,29 @@ submit_target_flow() {
 
     first_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "" "")
 
-    refcat_jobid=$(sbatch --parsable --dependency=afterok:${first_pass_dep} \
-        --job-name="webb-refcat-${name}" \
-        --output="${logdir}/webb-refcat-${name}_%j.log" \
-        --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
-        --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
-        --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${refcat_script} --target=${name} --proposal-id=${proposal_id} --field=${field} --filter=${ref_filter} --generate-catalogs")
-    echo "Submitted reference-catalog job ${refcat_jobid} for ${name}"
+    # Gaia-refcat targets (wd1, wd2, w51) already have a static
+    # ``catalogs/gaia_refcat.fits`` written by ``build_gaia_refcat.py``;
+    # the VVV/GNS-bootstrap refcat builder does not work outside the GC
+    # (no GNS/VVV coverage in Carina/disk fields) and would fail with
+    # "No sources found in J/A+A/653/A133/central".  Skip it and feed the
+    # first-pass dependency straight into the second pass.
+    case "${name}" in
+        wd1|wd2|w51)
+            echo "Skipping reference-catalog build for ${name} (Gaia DR3 refcat is static at catalogs/gaia_refcat.fits)"
+            second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${first_pass_dep}")
+            ;;
+        *)
+            refcat_jobid=$(sbatch --parsable --dependency=afterok:${first_pass_dep} \
+                --job-name="webb-refcat-${name}" \
+                --output="${logdir}/webb-refcat-${name}_%j.log" \
+                --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
+                --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
+                --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${refcat_script} --target=${name} --proposal-id=${proposal_id} --field=${field} --filter=${ref_filter} --generate-catalogs")
+            echo "Submitted reference-catalog job ${refcat_jobid} for ${name}"
 
-    second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${refcat_jobid}")
+            second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${refcat_jobid}")
+            ;;
+    esac
 
     local -a fields=()
     IFS=',' read -r -a fields <<< "${fields_csv}"
