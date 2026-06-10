@@ -40,6 +40,25 @@ across four iterative passes.  Every pass runs the same script
 `brick2221.analysis.crowdsource_catalogs_long`) on a per-frame basis,
 but with different inputs and goals.
 
+> **New default photometry pipeline (2026-06-09):** the manual-iteration
+> pipeline (`jwst_gc_pipeline.photometry.cataloging.run_manual_pipeline`)
+> replaces `IterativePSFPhotometry` as **the** default PSF-photometry
+> path.  It runs the m12 → m3 → m4 → m5 → m6 → m7 phases in-process as a
+> single non-array job (phases are sequential, per-frame fits within a
+> phase parallelize via `--parallel-workers`).  Output tokens are
+> `_m1.._m7`, `_dao_basic` — disjoint from the legacy `_iter2/_iter3/
+> _iter4` / `_daoiterative` products.  See
+> `jwst-gc-pipeline/PHOTOMETRY_PIPELINE.md` for the algorithm.
+>
+> Use `brick2221/shellscripts/submit_manual_pipeline.sh` to launch the
+> new path (see "Manual-iteration pipeline" section below).
+> `submit_full_chain.sh` (legacy iter1→iter2→merge→iter3 chain) is
+> preserved until the in-flight brick rerun completes and will then
+> default to the manual path.
+>
+> The legacy iter1/iter2/iter3/iter4 description below is retained for
+> reference and remains accurate for the legacy path.
+
  1. **iter1 — basic per-frame DAO seed.** `crowdsource_catalogs_long.py
     --each-exposure --daophot --skip-crowdsource` (no `--iteration-label`).
     Finds peaks above noise on each per-frame destreak/crf image and runs
@@ -161,6 +180,125 @@ The analysis has been done haphazardly in notebooks, but then I tried to reconci
  * `ColorVsCOIceAnalysis.ipynb` - makes several color-color plots
 
 
+
+### Manual-iteration pipeline (new default, 2026-06-09)
+
+The new default PSF-photometry pipeline (`run_manual_pipeline` in
+`jwst_gc_pipeline.photometry.cataloging`) is launched via
+`brick2221/shellscripts/submit_manual_pipeline.sh`.  Phases m12 → m3 →
+m4 → m5 → m6 (→ m7 if multi-filter) run sequentially in one process;
+per-frame fits inside each phase parallelize via
+`--parallel-workers=<N>` (defaults to `--cpus-per-task`).
+
+#### Defaults
+
+| env var | default | meaning |
+|---------|---------|---------|
+| `MANUAL_CPUS` | 32 | `--cpus-per-task` AND `--parallel-workers` |
+| `MANUAL_MEM`  | 256gb | `--mem` per node |
+| `MANUAL_TIME` | 96:00:00 | walltime |
+
+Override at launch, e.g.:
+
+```bash
+MANUAL_CPUS=64 MANUAL_MEM=512gb \
+  bash submit_manual_pipeline.sh sgrb2 F212N nrcb V9
+```
+
+#### Usage
+
+```
+submit_manual_pipeline.sh <target> <filter[,filter,...]> <module> [tag] [extra_dep]
+```
+
+**Module token rules** (see `PHOTOMETRY_PIPELINE.md`):
+
+- A single token `nrcb` (or `nrca`) auto-expands to `nrcb1..nrcb4` for
+  SW filters and `nrcblong` for LW filters within one run.
+- Use `merged` to process all detectors via the module-merging codepath.
+
+**Multi-filter cross-band seed (m7)**: pass multiple filters
+comma-separated.  m7 unions the per-filter vetted m6 catalogs into a
+cross-band seed before the final pass.  Multi-filter calls must share
+the same `each_suffix` family — sgrb2 LW/SW mixes are rejected (split
+into two calls; see below).
+
+#### Per-target copy-pastable examples
+
+```bash
+# brick (proposal 2221 narrowband)
+bash submit_manual_pipeline.sh brick F405N merged
+bash submit_manual_pipeline.sh brick F182M,F187N,F212N,F405N,F410M,F466N merged
+
+# brick-1182 (proposal 1182 broadband; outputs land under /jwst/brick/)
+bash submit_manual_pipeline.sh brick-1182 F115W merged
+bash submit_manual_pipeline.sh brick-1182 F115W,F200W,F356W,F444W merged
+
+# cloudc (proposal 2221 obs 002)
+bash submit_manual_pipeline.sh cloudc F410M merged
+
+# sickle (proposal 3958 obs 007)
+bash submit_manual_pipeline.sh sickle F470N nrcb
+
+# sgra (proposal 1939)
+bash submit_manual_pipeline.sh sgra F212N merged
+
+# arches / quintuplet (proposal 2045)
+bash submit_manual_pipeline.sh arches F212N merged
+bash submit_manual_pipeline.sh quintuplet F212N merged
+
+# sgrc (proposal 4147)
+bash submit_manual_pipeline.sh sgrc F212N merged
+```
+
+#### Special-case targets
+
+**sgrb2** (proposal 5365) — LW filters use `align_o001_crf`, SW filters
+use `destreak_o001_crf`.  Multi-filter calls that mix LW + SW are
+rejected by the script; split into two calls per family:
+
+```bash
+# SW family
+bash submit_manual_pipeline.sh sgrb2 F210M,F212N nrcb
+# LW family
+bash submit_manual_pipeline.sh sgrb2 F300M,F360M,F405N,F410M,F466N,F480M nrcb
+```
+
+**cloudef** (proposal 2092) — two obs (`002` Cloud E, `005` Cloud F)
+that must be reduced together.  `submit_manual_pipeline.sh cloudef`
+auto-loops the `fields` array and submits ONE sbatch per obs.  Each
+obs's `run_manual_pipeline` produces per-obs outputs under
+`/orange/adamginsburg/jwst/cloudef/`.  Cross-obs catalog union is
+a separate manual step (call `merge_catalogs.py` over the two output
+trees once both jobs complete; cross-obs auto-union in the manual
+pipeline is a TODO).
+
+```bash
+bash submit_manual_pipeline.sh cloudef F210M nrcb
+bash submit_manual_pipeline.sh cloudef F162M,F210M,F360M,F480M nrcb
+```
+
+**gc2211** (proposal 2211, asteroid survey, 5 GC pointings) — each obs
+is its own launcher target (`gc2211-023`, `gc2211-028`, `gc2211-046`,
+`gc2211-049`, `gc2211-050`).  Filter sets vary per obs.  Submit one
+call per obs:
+
+```bash
+bash submit_manual_pipeline.sh gc2211-023 F200W,F277W merged
+bash submit_manual_pipeline.sh gc2211-028 F150W,F277W merged   # obs 028 is F150W not F200W
+bash submit_manual_pipeline.sh gc2211-046 F200W,F277W merged
+bash submit_manual_pipeline.sh gc2211-049 F200W,F277W merged
+bash submit_manual_pipeline.sh gc2211-050 F200W,F277W merged
+```
+
+#### Output locations
+
+Per-frame and merged outputs land under
+`<basepath>/<filter>/pipeline/` and `<basepath>/catalogs/` with tokens
+`_m1.._m7`, `_dao_basic`, plus `_vetted` and `_allcols` catalog
+variants (see PHOTOMETRY_PIPELINE.md §Outputs).  These are disjoint
+from the legacy `_iter2/_iter3/_iter4` tokens — both paths coexist in
+one tree without collision.
 
 ### Setup for Reduction
 

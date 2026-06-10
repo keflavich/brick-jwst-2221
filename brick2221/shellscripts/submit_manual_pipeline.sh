@@ -17,15 +17,76 @@
 # Usage:
 #   submit_manual_pipeline.sh <target> <filter[,filter,...]> <module> [tag] [extra_dep]
 #
-# Examples:
-#   # Single-filter test
-#   submit_manual_pipeline.sh sgrb2 F212N nrcb V9
-#   # Multi-filter (engages m7 cross-band seed):
-#   submit_manual_pipeline.sh sgrb2 F210M,F212N nrcb V9
+# Module token rules (see PHOTOMETRY_PIPELINE.md):
+#   - A single token "nrcb" auto-expands to "nrcb1..nrcb4" for SW filters
+#     and "nrcblong" for LW filters; same for "nrca".
+#   - For mixed SW/LW multi-filter runs, this script forbids the call only
+#     for sgrb2 (LW uses align_o<NNN>_crf, SW uses destreak_o<NNN>_crf).
+#     Other targets use the same suffix family so SW/LW in one call works.
 #
-# The legacy iter1->iter2->merge->iter3 chain is in submit_full_chain.sh
-# (kept for in-flight brick rerun).  Eventually that script will also
-# default to this path; this companion runner is the migration target.
+# Resource env-var overrides (defaults: 32 CPUs / 256 GB / 96h):
+#   MANUAL_CPUS=64 MANUAL_MEM=512gb MANUAL_TIME=72:00:00 \
+#     submit_manual_pipeline.sh <target> <filter> <module>
+#
+# ----- Per-target examples -----
+#
+# brick (2221 narrowband):
+#   submit_manual_pipeline.sh brick F405N merged
+#   # multi-filter cross-band seed engages iter7 (m7):
+#   submit_manual_pipeline.sh brick F182M,F187N,F212N,F405N,F410M,F466N merged
+#
+# brick-1182 (1182 broadband; outputs land under /jwst/brick/):
+#   submit_manual_pipeline.sh brick-1182 F115W merged
+#   submit_manual_pipeline.sh brick-1182 F115W,F200W,F356W,F444W merged
+#
+# cloudc (2221 obs 002):
+#   submit_manual_pipeline.sh cloudc F410M merged
+#
+# sickle (3958 obs 007; ref filter f470n):
+#   submit_manual_pipeline.sh sickle F470N nrcb
+#
+# sgrb2 (SPECIAL: LW uses align_o001_crf, SW uses destreak_o001_crf):
+#   submit_manual_pipeline.sh sgrb2 F212N nrcb         # SW
+#   submit_manual_pipeline.sh sgrb2 F360M nrcb         # LW
+#   # Mixed SW+LW in ONE call is rejected; split per family:
+#   submit_manual_pipeline.sh sgrb2 F210M,F212N nrcb           # SW family
+#   submit_manual_pipeline.sh sgrb2 F300M,F360M,F405N,F410M,F466N,F480M nrcb  # LW family
+#
+# sgra (1939):
+#   submit_manual_pipeline.sh sgra F212N merged
+#
+# arches / quintuplet (2045):
+#   submit_manual_pipeline.sh arches F212N merged
+#   submit_manual_pipeline.sh quintuplet F212N merged
+#
+# sgrc (4147):
+#   submit_manual_pipeline.sh sgrc F212N merged
+#
+# cloudef (SPECIAL: TWO obs 002 + 005 reduced together).
+#   This script auto-loops fields=(002 005) and submits ONE sbatch PER
+#   obs.  Each obs gets an independent run_manual_pipeline; the per-obs
+#   outputs live under /orange/adamginsburg/jwst/cloudef/.  Final
+#   cross-obs catalog requires a separate cross-obs merge step (TODO);
+#   for now, run downstream union via merge_catalogs.py manually.
+#   submit_manual_pipeline.sh cloudef F210M nrcb
+#   submit_manual_pipeline.sh cloudef F162M,F210M,F360M,F480M nrcb
+#
+# gc2211 (SPECIAL: 5 separate GC pointings = 5 launcher targets).
+#   Each obs id is its own launcher target.  Filter sets differ per obs:
+#     obs 028: F150W,F277W;  obs 023/046/049/050: F200W,F277W.
+#   Submit one call per obs:
+#     submit_manual_pipeline.sh gc2211-023 F200W,F277W merged
+#     submit_manual_pipeline.sh gc2211-028 F150W,F277W merged
+#     submit_manual_pipeline.sh gc2211-046 F200W,F277W merged
+#     submit_manual_pipeline.sh gc2211-049 F200W,F277W merged
+#     submit_manual_pipeline.sh gc2211-050 F200W,F277W merged
+#   Or loop over all 5 (per-obs filter set varies; do them individually
+#   for clarity).
+#
+# ----- Legacy iter1->iter2->merge->iter3 chain -----
+# submit_full_chain.sh is preserved for the in-flight brick rerun.  Once
+# that completes, submit_full_chain.sh will default to this manual path
+# too; this companion runner is the migration target.
 
 set -e
 
