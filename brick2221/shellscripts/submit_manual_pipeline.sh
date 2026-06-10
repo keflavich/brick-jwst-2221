@@ -165,6 +165,18 @@ case "$target" in
     basepath=/orange/adamginsburg/jwst/gc2211 ; proposal_id=2211
     fld="${target#gc2211-}" ; fields=("${fld}") ; python_target=gc2211
     logdir=/blue/adamginsburg/adamginsburg/logs/gc2211_jwst/ ;;
+  wd1)
+    basepath=/orange/adamginsburg/jwst/wd1 ; proposal_id=1905
+    fields=(001)
+    logdir=/blue/adamginsburg/adamginsburg/logs/wd1_jwst/ ;;
+  wd2)
+    basepath=/orange/adamginsburg/jwst/wd2 ; proposal_id=3523
+    fields=(005)
+    logdir=/blue/adamginsburg/adamginsburg/logs/wd2_jwst/ ;;
+  w51)
+    basepath=/orange/adamginsburg/jwst/w51 ; proposal_id=6151
+    fields=(001)
+    logdir=/blue/adamginsburg/adamginsburg/logs/w51_jwst/ ;;
   *) echo "Unknown target: $target" >&2 ; exit 2 ;;
 esac
 

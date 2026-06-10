@@ -25,7 +25,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: $(basename "$0") <target>" >&2
-    echo "Targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211, wd1, wd2" >&2
+    echo "Targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211, wd1, wd2, w51" >&2
     exit 2
 fi
 
@@ -138,6 +138,17 @@ set_target_defaults() {
             DEF_REF_FILTER=F212N
             DEF_MERGE_REF_FILTER=f405n
             ;;
+        w51)
+            # W51 NIRCam imaging (Goddard prop 6151 obs 001, plus prop 1182
+            # obs 002 short-wave coverage).  W51 sits in the disk (l~49, b~-0.4),
+            # NOT the Galactic Center, so Gaia DR3 is the right astrometric
+            # reference (was UKIDSS/VVV in prior runs).
+            DEF_PROPOSAL_ID=6151
+            DEF_FIELD=001
+            DEF_FILTERS=F115W,F140M,F150W,F162M,F182M,F187N,F200W,F212N,F356W,F405N,F410M,F444W
+            DEF_REF_FILTER=F212N
+            DEF_MERGE_REF_FILTER=f405n
+            ;;
         wd2)
             # Westerlund 2 (Guarcello prop 3523, Cycle 2).  obs=005 is
             # the main cluster; obs=003 is the control field.  Wd2 sits in
@@ -150,7 +161,7 @@ set_target_defaults() {
             DEF_MERGE_REF_FILTER=f405n
             ;;
         *)
-            echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211, wd1, wd2" >&2
+            echo "Unknown target: ${name}. Supported targets: cloudef, sgrc, sgrb2, arches, quintuplet, sgra, gc2211, wd1, wd2, w51" >&2
             exit 2
             ;;
     esac
