@@ -271,13 +271,24 @@ submit_target_flow() {
             second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${first_pass_dep}")
             ;;
         *)
+            # GC fields inside the Galactic Center but OUTSIDE GALACTICNUCLEUS
+            # (GNS, J/A+A/653/A133) coverage must bootstrap the refcat from VVV
+            # only: the GNS query returns 0 sources there and hard-fails with
+            # "No sources found in J/A+A/653/A133/central".  VVV covers them.
+            # Verified outside GNS: cloudef (Cloud E/F at RA~266.47-266.65, Dec
+            # ~-28.48--28.50; GNS only covers RA~266.51-266.56, Dec~-28.71--28.76)
+            # and sgrc (documented in make_reference --skip-gns help).
+            case "${name}" in
+                cloudef|sgrc) refcat_skip_gns="--skip-gns" ;;
+                *)            refcat_skip_gns="" ;;
+            esac
             refcat_jobid=$(sbatch --parsable --dependency=afterok:${first_pass_dep} \
                 --job-name="webb-refcat-${name}" \
                 --output="${logdir}/webb-refcat-${name}_%j.log" \
                 --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
                 --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
-                --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${refcat_script} --target=${name} --proposal-id=${proposal_id} --field=${field} --filter=${ref_filter} --generate-catalogs")
-            echo "Submitted reference-catalog job ${refcat_jobid} for ${name}"
+                --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${refcat_script} --target=${name} --proposal-id=${proposal_id} --field=${field} --filter=${ref_filter} --generate-catalogs ${refcat_skip_gns}")
+            echo "Submitted reference-catalog job ${refcat_jobid} for ${name} ${refcat_skip_gns:+(${refcat_skip_gns})}"
 
             second_pass_dep=$(submit_pipeline_filter_jobs "${name}" "${proposal_id}" "${fields_csv}" "${filters_csv}" "${MODULES}" "--skip_step1and2" "${refcat_jobid}")
             ;;
