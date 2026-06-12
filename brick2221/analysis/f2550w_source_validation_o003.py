@@ -48,15 +48,27 @@ BANDS = {
 }
 
 
+def _corrected(band):
+    """True if the band's file already carries the WCS correction (MIRIDRA
+    keyword written by apply_measured_miri_wcs_offsets / the v12+ builds);
+    applying the offsets again would double-correct."""
+    from astropy.io import fits as _f
+    return 'MIRIDRA' in _f.getheader(BANDS[band]['fn'], ext=1)
+
+
 def to_true(coords, band):
     """Measured position in `band`'s frame -> refcat ('true') frame."""
+    if _corrected(band):
+        return coords
     info = BANDS[band]
     return SkyCoord(ra=coords.ra - (info['dra'] * u.arcsec) / np.cos(coords.dec),
                     dec=coords.dec - info['ddec'] * u.arcsec)
 
 
 def to_band(coords, band):
-    """Refcat-frame position -> `band`'s (uncorrected) image frame."""
+    """Refcat-frame position -> `band`'s image frame."""
+    if _corrected(band):
+        return coords
     info = BANDS[band]
     return SkyCoord(ra=coords.ra + (info['dra'] * u.arcsec) / np.cos(coords.dec),
                     dec=coords.dec + info['ddec'] * u.arcsec)
