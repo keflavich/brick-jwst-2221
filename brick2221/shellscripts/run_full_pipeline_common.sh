@@ -139,7 +139,7 @@ set_target_defaults() {
             DEF_MERGE_REF_FILTER=f405n
             ;;
         w51)
-            # W51 NIRCam imaging (Goddard prop 6151 obs 001).  W51 sits in
+            # W51 NIRCam imaging (Yoo prop 6151 obs 001).  W51 sits in
             # the disk (l~49, b~-0.4), NOT the Galactic Center, so Gaia DR3
             # is the right astrometric reference (was UKIDSS/VVV in prior runs).
             # Prop 6151 NIRCam (per user 2026-06-13): F140M F162M F182M F187N
