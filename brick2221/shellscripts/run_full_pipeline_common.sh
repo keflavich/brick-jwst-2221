@@ -139,14 +139,18 @@ set_target_defaults() {
             DEF_MERGE_REF_FILTER=f405n
             ;;
         w51)
-            # W51 NIRCam imaging (Goddard prop 6151 obs 001, plus prop 1182
-            # obs 002 short-wave coverage).  W51 sits in the disk (l~49, b~-0.4),
-            # NOT the Galactic Center, so Gaia DR3 is the right astrometric
-            # reference (was UKIDSS/VVV in prior runs).
+            # W51 NIRCam imaging (Goddard prop 6151 obs 001).  W51 sits in
+            # the disk (l~49, b~-0.4), NOT the Galactic Center, so Gaia DR3
+            # is the right astrometric reference (was UKIDSS/VVV in prior runs).
+            # Prop 6151 NIRCam (per user 2026-06-13): F140M F162M F182M F187N
+            # F210M F335M F360M F405N F410M F480M.  Narrow medium filters
+            # are pupil-encoded (F150W2+F162M, F444W+F405N, etc.); pipeline
+            # passes --filternames= to PipelineRerunNIRCAM-LONG.py which
+            # resolves the FILTER/PUPIL combo via MAST query.
             DEF_PROPOSAL_ID=6151
             DEF_FIELD=001
-            DEF_FILTERS=F115W,F140M,F150W,F162M,F182M,F187N,F200W,F212N,F356W,F405N,F410M,F444W
-            DEF_REF_FILTER=F212N
+            DEF_FILTERS=F140M,F162M,F182M,F187N,F210M,F335M,F360M,F405N,F410M,F480M
+            DEF_REF_FILTER=F187N
             DEF_MERGE_REF_FILTER=f405n
             ;;
         wd2)
