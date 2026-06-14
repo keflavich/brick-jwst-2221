@@ -238,6 +238,7 @@ for fld in "${fields[@]}"; do
         --proposal_id=${proposal_id} --field=${fld} \
         --target=${python_target} --each-suffix=${each_suffix} \
         --each-exposure --daophot --skip-crowdsource --skip-if-done \
+        --max-group-size=${MANUAL_MAX_GROUP_SIZE:-10} \
         --parallel-workers=${CPUS}")
   submitted+=("${JOB}")
   echo "submitted manual-iter ${target}/o${fld}/${filter}/${module} = ${JOB}"
