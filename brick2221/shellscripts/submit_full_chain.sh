@@ -123,8 +123,22 @@ case "$target" in
     python_target=gc2211
     logdir=/blue/adamginsburg/adamginsburg/logs/gc2211_jwst/
     array_range="0-23" ;;
+  w51)
+    # W51 (Yoo prop 6151, obs 001).  SW filters have 64 frames; LW have 16.
+    # array_range="0-63" covers SW; extra tasks for LW skip gracefully.
+    basepath=/orange/adamginsburg/jwst/w51 ; proposal_id=6151
+    field=001 ; fields=(001) ; ref_filter=f405n
+    logdir=/blue/adamginsburg/adamginsburg/logs/w51_jwst/
+    array_range="0-63" ;;
+  wd1)
+    # Westerlund 1 (Guarcello prop 1905, obs 001).  SW filters have 96 frames; LW have 24.
+    # array_range="0-95" covers SW; extra tasks for LW skip gracefully.
+    basepath=/orange/adamginsburg/jwst/wd1 ; proposal_id=1905
+    field=001 ; fields=(001) ; ref_filter=f405n
+    logdir=/blue/adamginsburg/adamginsburg/logs/wd1_jwst/
+    array_range="0-95" ;;
   *) echo "Unknown target: $target" >&2
-     echo "Known targets: sickle brick brick-1182 cloudc sgrb2 sgra cloudef arches quintuplet sgrc gc2211-{023,028,046,049,050}" >&2
+     echo "Known targets: sickle brick brick-1182 cloudc sgrb2 sgra cloudef arches quintuplet sgrc gc2211-{023,028,046,049,050} w51 wd1" >&2
      exit 2 ;;
 esac
 

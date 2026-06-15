@@ -64,7 +64,7 @@ Options:
   --target NAME        Required. One of: sickle, brick, brick-1182, cloudc,
                        sgrb2, sgra, cloudef, arches, quintuplet, sgrc,
                        gc2211-023, gc2211-028, gc2211-046, gc2211-049,
-                       gc2211-050.
+                       gc2211-050, w51, wd1.
   --skip-seed-build    Do not rebuild the union seed catalog; reuse existing file.
   --residual-peaks     Pass --residual-peaks to the seed builder to inject bright
                        peaks from iter3 residual mosaics as additional seeds.
@@ -301,6 +301,36 @@ case "${target}" in
         merge_ref_filter=f277w
         mem_short=128gb
         mem_long=128gb
+        ;;
+    w51)
+        basepath=/orange/adamginsburg/jwst/w51
+        proposal_id=6151
+        field=001
+        each_suffix=destreak_o001_crf
+        default_filters=(F140M F162M F182M F187N F210M F335M F360M F405N F410M F480M)
+        # W51 has F405N; merge ref defaults to f405n.
+        logdir=/blue/adamginsburg/adamginsburg/logs/w51_jwst/
+        modules_short=(merged)
+        modules_long=(merged)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_w51.fits
+        mem_short=64gb
+        mem_long=32gb
+        ;;
+    wd1)
+        basepath=/orange/adamginsburg/jwst/wd1
+        proposal_id=1905
+        field=001
+        each_suffix=destreak_o001_crf
+        default_filters=(F115W F150W F164N F187N F200W F212N F277W F323N F405N F444W F466N)
+        # Wd1 has F405N; merge ref defaults to f405n.
+        logdir=/blue/adamginsburg/adamginsburg/logs/wd1_jwst/
+        modules_short=(merged)
+        modules_long=(merged)
+        module_long=merged
+        seed_path=${basepath}/catalogs/seed_union_iter3_wd1.fits
+        mem_short=64gb
+        mem_long=32gb
         ;;
     *)
         echo "unknown target: ${target}" >&2
