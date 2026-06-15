@@ -476,7 +476,7 @@ for current_field in "${fields[@]}"; do
     field="${current_field}"
     each_suffix="destreak_o${field}_crf"
 for filter in "${filters[@]}"; do
-    # Determine per-filter each_suffix (sgrb2 has two suffix types)
+    # Determine per-filter each_suffix (sgrb2 has two suffix types; wd1 F150W lacks destreak)
     if [[ "${target}" == "sgrb2" ]]; then
         case "${filter}" in
             F182M|F187N|F210M|F212N) current_each_suffix=destreak_o001_crf ;;
@@ -486,6 +486,12 @@ for filter in "${filters[@]}"; do
             F187N) current_array_range="0-47" ;;
             *)     current_array_range="0-23" ;;
         esac
+    elif [[ "${target}" == "wd1" ]]; then
+        case "${filter}" in
+            F150W) current_each_suffix=o001_crf ;;
+            *)     current_each_suffix=destreak_o001_crf ;;
+        esac
+        current_array_range="0-95"
     else
         current_each_suffix="${each_suffix}"
         current_array_range="0-23"

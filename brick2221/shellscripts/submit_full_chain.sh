@@ -157,6 +157,11 @@ get_each_suffix() {
       F182M|F187N|F210M|F212N) echo "destreak_o${fld}_crf" ;;
       *)                        echo "align_o${fld}_crf" ;;
     esac
+  elif [[ "$target" == "wd1" ]]; then
+    case "$filter" in
+      F150W) echo "o001_crf" ;;
+      *)     echo "destreak_o${fld}_crf" ;;
+    esac
   else
     echo "destreak_o${fld}_crf"
   fi
