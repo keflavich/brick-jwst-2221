@@ -200,11 +200,34 @@ get_each_suffix() {
 }
 
 # Per-target resource defaults; override via env vars.
-# Phases are sequential, but per-frame fits within a phase parallelize
-# via --parallel-workers. Default to a fat single-node config.
-MEM=${MANUAL_MEM:-256gb}
-CPUS=${MANUAL_CPUS:-32}
+# Phases are sequential, but per-frame fits within a phase parallelize via
+# --parallel-workers (one worker per detector-exposure).  To get the full
+# benefit we allocate ~1 CPU per frame: count the crf inputs for the HEAVIEST
+# filter in this run and size CPUS to that, capped at a single node
+# (MANUAL_CPU_CAP, default 128 = largest hpg-default node, since the in-process
+# ProcessPoolExecutor cannot span nodes).  Runs with <=cap frames then fit every
+# frame in one parallel batch.
+CPU_CAP=${MANUAL_CPU_CAP:-128}
+_max_frames=0
+for _f in ${filter//,/ }; do
+  _sfx=$(get_each_suffix "${fields[0]}" "$_f")
+  _n=$( (shopt -s nullglob; a=( "${basepath}/${_f^^}/pipeline/"*"${_sfx}.fits" ); echo ${#a[@]}) )
+  (( _n > _max_frames )) && _max_frames=$_n
+done
+if [[ -n "${MANUAL_CPUS:-}" ]]; then
+  CPUS=$MANUAL_CPUS
+elif (( _max_frames > 0 )); then
+  CPUS=$(( _max_frames < CPU_CAP ? _max_frames : CPU_CAP ))
+else
+  CPUS=32
+fi
+(( CPUS < 1 )) && CPUS=1
+# ~6 GB/worker (a SW 75k-source fit holds the 2048^2 frame + fit state); capped
+# by node RAM via Slurm.  Override with MANUAL_MEM.
+MEM=${MANUAL_MEM:-$(( CPUS * ${MANUAL_MEM_PER_CPU_GB:-6} ))gb}
 WALLTIME=${MANUAL_TIME:-96:00:00}
+PARTITION=${MANUAL_PARTITION:-hpg-default}
+echo "resources: ${_max_frames} frames (heaviest filter) -> CPUS=${CPUS} (cap ${CPU_CAP}) MEM=${MEM} partition=${PARTITION}" >&2
 
 submitted=()
 for fld in "${fields[@]}"; do
@@ -228,6 +251,7 @@ for fld in "${fields[@]}"; do
 
   JOB=$(sbatch --parsable $DEP \
     --account=astronomy-dept --qos=astronomy-dept-b \
+    --partition=${PARTITION} \
     --ntasks=1 --cpus-per-task=${CPUS} --nodes=1 \
     --mem=${MEM} --time=${WALLTIME} \
     --job-name=webb-manual-${target}-o${fld}-${filter//,/+}-${module}-${tag} \
