@@ -172,21 +172,23 @@ iter2_ids=()
 
 for fld in "${fields[@]}"; do
   each_suffix=$(get_each_suffix "$fld")
-  COMMON="--filternames=${filter} --modules=${module} --proposal_id=${proposal_id} --field=${fld} --target=${python_target} --each-suffix=${each_suffix} --each-exposure --daophot --skip-crowdsource --bundle-size=1 --skip-if-done"
+  COMMON="--filternames=${filter} --modules=${module} --proposal_id=${proposal_id} --field=${fld} --target=${python_target} --each-suffix=${each_suffix} --each-exposure --daophot --skip-crowdsource --skip-if-done"
 
-  ITER1=$(sbatch --parsable $DEP --array=${array_range} \
+  # No --array: manual-iteration pipeline is a single in-process job and
+  # must NOT run under a SLURM array (SLURM_ARRAY_TASK_ID must be unset).
+  ITER1=$(sbatch --parsable $DEP \
     --account=astronomy-dept --qos=astronomy-dept-b \
-    --ntasks=1 --cpus-per-task=4 --mem=64gb --time=24:00:00 \
+    --ntasks=1 --cpus-per-task=4 --mem=64gb --time=96:00:00 \
     --job-name=webb-cat-${target}-o${fld}-${filter}-${module}-iter1-${tag} \
-    --output=${logdir}/webb-cat-${target}-o${fld}-${filter}-${module}-iter1-${tag}_%j-%A_%a.log \
+    --output=${logdir}/webb-cat-${target}-o${fld}-${filter}-${module}-iter1-${tag}_%j.log \
     --wrap "export OMP_NUM_THREADS=1; ${PYTHON} ${SCRIPT} ${COMMON}")
   iter1_ids+=("${ITER1}")
 
-  ITER2=$(sbatch --parsable --dependency=afterok:${ITER1} --array=${array_range} \
+  ITER2=$(sbatch --parsable --dependency=afterok:${ITER1} \
     --account=astronomy-dept --qos=astronomy-dept-b \
-    --ntasks=1 --cpus-per-task=4 --mem=64gb --time=24:00:00 \
+    --ntasks=1 --cpus-per-task=4 --mem=64gb --time=96:00:00 \
     --job-name=webb-cat-${target}-o${fld}-${filter}-${module}-iter2-${tag} \
-    --output=${logdir}/webb-cat-${target}-o${fld}-${filter}-${module}-iter2-${tag}_%j-%A_%a.log \
+    --output=${logdir}/webb-cat-${target}-o${fld}-${filter}-${module}-iter2-${tag}_%j.log \
     --wrap "export OMP_NUM_THREADS=1; ${PYTHON} ${SCRIPT} ${COMMON} --iteration-label=iter2 --postprocess-residuals")
   iter2_ids+=("${ITER2}")
 done
