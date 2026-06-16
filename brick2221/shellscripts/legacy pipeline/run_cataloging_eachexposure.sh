@@ -4,8 +4,8 @@
 # (per-target + per-obs) and run_full_pipeline_common.sh.
 # Set ALLOW_OBSOLETE=1 to bypass.
 if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
-    echo "this code is obsolete; use submit_full_chain.sh <target> <filter> <module>" >&2
-    exit 0
+    echo "this code is obsolete; use submit_manual_pipeline.sh <target> <filter> <module>" >&2
+    exit 1
 fi
 
 # Submit per-exposure cataloging jobs for brick/cloudc, using bundle_size to

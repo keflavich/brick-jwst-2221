@@ -5,7 +5,7 @@
 # Set ALLOW_OBSOLETE=1 to bypass.
 if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
     echo "this code is obsolete; see README iter1-4 section" >&2
-    exit 0
+    exit 1
 fi
 
 sbatch --job-name=webb-cat-F405N-a-ds-bg --output=web-cat-F405N-a%j.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python39/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=F405N --desaturated --daophot --modules=nrca"

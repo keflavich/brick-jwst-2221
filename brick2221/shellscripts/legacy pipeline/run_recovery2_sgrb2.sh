@@ -3,8 +3,8 @@
 # OOM incident.  Use submit_full_chain.sh / run_full_pipeline_sgrb2.sh
 # going forward.  Set ALLOW_OBSOLETE=1 to bypass.
 if [[ "${ALLOW_OBSOLETE:-0}" != "1" ]]; then
-    echo "this code is obsolete (sgrb2 one-off recovery); use submit_full_chain.sh" >&2
-    exit 0
+    echo "this code is obsolete (sgrb2 one-off recovery); use submit_manual_pipeline.sh" >&2
+    exit 1
 fi
 
 # Recovery for sgrb2 after visualization-bug OOM kills:
