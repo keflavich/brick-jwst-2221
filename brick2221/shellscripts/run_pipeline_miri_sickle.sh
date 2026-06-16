@@ -8,8 +8,14 @@ python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 pipeline_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/reduction/PipelineMIRI.py
 
 proposal_id=3958
-# MIRI fields available in Sickle observations:
-# 001=t001, 002=t002, 003=t003
+# MIRI fields in program 3958:
+#   001=t001, 002=t002  -> the SICKLE  (land in /orange/.../jwst/sickle/)
+#   003=t003            -> the BRICK   (land in /orange/.../jwst/brick/)
+# NOTE: obs 003 is NOT the sickle -- it is the brick MIRI field.  Program
+# 3958 is shared, so PipelineMIRI routes o003 to the brick/ tree (see
+# field_to_reg_mapping in jwst_gc_pipeline/reduction/PipelineMIRI.py) to keep
+# its images + catalogs out of sickle/ and avoid name clashes.  This runner
+# can still submit all three obs; o003 simply lands under brick/.
 fields=${FIELDS:-001,002,003}
 filters=${FILTERS:-F770W,F1130W,F1500W}
 
