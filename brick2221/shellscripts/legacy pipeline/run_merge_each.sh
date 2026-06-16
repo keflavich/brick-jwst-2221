@@ -1,4 +1,14 @@
 logdir=/blue/adamginsburg/adamginsburg/brick_logs/
+# ============================================================
+# DEPRECATED -- legacy iter1-4 cataloging pipeline.
+# Superseded by the manual-iteration pipeline (default):
+#   submit_manual_pipeline.sh  -> jwst_gc_pipeline.photometry.cataloging
+# Retired to 'legacy pipeline/'. Kept for reference only.
+# ============================================================
+echo "DEPRECATED: $(basename "$0") belongs to the legacy iter1-4 cataloging" >&2
+echo "pipeline, superseded by submit_manual_pipeline.sh (manual-iteration path)." >&2
+echo "This script has been retired and no longer runs. Recover from git if needed." >&2
+exit 1
 python_exe=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 analysis_dir=/blue/adamginsburg/adamginsburg/jwst/brick/analysis
 basepath=/blue/adamginsburg/adamginsburg/jwst/brick
@@ -52,6 +62,20 @@ for filter in F212N F182M F187N; do
 	done
 done
 
+for filter in F410M F405N F466N; do
+	for module in nrca nrcb; do
+		submit_residual_mosaic_backstop "${filter}" "${module}" "2221" "cloudc"
+	done
+done
+
+for filter in F212N F182M F187N; do
+	for modnum in 1 2 3 4; do
+		for module in nrca${modnum} nrcb${modnum}; do
+			submit_residual_mosaic_backstop "${filter}" "${module}" "2221" "cloudc"
+		done
+	done
+done
+
 for filter in F356W F444W; do
 	for module in nrca nrcb; do
 		submit_residual_mosaic_backstop "${filter}" "${module}" "1182" "brick"
@@ -67,10 +91,12 @@ for filter in F115W F200W; do
 done
 
 sbatch --array=0-4,6-7 --job-name=webb-cat-merge-singlefields-dao-brick --output=${logdir}/webb-cat-merge-singlefields-dao-brick_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource"
+sbatch --array=0-4,6-7 --job-name=webb-cat-merge-singlefields-dao-cloudc --output=${logdir}/webb-cat-merge-singlefields-dao-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource --target=cloudc"
 #sbatch --array=0-4,6-7 --job-name=webb-cat-merge-singlefields-crowdsource --output=${logdir}/webb-cat-merge-singlefields-crowdsource_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=crowdsource --skip-dao"
 #sbatch --array=0-4,6-7 --job-name=webb-cat-merge-singlefields-iterative --output=${logdir}/webb-cat-merge-singlefields-iterative%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=64gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=iterative --skip-crowdsource"
 # F182M, F200W, F115W
 sbatch --array=5,8-9 --job-name=webb-cat-merge-singlefields-dao-brick --output=${logdir}/webb-cat-merge-singlefields-dao-brick_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource"
+sbatch --array=5,8-9 --job-name=webb-cat-merge-singlefields-dao-cloudc --output=${logdir}/webb-cat-merge-singlefields-dao-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=dao --skip-crowdsource --target=cloudc"
 #sbatch --array=5,8-9 --job-name=webb-cat-merge-singlefields-crowdsource --output=${logdir}/webb-cat-merge-singlefields-crowdsource_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=crowdsource --skip-dao"
 #sbatch --array=5,8-9 --job-name=webb-cat-merge-singlefields-iterative --output=${logdir}/webb-cat-merge-singlefields-iterative%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=256gb --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=iterative --skip-crowdsource"
 

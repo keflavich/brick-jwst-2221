@@ -52,12 +52,20 @@ but with different inputs and goals.
 >
 > Use `brick2221/shellscripts/submit_manual_pipeline.sh` to launch the
 > new path (see "Manual-iteration pipeline" section below).
-> `submit_full_chain.sh` (legacy iter1→iter2→merge→iter3 chain) is
-> preserved until the in-flight brick rerun completes and will then
-> default to the manual path.
+>
+> **Legacy scripts retired (2026-06-16):** the legacy iter1→iter2→merge→
+> iter3→iter4 shell submitters (`submit_full_chain.sh`,
+> `run_iter4resbgrefit.sh`, `run_merge_each*.sh`, `run_residbg_cataloging.sh`,
+> the `run_all_cataloging*`/`sbatch_cataloging*` drivers, the sgrb2
+> recovery/continuation scripts, `run_mosaicing_only_sickle.sh`, …) now
+> live in `brick2221/shellscripts/legacy pipeline/` and `exit 1` with a
+> deprecation banner if invoked.  `run_iter3_cataloging.sh` is **temporarily
+> retained in place** (unmoved) only because 65 in-flight V9 `iter3-launch`
+> jobs exec it by absolute path; retire it once those drain.  See
+> `brick2221/shellscripts/README.md` for the full active-vs-legacy list.
 >
 > The legacy iter1/iter2/iter3/iter4 description below is retained for
-> reference and remains accurate for the legacy path.
+> reference and remains accurate for the (now-retired) legacy path.
 
  1. **iter1 — basic per-frame DAO seed.** `crowdsource_catalogs_long.py
     --each-exposure --daophot --skip-crowdsource` (no `--iteration-label`).
@@ -107,17 +115,32 @@ iter4resbgrefit (residual-bg refinement, optional)
 
 ### Job runner coverage matrix
 
-Each shell script in `brick2221/shellscripts/` implements one or more
-iterations.  These are the supported entry points:
+Active entry points in `brick2221/shellscripts/` (post-2026-06-16 cleanup).
+**Cataloging is the manual-iteration pipeline (default).** Reduction
+scripts are upstream (they produce the `*_crf` inputs) and remain required.
 
-| Script                          | iter1 | iter2 | iter3 | iter4 | Pipeline | Refcat | Notes |
-|---------------------------------|:-----:|:-----:|:-----:|:-----:|:--------:|:------:|-------|
-| `submit_full_chain.sh`          |  ✓   |  ✓   |  ✓   |       |          |        | iter1 → iter2 → merge → iter3 launch |
-| `run_full_pipeline_common.sh`   |  ✓   |       |       |       |    ✓    |   ✓   | First-pass + refcat + second-pass + iter1 + merge |
-| `run_full_pipeline_<target>.sh` |  ✓   |       |       |       |    ✓    |   ✓   | Thin wrappers over `_common.sh` |
-| `run_iter3_cataloging.sh`       |       |       |  ✓   |       |          |        | Builds union seed + per-frame iter3 + merge |
-| `run_iter4resbgrefit.sh`        |       |       |       |  ✓   |          |        | iter3 residual bg refit (purely additive) |
-| `run_residbg_cataloging.sh`     |       | iter2residbg | iter3residbg |  |  |  | residual-bg cascade |
+| Script                          | Stage | Pipeline | Refcat | Notes |
+|---------------------------------|:-----:|:--------:|:------:|-------|
+| `submit_manual_pipeline.sh`     | cataloging (m12→m7) |        |        | **THE cataloging submitter.** Single in-process job, `--manual-iterations` default; `_m1.._m7`/`_dao_basic` output |
+| `sickle_miri_f770w_cataloging_*.sh` | cataloging (MIRI) |     |        | Hand-written manual-path MIRI F770W jobs (single in-process, not array) |
+| `run_full_pipeline_common.sh`   | reduction + iter1 |    ✓    |   ✓   | First-pass + refcat + second-pass; its step-4 per-exposure cataloging now runs the manual path |
+| `run_full_pipeline_<target>.sh` | reduction |    ✓    |   ✓   | Thin wrappers over `_common.sh` (arches, cloudef, gc2211, quintuplet, sgra, sgrb2, sgrc, w51, wd1, wd2) |
+| `run_pipeline_long_sickle.sh` / `run_pipeline_miri_sickle.sh` | reduction | ✓ | | Sickle NIRCam-LONG / MIRI calibration |
+| MIRI f2550w `*_image3/edgetrim/homogenize/colprofile`, `cloudc_miri_f2550w_pipelinemiri.sh` | reduction | ✓ | | MIRI f2550w mosaic post-processing |
+| `sickle_build_miri_large_psf.sh` | utility |       |        | Builds large MIRI PSF grids |
+
+**Retired to `legacy pipeline/` (deprecated, `exit 1`):** the legacy
+iter1→iter2→merge→iter3→iter4 submitters — `submit_full_chain.sh`,
+`run_iter4resbgrefit.sh`, `run_merge_each{,_brick,_cloudc}.sh`,
+`run_residbg_cataloging.sh`, `run_all_cataloging{,_sgrb2,_sickle}.sh`,
+`run_f115w_cataloging.sh`, `run_cataloging_eachexposure{,_f115w}.sh`,
+`run_merge_f115w.sh`, `all_cataloging_merge{,_blur}.sh`,
+`sbatch_cataloging.sh`, `sbatch_commands_nobgsub.sh`,
+`run_{continuation,continuation2,recovery,recovery2}_sgrb2.sh`,
+`resubmit_failed_brick_sickle_2026-04-20.sh`,
+`run_mosaicing_only_sickle.sh`.
+`run_iter3_cataloging.sh` stays in place until its 65 in-flight V9
+`iter3-launch` jobs drain (it is exec'd by absolute path), then retire it too.
 
 ### Target / observation coverage
 

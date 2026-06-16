@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+# ============================================================
+# DEPRECATED -- legacy iter1-4 cataloging pipeline.
+# Superseded by the manual-iteration pipeline (default):
+#   submit_manual_pipeline.sh  -> jwst_gc_pipeline.photometry.cataloging
+# Retired to 'legacy pipeline/'. Kept for reference only.
+# ============================================================
+echo "DEPRECATED: $(basename "$0") belongs to the legacy iter1-4 cataloging" >&2
+echo "pipeline, superseded by submit_manual_pipeline.sh (manual-iteration path)." >&2
+echo "This script has been retired and no longer runs. Recover from git if needed." >&2
+exit 1
 # Submit iter1 + iter2 per-frame photometry for all Sgr B2 (proposal 5365)
 # filters, then merge.  Run run_iter3_cataloging.sh --target=sgrb2 afterwards.
 #

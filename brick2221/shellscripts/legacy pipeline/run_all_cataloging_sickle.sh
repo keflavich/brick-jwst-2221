@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+# ============================================================
+# DEPRECATED -- legacy iter1-4 cataloging pipeline.
+# Superseded by the manual-iteration pipeline (default):
+#   submit_manual_pipeline.sh  -> jwst_gc_pipeline.photometry.cataloging
+# Retired to 'legacy pipeline/'. Kept for reference only.
+# ============================================================
+echo "DEPRECATED: $(basename "$0") belongs to the legacy iter1-4 cataloging" >&2
+echo "pipeline, superseded by submit_manual_pipeline.sh (manual-iteration path)." >&2
+echo "This script has been retired and no longer runs. Recover from git if needed." >&2
+exit 1
 set -euo pipefail
 
 export STPSF_PATH=/orange/adamginsburg/repos/webbpsf/data/
@@ -376,4 +386,3 @@ fi
 if [[ "${run_mode}" == "local" && ${local_catalog_jobs} -eq 1 ]]; then
     echo "Local mode completed for at least one daophot job. Run merge_catalogs.py separately if you want the cross-filter merge now."
 fi
-
