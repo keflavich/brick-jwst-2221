@@ -307,7 +307,16 @@ submit_target_flow() {
     local filter
     local fld
     for fld in "${fields[@]}"; do
-    local each_suffix="destreak_o${fld}_crf"
+    # Extended-emission fields run with do_destreak=False (see
+    # PipelineRerunNIRCAM-LONG.py), so their per-exposure crf files are
+    # named *_align_o<fld>_crf.fits, not *_destreak_o<fld>_crf.fits.
+    # Cataloging must follow the same suffix or it globs the stale
+    # destreaked crf (or nothing).
+    local crf_kind="destreak"
+    case "${name}" in
+        w51|sickle|wd2) crf_kind="align" ;;
+    esac
+    local each_suffix="${crf_kind}_o${fld}_crf"
     for filter in "${filters[@]}"; do
         # Bundle BUNDLE_SIZE exposures per task to cut queued tasks.
         # Auto-size the per-filter cat array from the actual destreak
