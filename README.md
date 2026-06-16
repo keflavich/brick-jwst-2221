@@ -153,7 +153,8 @@ in the merged catalog.  Coverage as of 2026-06-07:
 | brick (2221 narrowband) | 2221 | 001                  | F182M F187N F212N F405N F410M F466N                                |
 | brick-1182 (broadband)  | 1182 | 004                  | F115W F200W F356W F444W                                            |
 | cloudc            |     2221 | 002                  | F182M F187N F212N F405N F410M F466N                                |
-| sickle            |     3958 | 007                  | F187N F210M F335M F470N F480M                                      |
+| sickle            |     3958 | 007 (NIRCam); MIRI 001, 002 | F187N F210M F335M F470N F480M (NIRCam); F770W F1130W F1500W (MIRI obs 001/002) |
+| brick (3958 MIRI) |     3958 | **003**              | F770W F1130W F1500W — MIRI obs 003 is the BRICK, not the sickle (routes to `brick/`) |
 | sgrb2             |     5365 | 001                  | F150W F182M F187N F210M F212N F300M F360M F405N F410M F466N F480M  |
 | sgra              |     1939 | 001                  | F115W F212N F405N                                                  |
 | cloudef           |     2092 | **002 + 005**        | F162M F210M F360M F480M (Cloud E = 002, Cloud F = 005, merged)     |
@@ -167,6 +168,14 @@ every obs id; missing one silently drops part of the field.  Brick is
 covered as two separate launcher targets (`brick` for proposal 2221 +
 `brick-1182` for the broadband proposal 1182) because the per-frame
 `destreak_o<NNN>_crf` suffix is obs-specific.
+
+**Program 3958 spans two targets.** NIRCam obs 007 and MIRI obs 001/002
+are the *sickle*; MIRI obs **003** is the *brick* (it shares the 3958
+program id but is a separate pointing).  Both `PipelineMIRI.py` and the
+cataloging `field_to_reg_mapping` route `3958/003` to the **brick/** tree,
+so its images and catalogs land under `/orange/.../jwst/brick/` (== the
+`/blue/...` brick symlink) and never collide with sickle/ products.
+Catalog it with `--target=brick --proposal_id=3958 --field=003`.
 
 ## Reduction process
 

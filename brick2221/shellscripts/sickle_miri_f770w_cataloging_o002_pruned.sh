@@ -11,6 +11,9 @@
 # MIRI-tuned full-frame F770W cataloging (sickle prop 3958 obs 001).
 # MIRI tuning auto-applies (higher early thresholds, aggressive bg-sub rounds,
 # relaxed qfit, no cross-band) because F770W is a MIRI filter.
+# NOTE: program 3958 MIRI obs 001/002 are the sickle; obs 003 is the BRICK
+# MIRI field -- catalog o003 with --target=brick --field=003 (lands in brick/,
+# not sickle/).  There is intentionally no sickle o003 cataloging script.
 cd /orange/adamginsburg/jwst/sickle
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
     /orange/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py \

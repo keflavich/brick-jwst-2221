@@ -122,6 +122,11 @@ python_target=""
 
 case "$target" in
   sickle)
+    # 3958 obs 007 = sickle NIRCam.  3958 MIRI obs 001/002 are also sickle, but
+    # obs 003 is the BRICK MIRI field (not the sickle): catalog it with
+    # target=brick (proposal_id 3958, field 003) so it lands in brick/ and does
+    # not clash with sickle/ products.  The basepath split is handled by
+    # field_to_reg_mapping in crowdsource_catalogs_long.py (3958/003 -> brick).
     basepath=/orange/adamginsburg/jwst/sickle ; proposal_id=3958
     fields=(007)
     logdir=/blue/adamginsburg/adamginsburg/logs/sickle_jwst/ ;;
@@ -187,6 +192,10 @@ DEP=""
 if [[ -n "$extra_dep" ]]; then DEP="--dependency=afterok:$extra_dep"; fi
 
 # sgrb2 uses align_o<NNN>_crf for LW filters, destreak_o<NNN>_crf for SW.
+# w51/wd2/sickle are extended-emission fields: PipelineRerunNIRCAM-LONG.py
+# forces do_destreak=False for these, copying _cal.fits -> _align.fits and
+# running TweakReg+Image3 on that, producing align_o<NNN>_crf.fits instead
+# of destreak_o<NNN>_crf.fits (see EXTENDED_EMISSION_FIELDS in that script).
 get_each_suffix() {
   local fld="$1" filt="$2"
   if [[ "$target" == "sgrb2" ]]; then
@@ -194,6 +203,8 @@ get_each_suffix() {
       F150W|F182M|F187N|F210M|F212N) echo "destreak_o${fld}_crf" ;;
       *)                              echo "align_o${fld}_crf" ;;
     esac
+  elif [[ "$target" == "w51" || "$target" == "wd2" || "$target" == "sickle" ]]; then
+    echo "align_o${fld}_crf"
   else
     echo "destreak_o${fld}_crf"
   fi
