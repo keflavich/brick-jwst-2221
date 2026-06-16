@@ -318,54 +318,37 @@ submit_target_flow() {
     esac
     local each_suffix="${crf_kind}_o${fld}_crf"
     for filter in "${filters[@]}"; do
-        # Bundle BUNDLE_SIZE exposures per task to cut queued tasks.
-        # Auto-size the per-filter cat array from the actual destreak
-        # file count: dither pattern + detector layout varies by target,
-        # field, instrument, and wavelength, so the right value is just
-        # "however many destreak FITS this filter wrote".  Resolution
-        # order:
-        #   1) ARRAY_RANGE_OVERRIDE env var (manual override)
-        #   2) actual file count on disk (preferred)
-        #   3) ARRAY_RANGE env fallback (used only when files don't yet
-        #      exist, e.g. first-pass scheduling before pipeline runs)
-        # The cat script silently skips indices beyond the actual file
-        # count, so an oversize fallback is harmless apart from a few
-        # idle queued tasks.
-        local range_hi
+        # Manual-iteration cataloging is the default pipeline now: the
+        # --each-exposure phases run sequentially in a single in-process
+        # job and CANNOT be split across a SLURM array (the catalog script
+        # rejects --each-exposure + manual-iterations when
+        # SLURM_ARRAY_TASK_ID is set).  So submit ONE job per filter, no
+        # --array.  Per-source parallelism still comes from
+        # --parallel-workers.  (If you need the old array-parallel
+        # per-exposure path, add --legacy-iterations to the wrap command
+        # and restore an --array=0-N sizing.)
         local n_files
         # Use shopt nullglob via a subshell so an empty match doesn't
-        # trip set -e / pipefail (ls returns 1 on no-match, killing the
-        # whole flow before cat arrays are submitted).
+        # trip set -e / pipefail (ls returns 1 on no-match).
         n_files=$( (shopt -s nullglob; files=( "/orange/adamginsburg/jwst/${name}/${filter}/pipeline/"*"${each_suffix}.fits" ); echo ${#files[@]}) )
-        if [[ -n "${ARRAY_RANGE_OVERRIDE:-}" && "${ARRAY_RANGE_OVERRIDE}" =~ ^0-([0-9]+)$ ]]; then
-            local total=$(( ${BASH_REMATCH[1]} + 1 ))
-            range_hi=$(( (total + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
-        elif (( n_files > 0 )); then
-            range_hi=$(( (n_files + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
-        elif [[ "${ARRAY_RANGE}" =~ ^0-([0-9]+)$ ]]; then
-            local total=$(( ${BASH_REMATCH[1]} + 1 ))
-            range_hi=$(( (total + BUNDLE_SIZE - 1) / BUNDLE_SIZE - 1 ))
-        else
-            # Final-resort fallback if ARRAY_RANGE is malformed.  Caller
-            # should fix the env var; we just keep submitting a sane
-            # default rather than 0 tasks.
-            range_hi=$(( 24 / BUNDLE_SIZE - 1 ))
+        if (( n_files == 0 )); then
+            echo "No ${each_suffix} files for ${name} ${filter} obs ${fld}; skipping cataloging" >&2
+            continue
         fi
-        echo "Cat array for ${name} ${filter} obs ${fld}: n_files=${n_files} array=0-${range_hi} (bundle=${BUNDLE_SIZE})" >&2
+        echo "Cat (manual-iteration, single job) for ${name} ${filter} obs ${fld}: n_files=${n_files}" >&2
         local cat_mem_gb=$(( MEM_PER_WORKER_GB * PARALLEL_WORKERS ))
         local parallel_args=""
         if (( PARALLEL_WORKERS > 1 )); then
             parallel_args="--parallel-workers=${PARALLEL_WORKERS} --parallel-chunk-size=${PARALLEL_CHUNK_SIZE}"
         fi
         cat_jobid=$(sbatch --parsable --dependency=afterok:${second_pass_dep} \
-            --array="0-${range_hi}" \
             --job-name="webb-cat-${name}-${filter}-o${fld}-eachexp" \
-            --output="${logdir}/webb-cat-${name}-${filter}-o${fld}-eachexp_%j-%A_%a.log" \
+            --output="${logdir}/webb-cat-${name}-${filter}-o${fld}-eachexp_%j.log" \
             --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
             --ntasks=1 --cpus-per-task=${PARALLEL_WORKERS} --nodes=1 --mem=${cat_mem_gb}gb --time=96:00:00 \
             --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --field=${fld} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done ${parallel_args}")
         catalog_jobids+=("${cat_jobid}")
-        echo "Submitted catalog array ${cat_jobid} for ${name} ${filter} obs ${fld}"
+        echo "Submitted catalog job ${cat_jobid} for ${name} ${filter} obs ${fld}"
     done
     done
 
