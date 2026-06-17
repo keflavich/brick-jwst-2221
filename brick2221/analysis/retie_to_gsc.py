@@ -97,6 +97,35 @@ def summarize(dra, ddec, tag):
             f"vec={np.hypot(md, mdd):6.2f} MAD=({stats.mad_std(dra):5.1f},{stats.mad_std(ddec):5.1f})")
 
 
+def guide_star_validation(cat_coord, gsc, gcoord, cachedir, max_sep):
+    """Agreement vs GSC3.2 in the FGS guide-star range 12.5<J<18, per J bin.
+
+    Uses VISTA J (from a VIRAC2 cache if present, reaching J=18) else 2MASS J from
+    GSC3.2 (saturates the GC near J~16.5).
+    """
+    gJ = np.asarray(gsc["tmassJMag"], float)
+    jsrc = "2MASS J (GSC)"
+    vfile = cachedir / "virac2.fits"
+    if vfile.exists():
+        v = Table.read(vfile)
+        vJ = np.asarray(v["Jmag"], float)
+        vC = SkyCoord(v["RAJ2000"], v["DEJ2000"], unit="deg")
+        gi, gs, _ = gcoord.match_to_catalog_sky(vC)
+        assigned = np.where(gs < 0.3 * u.arcsec, vJ[gi], np.nan)
+        if np.isfinite(assigned).sum() > np.isfinite(gJ).sum():
+            gJ = assigned; jsrc = "VISTA J (VIRAC2)"
+    lines = [f"## Guide-star-range agreement vs GSC3.2 [{jsrc}]"]
+    ci, ri = match(cat_coord, gcoord, max_sep)
+    dra, ddec = gc_offsets(cat_coord[ci], gcoord[ri])
+    J = gJ[ri]
+    for lo, hi in [(12.5, 18), (12.5, 14), (14, 16), (16, 18)]:
+        m = (J >= lo) & (J < hi) & np.isfinite(dra) & np.isfinite(ddec)
+        if m.sum() < 8:
+            lines.append(f"  J {lo}-{hi}: N={int(m.sum())} (too few)"); continue
+        lines.append(summarize(dra[m], ddec[m], f"  J {lo}-{hi}"))
+    return lines
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--catalog", required=True)
@@ -213,6 +242,9 @@ def main():
         ci, ri = match(cc, vvv["skycoord"], 0.3 * u.arcsec)
         d1, d2 = gc_offsets(cc[ci], vvv["skycoord"][ri])
         report.append(summarize(d1, d2, "AFTER re-tie (JWST vs VVV)"))
+
+    # Guide-star-range validation (the FGS-relevant regime).
+    report += [""] + guide_star_validation(cc, gsc, gcoord, cachedir, max_sep)
 
     (outdir / f"{label}_retie_report.md").write_text("\n".join(report) + "\n")
     print("\n".join(report))
