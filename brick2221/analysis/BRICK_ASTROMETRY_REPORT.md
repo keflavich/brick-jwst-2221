@@ -186,6 +186,28 @@ not the crowdsource qualcuts.
   median spread (13-22 mas) is crowded-field mismatch-sampling noise, not real misalignment.
   Detector-to-detector not testable here (only nrca1 source catalogs present in F182M/pipeline).
 
+## 4d. Satstar + detector-to-detector deep-dive (2026-06-17)
+**Satstar / brightest-star astrometry.** Root cause located: for stars saturated in F200W,
+`skycoord_ref` IS the F200W satstar position (2220/2375 use ref_filtername=f200w) — i.e. the catalog's
+primary position for these comes from the saturated wide-band satstar fit. BUT swapping to the clean
+narrow band does NOT help: satstar vs same-star F212N = MAD ~55 mas (92-95% > 20 mas); F212N vs GSC
+~53 mas ≈ satstar vs GSC ~54 mas. These are red bright giants (mag_ab F200W~14.5, F212N~15.6-20,
+F115W~23) — saturated in wide bands, faint/noisy in narrow bands, in a crowded field, so NO band
+gives a clean centroid. The median bias is modest (~10-17 mas); the dominant error is ~50 mas random.
+This is a **bright/red-star centroiding floor**, not a fixable satstar-only shift. These stars are
+mostly at/beyond the faint edge of the FGS guide range (very red), so the ~10-12 mas guide-star
+result stands. Recommendation: **flag F200W/F405N-saturated red giants as ~50 mas-uncertain**; do not
+use them as <10 mas NIRSpec references. Improving them needs reduction-level work (better satstar
+PSF centroiding / forced astrometry from the least-crowded unsaturated band).
+
+**Detector-to-detector** (F182M exp 00001, source detection on all 8 cal images, GWCS-transformed,
+vs GSC3.2 Ks<14): common offset ~(+120, -80) mas = the raw per-exposure pointing BEFORE tweakreg;
+detector-to-detector spread ~30-47 mas (dRA 91-138, dDec -68 to -100) but limited by N=26-73/detector
+and MAD~50 (per-detector median uncertainty ~6-12 mas), so ~2-4 sigma. This is the cal-level INPUT to
+alignment; the final aligned catalog's per-star cross-frame repeatability is ~3 mas (tweakreg removes
+the bulk). A clean final-frame detector-to-detector test would require per-detector positions in the
+merged frame (not stored separately).
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
