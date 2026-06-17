@@ -223,6 +223,33 @@ merged frame (not stored separately).
   per-detector WCS in that band / consider re-aligning F182M, or cross-check the anchor with
   F200W+F115W (which are seam-free).**
 
+## 4f. Seam: program/detector localization + fix (2026-06-17)
+**The seam is a per-program/epoch defect, and it DOES affect delivered positions.** Splitting by
+filter vs the seam-free F200W (clean stars), the ~21-25 mas jump at Dec -28.705..-28.715 is present
+in the **narrow/medium bands AND skycoord_ref** but absent in the wide bands:
+- seam-PRESENT: F182M, F187N, F212N, F405N, F410M, F466N, **skycoord_ref (21 mas)** = **prop 2221
+  obs 001, 2022-08-28**.
+- seam-FREE: F115W, F200W, F356W, F444W = **prop 1182 obs 004, 2022-09-14**.
+So the 2221-o001 mosaic has the seam; the 1182-o004 (wide) mosaic is clean. Since skycoord_ref is
+f405n/f410m-based, the **delivered catalog positions carry the ~21 mas seam in that band**.
+VIRAC2 cannot independently confirm (its matchable stars are the bright ~100 mas-scatter JWST
+population; faint VIRAC2 is unreliable) — but the internal evidence is airtight (F115W-F182M and
+F200W-F182M show the identical jump; F115W-F200W shows none).
+
+**Detector localization** (a): source detection on the 8 F182M (2221) detectors, GWCS-transformed,
+vs clean F200W: per-detector band-vs-off-band, **nrcb3** (band-off = +21,+17 mas) and **nrcb4**
+(+18,+20) show a band-specific offset while **nrca3/nrca4 are clean** -> the seam traces to
+**intra-detector distortion residuals in the NRCB-module detectors** in that Dec band, not removed by
+tweakreg's per-frame shift. (2-exposure sample, ~3-4 sigma; a fuller run would nail it.)
+
+**Fix** (b): two deliverables in `/orange/.../brick/`:
+- `astrometry_retie_qualcuts..._seamfix.fits` — delivered catalog with skycoord_ref in the seam band
+  replaced by the clean wide-band (F200W/F115W) position (40,775 sources; band residual 9.8,15 -> 0).
+- `catalogs/widebands_seamfree_gsc32_reference_catalog.fits` — seam-free, GSC3.2-tied reference
+  built from the 1182-o004 wide bands (F200W), for re-aligning the 2221 mosaics. Recommend re-running
+  2221 alignment against this (with per-detector/distortion correction for nrcb3/nrcb4), or adopting
+  the wide-band frame as the anchor instead of F182M.
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
