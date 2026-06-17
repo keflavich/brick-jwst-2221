@@ -250,6 +250,24 @@ tweakreg's per-frame shift. (2-exposure sample, ~3-4 sigma; a fuller run would n
   2221 alignment against this (with per-detector/distortion correction for nrcb3/nrcb4), or adopting
   the wide-band frame as the anchor instead of F182M.
 
+## 4g. The Dec -28.70 module-boundary seam is in BOTH programs (2026-06-17)
+- The faint Dec -28.70 line in the wide bands and the **(+15,+25) mas secondary cluster** in the
+  F200W-F115W offset distribution are the **same artifact**: the (15,25) population (113 stars) sits
+  at Dec median -28.703 spanning all RA (a thin horizontal band).
+- So a module-boundary seam exists at Dec ~ -28.70 to -28.71 in BOTH programs: **strong in 2221-o001
+  N/M bands (~20 mas, ~40k stars, Dec -28.704..-28.715)** and **weak in 1182-o004 wide bands
+  (~15-25 mas, ~113 stars, thin Dec -28.703 line)**.
+- Horizontal line at fixed Dec, all RA = **NIRCam A/B module mosaic boundary**. Per-detector check:
+  A-module vs B-module differ ~7 mas off-band; NRCB detectors (nrcb3/nrcb4) show the band offset ->
+  intra-NRCB-module distortion residuals not removed by tweakreg's per-frame shift, common to both
+  programs (same target/orientation). (Localization at the detection limit -- thin band, low N.)
+- VIRAC2 verdict: it CANNOT validate at few-mas (its GC per-source error is ~30-40 mas; F200W/F115W
+  vs VIRAC2 are broad ~40 mas blobs = VIRAC2 noise). The JWST-internal F200W-F115W is a tight spike
+  at (0,0) (MAD 0.85 mas at mag 16-18) -> the frames are aligned; VIRAC2 is just the noisy ruler.
+- **Net: wide bands (F200W/F115W) are the clean backbone (sub-mas internal, uniform +-2 mas) EXCEPT
+  the thin Dec -28.703 module-boundary band.** For re-alignment: mask/down-weight Dec -28.70..-28.71,
+  or apply per-detector (not just per-frame) WCS correction for the NRCB module.
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
