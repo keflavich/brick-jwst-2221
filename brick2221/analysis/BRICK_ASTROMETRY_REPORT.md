@@ -166,6 +166,26 @@ emit Vega-as-`mag_ab`). The historical `ok2221or1182` was corrected post-hoc by 
 affected — the code fix is still valid, but the buggy on-disk catalog was the daophot ok2221or1182,
 not the crowdsource qualcuts.
 
+## 4c. Validation suite (2026-06-17)
+- **Guide-star range (12.5<J<18, FGS regime), retied qualcuts vs GSC3.2** (VISTA J): 12.5-18 = 7.8
+  mas (2MASS J) / ~12 mas (VISTA J to 18); per bin ~10-14 mas. The bright-only shift generalizes to
+  faint guide stars (it's a magnitude-independent frame offset). Now a standard block in
+  `retie_to_gsc.py`.
+- **VIRAC2 vs GSC3.2 in guide range**: 0.8 mas (J12.5-14), 15 mas (J14-16), 55 mas (J16-18, ~all
+  -Dec). The two reference frames diverge for faint stars; our independent JWST catalog agrees with
+  GSC3.2 to ~12 mas at J17-18, so **VIRAC2 (not GSC3.2) is the faint-end outlier** -> do not use
+  VIRAC2 as the faint reference.
+- **Saturated-star fits**: included (2839 flagged) but **biased** — saturated sources sit ~13-17 mas
+  off the reference (vs ~4 mas for unsaturated) with larger scatter (MAD 54 vs 37). satstar
+  positions need work before trusting bright/saturated targets to <10 mas.
+- **F182M vs F200W** (two closest bands, different epochs): faint unsaturated (mag<18, N=7447) =
+  (-3.5, -2.3) mas, **MAD (6.2, 4.0)** — excellent. Bright (mag<16) degrades to ~15-50 mas from
+  saturation/crowding. So the bands agree well for normal stars; bright/saturated is the weak point.
+- **Frame-to-frame (nrca1, 24 dithers, GWCS-transformed)**: per-star cross-frame scatter
+  **MAD (4.4, 2.4) mas** -> exposure-to-exposure ~3 mas (<5 mas bar met, not <1 mas). Per-frame
+  median spread (13-22 mas) is crowded-field mismatch-sampling noise, not real misalignment.
+  Detector-to-detector not testable here (only nrca1 source catalogs present in F182M/pipeline).
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
