@@ -28,8 +28,10 @@ try:
     from brick2221.analysis.make_reference_from_pipeline_catalogs import (
         compute_query_footprint,
         fetch_gaia_catalog,
+        fetch_gns_catalog,
         fetch_vvv_catalog,
         resolve_default_basepath,
+        DEFAULT_GNS_CATALOG,
     )
 except ImportError:
     repo_root = Path(__file__).resolve().parents[2]
@@ -37,8 +39,10 @@ except ImportError:
     from brick2221.analysis.make_reference_from_pipeline_catalogs import (
         compute_query_footprint,
         fetch_gaia_catalog,
+        fetch_gns_catalog,
         fetch_vvv_catalog,
         resolve_default_basepath,
+        DEFAULT_GNS_CATALOG,
     )
 
 
@@ -52,16 +56,25 @@ REFERENCE_SPECS = (
         "name": "vvv",
         "label": "VVV",
         "mag_columns": ("Ks_refmag", "Ksmag3", "Ksmag", "Ks3mag"),
+        "kband": True,
     },
     {
         "name": "gaia",
         "label": "Gaia DR3",
         "mag_columns": ("phot_g_mean_mag", "Gmag", "Gmag3", "Gmag2"),
+        "kband": False,
+    },
+    {
+        "name": "gns",
+        "label": "GALACTICNUCLEUS",
+        "mag_columns": ("Ks_refmag", "Ksmag", "Ks", "Ks_mag"),
+        "kband": True,
     },
 )
 
 K_BAND_EQUIVALENT_FILTERS = ("f212n", "f210m", "f200w")
-VVV_KS_ERROR_COLUMNS = ("e_Ks2ap3", "e_Ks1ap3", "e_Ks2ap1", "e_Ks1ap1")
+# Ks uncertainty columns across VVV and GALACTICNUCLEUS source tables.
+VVV_KS_ERROR_COLUMNS = ("e_Ksmag", "e_Ks", "e_Ks2ap3", "e_Ks1ap3", "e_Ks2ap1", "e_Ks1ap1")
 
 
 def parse_args() -> argparse.Namespace:
@@ -113,6 +126,19 @@ def parse_args() -> argparse.Namespace:
         "--gaia-catalog",
         default="I/355/gaiadr3",
         help="Vizier catalog identifier for Gaia DR3 reference queries.",
+    )
+    parser.add_argument(
+        "--gns-catalog",
+        default=DEFAULT_GNS_CATALOG,
+        help=(
+            "GALACTICNUCLEUS reference: Vizier identifier (default queries the footprint "
+            "directly) or a local FITS/ECSV path."
+        ),
+    )
+    parser.add_argument(
+        "--skip-gns",
+        action="store_true",
+        help="Skip the GALACTICNUCLEUS reference comparison.",
     )
     parser.add_argument(
         "--max-catalogs",
@@ -308,8 +334,20 @@ def load_reference_catalog(
     refresh_cache: bool,
     vvv_catalog: str,
     gaia_catalog: str,
+    gns_catalog: str,
 ) -> tuple[Table, Path, str]:
     cache_path = build_reference_cache_paths(outdir, catalog_path, name)
+    if name == "gns":
+        table = fetch_gns_catalog(
+            center=center,
+            width=width,
+            height=height,
+            gns_catalog=gns_catalog,
+            cache_path=cache_path,
+            refresh_cache=refresh_cache,
+        )
+        mag_column = pick_mag_column(table, REFERENCE_SPECS[2]["mag_columns"])
+        return table, cache_path, mag_column or "Ks_refmag"
     if name == "vvv":
         table = fetch_vvv_catalog(
             center=center,
@@ -620,6 +658,8 @@ def analyze_catalog(
     gaia_catalog: str,
     max_sep: u.Quantity,
     vvv_photometric_nsigma: float,
+    gns_catalog: str,
+    skip_gns: bool,
 ) -> list[dict[str, object]]:
     catalog = Table.read(catalog_path)
     catalog_coords = get_catalog_coordinates(catalog)
@@ -631,6 +671,8 @@ def analyze_catalog(
     catalog_cache_label = sanitize_label(catalog_label)
 
     for spec in REFERENCE_SPECS:
+        if spec["name"] == "gns" and skip_gns:
+            continue
         reference, cache_path, mag_column = load_reference_catalog(
             name=spec["name"],
             catalog_path=catalog_path,
@@ -641,9 +683,13 @@ def analyze_catalog(
             refresh_cache=refresh_cache,
             vvv_catalog=vvv_catalog,
             gaia_catalog=gaia_catalog,
+            gns_catalog=gns_catalog,
         )
         reference_coords = reference["skycoord"]
         match = match_catalog_to_reference(catalog_coords, reference_coords, max_sep=max_sep)
+        # Spatial-only (pre-photometric-filter) statistics, so the effect of flux
+        # matching is visible side-by-side with the filtered result.
+        summary_raw = summarize_offsets(match["dra"], match["ddec"], match["sep"])
         vvv_filter_info = {
             "applied": False,
             "jwst_mag_column": "",
@@ -652,7 +698,7 @@ def analyze_catalog(
             "n_after": int(len(match["catalog_indices"])),
             "median_mag_offset": np.nan,
         }
-        if spec["name"] == "vvv":
+        if spec.get("kband"):
             match, vvv_filter_info = apply_vvv_photometric_filter(
                 catalog=catalog,
                 reference=reference,
@@ -724,6 +770,13 @@ def analyze_catalog(
             "sem_sep_mas": summary["sem_sep_mas"],
             "vector_median_offset_mas": summary["vector_median_offset_mas"],
             "vector_sem_mas": summary["vector_sem_mas"],
+            "raw_n_matches": summary_raw["n_matches"],
+            "raw_median_dra_mas": summary_raw["median_dra_mas"],
+            "raw_median_ddec_mas": summary_raw["median_ddec_mas"],
+            "raw_median_sep_mas": summary_raw["median_sep_mas"],
+            "raw_mad_dra_mas": summary_raw["mad_dra_mas"],
+            "raw_mad_ddec_mas": summary_raw["mad_ddec_mas"],
+            "raw_vector_median_offset_mas": summary_raw["vector_median_offset_mas"],
             "footprint_ra_deg": float(center.ra.to_value(u.deg)),
             "footprint_dec_deg": float(center.dec.to_value(u.deg)),
             "footprint_width_arcmin": float(width.to_value(u.arcmin)),
@@ -746,15 +799,24 @@ def write_markdown_report(summary: Table, outdir: Path) -> Path:
         "",
         f"Generated: {datetime.datetime.now().isoformat()}",
         "",
-        "| catalog | reference | matches | med_dra_mas | med_ddec_mas | med_sep_mas | sem_dra_mas | sem_ddec_mas | sem_sep_mas |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "Offsets in mas. `vec` = systematic offset magnitude hypot(med_dra, med_ddec); "
+        "`MAD` = robust scatter (mad_std), the per-source RMS estimate; `sem_vec` = "
+        "hypot(sem_dra, sem_ddec), the uncertainty on the systematic. `raw_*` are spatial-only "
+        "(pre flux-match); the unprefixed columns are after K-band flux matching where available.",
+        "",
+        "| catalog | reference | N | vec_mas | sem_vec_mas | MAD_dra | MAD_ddec | raw_N | raw_vec_mas | raw_MAD_dra | raw_MAD_ddec | dmag |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in summary:
+        sem_vec = float(np.hypot(row["sem_dra_mas"], row["sem_ddec_mas"]))
         lines.append(
             "| "
             f"{Path(str(row['catalog_file'])).name} | {row['reference_name']} | {int(row['n_matches'])} | "
-            f"{row['median_dra_mas']:.3f} | {row['median_ddec_mas']:.3f} | {row['median_sep_mas']:.3f} | "
-            f"{row['sem_dra_mas']:.3f} | {row['sem_ddec_mas']:.3f} | {row['sem_sep_mas']:.3f} |"
+            f"{row['vector_median_offset_mas']:.2f} | {sem_vec:.2f} | "
+            f"{row['mad_dra_mas']:.2f} | {row['mad_ddec_mas']:.2f} | "
+            f"{int(row['raw_n_matches'])} | {row['raw_vector_median_offset_mas']:.2f} | "
+            f"{row['raw_mad_dra_mas']:.2f} | {row['raw_mad_ddec_mas']:.2f} | "
+            f"{row['vvv_photometric_median_mag_offset']:.3f} |"
         )
     report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report_path
@@ -787,6 +849,8 @@ def main() -> None:
                 gaia_catalog=args.gaia_catalog,
                 max_sep=args.max_sep_arcsec * u.arcsec,
                 vvv_photometric_nsigma=args.vvv_photometric_nsigma,
+                gns_catalog=args.gns_catalog,
+                skip_gns=args.skip_gns,
             )
         )
 

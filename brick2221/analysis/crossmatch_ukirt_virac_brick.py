@@ -88,6 +88,15 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Maximum match separation for Spitzer x UKIRT/VIRAC crossmatch",
     )
+    parser.add_argument(
+        "--virac-pm-epoch",
+        type=float,
+        default=None,
+        help=(
+            "If set (Julian year, e.g. 2022.66), propagate VIRAC2 positions from its 2014.0 "
+            "reference epoch to this epoch using pmRA/pmDE before matching (astrometric mode)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -273,13 +282,38 @@ def infer_virac_columns(virac: Table) -> tuple[str, str, str, str, str, str]:
     return ra_col, dec_col, "Hmag", "Ksmag", h_err_col, ks_err_col
 
 
-def crossmatch_catalogs(ukirt: Table, virac: Table, match_radius_arcsec: float) -> Table:
+def propagate_virac_pm(virac: Table, ra_col: str, dec_col: str, to_epoch_jyear: float,
+                       ref_epoch_jyear: float = 2014.0) -> tuple[np.ndarray, np.ndarray]:
+    """Propagate VIRAC2 positions to ``to_epoch_jyear`` using pmRA/pmDE.
+
+    VIRAC2 (II/387/virac2): reference epoch 2014.0, absolute (Gaia DR3-tied) PMs,
+    pmRA already includes cos(dec) [mas/yr]. Sources with missing PM are left in place.
+    """
+    ra = np.asarray(virac[ra_col], dtype=float)
+    dec = np.asarray(virac[dec_col], dtype=float)
+    if "pmRA" not in virac.colnames or "pmDE" not in virac.colnames:
+        return ra, dec
+    dt = to_epoch_jyear - ref_epoch_jyear
+    pmra = np.asarray(np.ma.filled(virac["pmRA"], 0.0), dtype=float)   # mas/yr, *cos(dec)
+    pmde = np.asarray(np.ma.filled(virac["pmDE"], 0.0), dtype=float)   # mas/yr
+    pmra = np.where(np.isfinite(pmra), pmra, 0.0)
+    pmde = np.where(np.isfinite(pmde), pmde, 0.0)
+    ra_new = ra + (pmra * dt / 3.6e6) / np.cos(np.deg2rad(dec))
+    dec_new = dec + (pmde * dt / 3.6e6)
+    return ra_new, dec_new
+
+
+def crossmatch_catalogs(ukirt: Table, virac: Table, match_radius_arcsec: float,
+                        virac_pm_epoch: float | None = None) -> Table:
     ra_col, dec_col, virac_h_col, virac_ks_col, virac_h_err_col, virac_ks_err_col = infer_virac_columns(virac)
 
     ukirt_ra = np.asarray(ukirt["ra"], dtype=float)
     ukirt_dec = np.asarray(ukirt["dec"], dtype=float)
-    virac_ra = np.asarray(virac[ra_col], dtype=float)
-    virac_dec = np.asarray(virac[dec_col], dtype=float)
+    if virac_pm_epoch is not None:
+        virac_ra, virac_dec = propagate_virac_pm(virac, ra_col, dec_col, virac_pm_epoch)
+    else:
+        virac_ra = np.asarray(virac[ra_col], dtype=float)
+        virac_dec = np.asarray(virac[dec_col], dtype=float)
 
     ukirt_coords = SkyCoord(ukirt_ra, ukirt_dec, unit="deg", frame="icrs")
     virac_coords = SkyCoord(virac_ra, virac_dec, unit="deg", frame="icrs")
@@ -295,6 +329,11 @@ def crossmatch_catalogs(ukirt: Table, virac: Table, match_radius_arcsec: float) 
     matched["ra"] = ukirt["ra"][keep]
     matched["dec"] = ukirt["dec"][keep]
     matched["sep_arcsec"] = sep2d[keep].to(u.arcsec).value
+    # Astrometric residuals UKIRT - VIRAC (great-circle), mas.
+    uk = ukirt_coords[keep]
+    vi = virac_coords[idx[keep]]
+    matched["dra_mas"] = ((uk.ra - vi.ra).to(u.mas).value) * np.cos(uk.dec.to_value(u.rad))
+    matched["ddec_mas"] = (uk.dec - vi.dec).to(u.mas).value
 
     matched["ukirt_h_mag"] = np.asarray(ukirt["h_mag"][keep], dtype=float)
     matched["ukirt_k_mag"] = np.asarray(ukirt["k_mag"][keep], dtype=float)
@@ -405,6 +444,17 @@ def summarize_matches(
     summary["dec_center_deg"] = [center.dec.deg]
     summary["box_size_arcmin"] = [box_size_arcmin]
     summary["match_radius_arcsec"] = [match_radius_arcsec]
+
+    # Astrometric residuals UKIRT - VIRAC (great-circle), mas.
+    if "dra_mas" in matched.colnames:
+        from astropy.stats import mad_std
+        dra = np.asarray(matched["dra_mas"], dtype=float)
+        ddec = np.asarray(matched["ddec_mas"], dtype=float)
+        summary["median_dra_mas"] = [float(np.nanmedian(dra))]
+        summary["median_ddec_mas"] = [float(np.nanmedian(ddec))]
+        summary["mad_dra_mas"] = [float(mad_std(dra, ignore_nan=True))]
+        summary["mad_ddec_mas"] = [float(mad_std(ddec, ignore_nan=True))]
+        summary["vector_offset_mas"] = [float(np.hypot(np.nanmedian(dra), np.nanmedian(ddec)))]
 
     summary["mean_ukirt_h_mag"] = [np.nanmean(matched["ukirt_h_mag"])]
     summary["mean_ukirt_k_mag"] = [np.nanmean(matched["ukirt_k_mag"])]
@@ -537,7 +587,8 @@ def main() -> None:
     virac = query_virac_box(center, args.box_size_arcmin, args.virac_catalog)
     spitzer = query_spitzer_sstgc_local(args.spitzer_catalog)
     print("Crossmatching catalogs...")
-    matched = crossmatch_catalogs(ukirt, virac, args.match_radius_arcsec)
+    matched = crossmatch_catalogs(ukirt, virac, args.match_radius_arcsec,
+                                  virac_pm_epoch=args.virac_pm_epoch)
 
     if len(matched) == 0:
         raise ValueError("No crossmatches found. Try a larger match radius.")
