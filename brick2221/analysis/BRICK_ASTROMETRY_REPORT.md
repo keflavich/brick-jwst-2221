@@ -208,6 +208,21 @@ alignment; the final aligned catalog's per-star cross-frame repeatability is ~3 
 the bulk). A clean final-frame detector-to-detector test would require per-detector positions in the
 merged frame (not stored separately).
 
+## 4e. F200W vs F115W/F182M + F182M detector seam (2026-06-17)
+- **F200W is excellent.** F200W - F115W (clean): median ~0, **MAD (0.84, 0.90) mas for bright
+  (F200W<18)**, ~(4.7,4.5) all; centered on zero, no systematic (offset_f200w_f115w.png). F200W and
+  F115W (same epoch/visit) are co-aligned to ~2 mas across the WHOLE field, all detectors.
+- **F200W - F182M**: ~(+3.4,+2.0) mas global offset (different epochs), MAD ~2-3 mas bright — small,
+  fine.
+- **F182M detector seam (NEW).** A horizontal band at **Dec -28.705 to -28.715** (~36") shows
+  F200W-F182M = **(-12.6, -16.5) mas** vs (+3.6,+2.1) off-stripe -> a **~20 mas discontinuity in the
+  F182M mosaic** (spatial_f200w_f182m.png). F200W-F115W shows NO stripe there (-0.6,0.2 vs 0,0), so
+  the seam is **specific to F182M**, the astrometric ANCHOR filter. Likely an F182M per-detector /
+  module WCS residual (or thin dither coverage) in that Dec band that tweakreg didn't fully remove;
+  it propagates into the reference frame locally. **Recommendation: investigate the F182M
+  per-detector WCS in that band / consider re-aligning F182M, or cross-check the anchor with
+  F200W+F115W (which are seam-free).**
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
