@@ -268,6 +268,28 @@ tweakreg's per-frame shift. (2-exposure sample, ~3-4 sigma; a fuller run would n
   the thin Dec -28.703 module-boundary band.** For re-alignment: mask/down-weight Dec -28.70..-28.71,
   or apply per-detector (not just per-frame) WCS correction for the NRCB module.
 
+## 4h. Dec -28.71 = TWO distinct problems (2026-06-17)
+Resolved the Dec -28.71 region into two separate issues:
+1. **2221 N/M bands: real ~25 mas astrometric seam** (bulk offset, Dec -28.705..-28.712, fully
+   covered). Intra-frame test: offsets are ~1-2 mas across the detector (no edge ramp, only a mild
+   ~1.4 mas Dec gradient) -> the seam is a **whole-frame/detector SHIFT, not edge distortion** ->
+   a per-detector shift correction (option b) CAN fix it. (NRCB detectors implicated.)
+2. **F200W is missing a detector** -- detection ratio F200W/F115W and F200W/F444W drop to 0.0 in an
+   L-shaped/rectangular footprint at **RA 266.513-266.530, Dec -28.705..-28.720**; F115W, F356W,
+   F444W are complete there (F356W/F444W ratio is uniform). So it's **F200W only** (not the SW+LW
+   pair). The (+15,+25) mas secondary cluster in F200W-F115W is the **edge of this hole** (F200W
+   positions there come from a few dithered frames). This is a coverage gap (data absent), NOT a
+   distortion -- needs the detector recovered in re-reduction, or use F115W there.
+
+### Q1 whole-detector vs edge: whole-frame/detector shift (2221 seam) -> option (b) works; F200W
+issue is a whole MISSING detector (re-reduce or substitute F115W).
+### Q2 are the seams aligned between programs: the 2221 N/M seam and the F200W hole sit at the SAME
+Dec (~-28.71) but are different failure modes in different programs/filters. **F115W (1182) is clean
+there (complete, no seam).** So for a joint F200W+F182M reference, at Dec -28.71 BOTH F200W (hole)
+and F182M (seam) are bad -> **use F115W**. The programs/filters are complementary: F115W fills the
+F200W hole; F200W/F115W bulk is clean where the 2221 N/M bands have their seam. Build the joint
+reference by selecting, per sky cell, the filter that is clean there (F115W as SW backbone).
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
