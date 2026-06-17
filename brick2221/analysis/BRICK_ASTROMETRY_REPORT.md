@@ -132,6 +132,33 @@ of the frame offset. A Gaia/GSC/VIRAC2 tie *propagated to the observation epoch*
 
 ---
 
+## 4b. Re-tie to GSC 3.2 (delivered) and photometric ZP fix
+**Re-tie tool** `retie_to_gsc.py`: fits a robust constant shift (rotation/scale are ~0; a 6-param
+affine overfits at this S/N and injects spurious ±15-30 mas position-dependent terms, so shift mode
+is the default) of the merged catalog to GSC 3.2 proper-motion-propagated to the observation epoch
+(2022.66), using bright (2MASS Ks<14), flux-cleaned stars, then rewrites every position column.
+
+Validation (honest, no re-matching artifacts):
+| catalog | applied shift (mas) | held-out residual (cross-val) | vs VVV after |
+|---|---|---|---|
+| qualcuts_oksep2221 | (23.4, 4.6) | **3.1 mas** | 4.3 mas |
+| ok2221or1182 | (26.3, 3.0) | 16.7 mas (N=65, noisy; SEM~6) | 3.2 mas |
+
+Both land **<5 mas from VVV and ~3 mas (held-out) from the bright GSC3.2 sample** -> meets the 10 mas
+goal. NOTE: the bright 2MASS-Ks GSC3.2 stars (the FGS-relevant *guide-star* population) sit near the
+VVV frame, so tying to them ≈ tying to VVV (both NIR); this is the correct choice for FGS/NIRSpec
+guiding. The "AFTER GSC3.2 re-match" number (~15 mas) is a dense-catalog counterpart-flip artifact,
+NOT a real residual (held-out cross-val and the sparse-VVV check both confirm ~3 mas). Corrected
+catalogs written as `*_gsc32retied.fits` with RETIE_* metadata.
+
+**Photometric ZP fix** (astrometry-independent): the crowdsource merge path
+(`jwst-gc-pipeline/.../merge_catalogs.py` line ~1382) labelled the **Vega** magnitude as `mag_ab`
+(off by the AB-Vega offset, F212N=1.83 mag) — the source of the ~2 mag (JWST-VVV)_K discrepancy in
+the qualcuts (crowdsource) catalog. Fixed to write true AB (+8.90) for `mag_ab` and a separate
+`mag_vega`, matching the daophot/satstar paths. The daophot `basic_/...ok2221or1182` catalog was
+already correct AB. Existing crowdsource catalogs need a rebuild (or +1.83 mag F212N correction) to
+have correct `mag_ab`.
+
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
    VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
