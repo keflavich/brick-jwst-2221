@@ -14,7 +14,13 @@ JWST Brick (prop 2221, obs 001) epoch = **2022-08-28 (jyear 2022.66)**, MJD 5981
 2. **There is a real absolute frame offset of ~17–23 mas (RA-dominated, JWST East of reference), brightness-independent.** This exceeds the 10 mas target.
 3. **The external reference frames disagree with each other by 23–76 mas** in this field (VVV vs Gaia/GSC ≈ 23 mas; VVV vs GNS ≈ 60 mas). Absolute 10 mas astrometry is **reference-limited**.
 4. **Origin**: the F182M reference catalog was tied to **VVV** by `measure_offsets` (shift-only, raw ΔRA without cos δ, convergence threshold 0.01″=10 mas, flux-ratio cleaned) → it converged with ~9 mas residual by its own metric, ~21 mas by naive matching. The merged catalogs add cross-filter transfer (~+8 mas) → ~17–23 mas vs VVV.
-5. **For NIRSpec**: FGS uses the **Gaia/GSC** frame, but the catalog is tied to **VVV**, which is ~23 mas off Gaia/GSC here. **Recommendation: re-tie to GSC2.4.x/Gaia DR3 (FGS frame), not VVV**, with a tighter threshold and cos δ fix.
+5. **For NIRSpec**: FGS uses **GSC 3.2 / Gaia DR3** (verified: GSC3.2 is Gaia-DR3-sourced, agrees
+   with GSC2.4.2 to 8.6 mas, sits ~21 mas off VVV). The catalog is tied to **VVV**, so it is ~23 mas
+   off GSC3.2. **Recommendation: re-tie to GSC 3.2 / Gaia DR3 at the observation epoch**, not VVV,
+   with a tighter threshold and cos δ fix.
+
+Reference versions used: **VIRAC v2** (II/387/virac2, Gaia-DR3-referenced, epoch 2014.0 — confirmed
+the 2nd VIRAC release, not v1 II/364); **GSC 3.2** (current active FGS catalog, Gaia DR3-sourced).
 
 ---
 
@@ -51,6 +57,8 @@ at ~17–23 mas vs VVV regardless of brightness.
 |---|--:|--:|--:|--:|--:|--:|---|
 | VVV (Ks) | 2176 | **17.1** | +17.1 | −0.6 | 41.5 | 44.3 | most reliable in GC |
 | GSC2.4.2 (Gaia) | 1056 | **22.2** | +20.4 | +8.7 | 50.4 | 52.4 | FGS lineage frame |
+| GSC3.2 (Gaia DR3, Ks<14 clean) | 506 | **23.5** | +23.1 | +4.5 | 42.6 | 31.9 | **current FGS catalog** |
+| GSC3.2 (PM, all) | 20580 | 53.6 | +51.9 | +13.5 | 54.2 | 29.4 | crowding-inflated (deep, no flux clean) |
 | VIRAC2 (Ks, no PM) | 6627 | 36.5 | +22.5 | +28.7 | 40.2 | 40.1 | PM not applied |
 | Gaia DR3 (no PM) | 279 | 46.0 | +41.7 | +19.5 | 25.6 | 59.5 | foreground/PM contaminated |
 | Gaia DR3 (PM→2022.66) | 279 | 49.0 | +48.7 | +6.2 | 20.9 | 61.4 | PM fixes Dec, not RA |
@@ -80,8 +88,17 @@ long-wave narrow bands (F405N/F444W/F466N) are crowding/PSF-limited (15–200 ma
 | pair | med dRA | med dDec | vec (mas) |
 |---|--:|--:|--:|
 | GSC2.4.2 − VVV | +23.1 | −4.4 | 23.5 |
+| GSC3.2 − VVV | −10.5 | −18.0 | 20.8 |
+| GSC3.2 − GSC2.4.2 | +7.3 | +4.4 | 8.6 |
 | GNS − VVV | −56.8 | +18.0 | 59.6 |
 | GSC2.4.2 − GNS | +76.1 | −2.1 | 76.1 |
+
+**GSC 3.2 (current active JWST FGS catalog)** retrieved from the STScI VO service
+(`gsss.stsci.edu/.../CatalogSearch.aspx?CAT=GSC32&FORMAT=CSV`; 134k srcs over the footprint,
+Gaia-DR3-sourced, per-source epoch ~2016, full PM). It agrees with GSC2.4.2 to **8.6 mas** and sits
+**~21 mas from VVV** — i.e. GSC versions are mutually consistent and the Gaia/GSC frame is ~20 mas
+off VVV. JWST is **~23 mas** from GSC3.2 (bright Ks<14, flux-cleaned, PM-propagated); the
+full-sample 54 mas is faint-source crowding inflation in this deep catalog.
 
 The GC reference frames mutually disagree by 23–76 mas. **VVV↔Gaia/GSC ≈ 23 mas** is the key one for
 NIRSpec. **GNS is a ~57 mas outlier vs VVV** (epoch ~2015 + GC bulk proper motion, and/or GNS
@@ -116,8 +133,10 @@ of the frame offset. A Gaia/GSC/VIRAC2 tie *propagated to the observation epoch*
 ---
 
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
-1. **Choose the operational frame = GSC2.4.x / Gaia DR3** (what FGS uses), not VVV. Re-tie the
-   reference catalog to it. (VVV is internally fine but ~23 mas off the FGS frame here.)
+1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
+   VVV. Re-tie the reference catalog to it. (VVV is internally fine but ~21–23 mas off the FGS frame
+   here; the catalog is currently ~23 mas off GSC3.2.) GSC3.2 query: STScI VO CatalogSearch.aspx
+   with `CAT=GSC32&FORMAT=CSV` (VOTABLE trips astropy's bit parser; tile in Dec for the row cap).
 2. **Fix `measure_offsets`**: (a) use cos(dec) great-circle ΔRA; (b) tighten threshold to ≪10 mas
    (e.g. 1 mas) and iterate to convergence; (c) consider a 4–6 parameter (shift+rotation+scale) or
    low-order distortion fit instead of shift-only.

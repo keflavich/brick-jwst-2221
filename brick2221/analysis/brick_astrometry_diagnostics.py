@@ -198,6 +198,50 @@ def load_gsc(center, width, height, cache):
     return t
 
 
+def load_gsc32(center, width, height, cache):
+    """GSC 3.2 (current JWST FGS catalog, Gaia DR3-sourced) via the STScI VO service.
+
+    The VOTABLE response trips astropy's bit-field parser, so request CSV. The
+    service caps rows per cone, so tile in Dec across the (elongated) footprint.
+    Columns: ra, dec, epoch (per-source jyear), rapm/decpm (mas/yr, *cos dec),
+    tmassKsMag, gaiaGmag, GAIAdr3sourceID.
+    """
+    import urllib.request
+    from astropy.io import ascii as asciirw
+    from astropy.table import vstack
+    if cache.exists():
+        return Table.read(cache)
+    base = "https://gsss.stsci.edu/webservices/vo/CatalogSearch.aspx"
+    ra0 = center.ra.to_value(u.deg)
+    dec0 = center.dec.to_value(u.deg)
+    half_h = height.to_value(u.deg) / 2.0
+    decs = [dec0 - half_h * 0.6, dec0, dec0 + half_h * 0.6]
+    sr = max(width.to_value(u.deg), half_h) * 0.8 + 0.02
+    parts = []
+    for dd in decs:
+        url = f"{base}?RA={ra0:.5f}&DEC={dd:.5f}&SR={sr:.3f}&CAT=GSC32&FORMAT=CSV"
+        data = urllib.request.urlopen(url, timeout=240).read().decode("utf-8", "replace")
+        parts.append(asciirw.read(data, format="csv", comment="#", fast_reader=False))
+    t = vstack(parts)
+    _, uniq = np.unique(np.asarray(t["objID"]), return_index=True)
+    t = t[uniq]
+    t.write(cache, overwrite=True)
+    return t
+
+
+def gsc32_propagated_coord(g: Table, to_epoch: Time):
+    """Propagate GSC3.2 positions to to_epoch using per-source epoch and rapm/decpm."""
+    ra = np.asarray(g["ra"], float)
+    dec = np.asarray(g["dec"], float)
+    ep = np.asarray(g["epoch"], float)
+    pmra = np.where(np.isfinite(np.asarray(g["rapm"], float)), np.asarray(g["rapm"], float), 0.0)
+    pmde = np.where(np.isfinite(np.asarray(g["decpm"], float)), np.asarray(g["decpm"], float), 0.0)
+    dt = to_epoch.jyear - ep
+    ra_new = ra + (pmra * dt / 3.6e6) / np.cos(np.deg2rad(dec))
+    dec_new = dec + (pmde * dt / 3.6e6)
+    return SkyCoord(ra_new * u.deg, dec_new * u.deg, frame="icrs")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--catalog", required=True, help="merged JWST catalog (fits/ecsv)")
@@ -279,9 +323,25 @@ def main():
         r = compare(cat_coord, None, SkyCoord(gsc[gra], gsc[gde], unit="deg"), None, max_sep,
                     "GSC2.4.2 (no PM)", do_flux=False)
         results["gsc"] = r; report.append("    " + fmt(r)); print(fmt(r))
-        report.append(f"    (GSC columns: {gsc.colnames})")
     except Exception as e:
-        report.append(f"    GSC FAILED: {e}"); print("GSC failed:", e)
+        report.append(f"    GSC2.4.2 FAILED: {e}"); print("GSC2.4.2 failed:", e)
+
+    # --- GSC 3.2 (CURRENT active JWST FGS catalog, Gaia DR3-sourced) ---
+    try:
+        gsc32 = load_gsc32(center, width, height, cachedir / "gsc32.fits")
+        ks = np.asarray(gsc32["tmassKsMag"], float)
+        coord_nopm = SkyCoord(gsc32["ra"], gsc32["dec"], unit="deg")
+        coord_pm = gsc32_propagated_coord(gsc32, JWST_EPOCH)
+        # Full sample (crowding-inflated in the GC) and clean bright-NIR subset.
+        r = compare(cat_coord, None, coord_pm, None, max_sep, "GSC3.2 (PM, all)", do_flux=False)
+        results["gsc32"] = r; report.append("    " + fmt(r)); print(fmt(r))
+        bright = np.isfinite(ks) & (ks < 14)
+        if bright.sum() > 20:
+            rb = compare(cat_coord, cat_k, coord_pm[bright], ks[bright], max_sep,
+                         "GSC3.2 (PM, Ks<14 flux-clean)")
+            results["gsc32_bright"] = rb; report.append("    " + fmt(rb)); print(fmt(rb))
+    except Exception as e:
+        report.append(f"    GSC3.2 FAILED: {e}"); print("GSC3.2 failed:", e)
 
     # --- spatial maps vs VVV and vs GNS (module/frame structure) ---
     for key in ("vvv", "gns"):
