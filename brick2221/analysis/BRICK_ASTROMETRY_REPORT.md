@@ -151,13 +151,20 @@ guiding. The "AFTER GSC3.2 re-match" number (~15 mas) is a dense-catalog counter
 NOT a real residual (held-out cross-val and the sparse-VVV check both confirm ~3 mas). Corrected
 catalogs written as `*_gsc32retied.fits` with RETIE_* metadata.
 
-**Photometric ZP fix** (astrometry-independent): the crowdsource merge path
-(`jwst-gc-pipeline/.../merge_catalogs.py` line ~1382) labelled the **Vega** magnitude as `mag_ab`
-(off by the AB-Vega offset, F212N=1.83 mag) — the source of the ~2 mag (JWST-VVV)_K discrepancy in
-the qualcuts (crowdsource) catalog. Fixed to write true AB (+8.90) for `mag_ab` and a separate
-`mag_vega`, matching the daophot/satstar paths. The daophot `basic_/...ok2221or1182` catalog was
-already correct AB. Existing crowdsource catalogs need a rebuild (or +1.83 mag F212N correction) to
-have correct `mag_ab`.
+**Photometric ZP fix** (astrometry-independent). Determined by direct catalog inspection (not code
+reading, which was misleading):
+- `qualcuts_oksep2221` (crowdsource provenance, 2026-06-07): `mag_ab − mag_vega = 1.827` → `mag_ab`
+  is **true AB, correct**; has `mag_vega`. Its (JWST−VVV)_K = +2.05 ≈ AB−Vega(1.83)+color, as expected.
+- `ok2221or1182_20251211` (daophot, 2025-12-11): `mag_ab ≡ Vega` (matches qualcuts `mag_vega` to
+  0.003 mag), **mislabeled**, no `mag_vega`. Its (JWST−VVV)_K = +0.21 ≈ color only. This is the
+  historical bug (built with old code).
+The current daophot path writes correct AB (+8.90); the crowdsource path (`merge_catalogs.py` ~line
+1382) was fixed in this work to write true AB + `mag_vega` for future builds (it previously could
+emit Vega-as-`mag_ab`). The historical `ok2221or1182` was corrected post-hoc by recomputing
+`mag_ab = -2.5 log10(flux_jy/Jy) + 8.90` per filter and storing the old Vega values as `mag_vega`
+(`*_abfix.fits`). NOTE: the jwst-gc-pipeline commit message (19e38e5) names the wrong catalog as
+affected — the code fix is still valid, but the buggy on-disk catalog was the daophot ok2221or1182,
+not the crowdsource qualcuts.
 
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
