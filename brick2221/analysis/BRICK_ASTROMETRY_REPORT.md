@@ -1,5 +1,11 @@
 # Brick NIRCam Astrometry: accuracy, error origin, and NIRSpec readiness
 
+> **DEPRECATION (2026-06):** ALL crowdsource-derived catalogs are deprecated. The project uses
+> daophot-derived catalogs only, and as of June 2026 **only the `_basic` daophot variant**. Any
+> conclusion in this report based on a `*crowdsource*`/`*qualcuts*` catalog must be re-verified on
+> daophot basic before use. (The F200W "L-hole" in §4i is a crowdsource-merge artifact and does not
+> appear in daophot basic.)
+
 Author: automated analysis (Claude), 2026-06-16
 Scripts: `astrometry_analysis.py` (VVV/Gaia/GNS), `brick_astrometry_diagnostics.py`
 (PM-propagated Gaia/VIRAC2/GSC, internal repeatability, spatial maps).
@@ -274,21 +280,99 @@ Resolved the Dec -28.71 region into two separate issues:
    covered). Intra-frame test: offsets are ~1-2 mas across the detector (no edge ramp, only a mild
    ~1.4 mas Dec gradient) -> the seam is a **whole-frame/detector SHIFT, not edge distortion** ->
    a per-detector shift correction (option b) CAN fix it. (NRCB detectors implicated.)
-2. **F200W is missing a detector** -- detection ratio F200W/F115W and F200W/F444W drop to 0.0 in an
-   L-shaped/rectangular footprint at **RA 266.513-266.530, Dec -28.705..-28.720**; F115W, F356W,
-   F444W are complete there (F356W/F444W ratio is uniform). So it's **F200W only** (not the SW+LW
-   pair). The (+15,+25) mas secondary cluster in F200W-F115W is the **edge of this hole** (F200W
-   positions there come from a few dithered frames). This is a coverage gap (data absent), NOT a
-   distortion -- needs the detector recovered in re-reduction, or use F115W there.
+2. **F200W "hole" at RA 266.513-266.530, Dec -28.705..-28.720** -- a thin L-shaped strip where
+   flux_f200w is null in the merged catalog. The (+15,+25) mas secondary cluster in F200W-F115W is
+   the **edge of this strip**. (Originally suspected a missing detector -- DISPROVEN, see 4i below.)
 
-### Q1 whole-detector vs edge: whole-frame/detector shift (2221 seam) -> option (b) works; F200W
-issue is a whole MISSING detector (re-reduce or substitute F115W).
-### Q2 are the seams aligned between programs: the 2221 N/M seam and the F200W hole sit at the SAME
-Dec (~-28.71) but are different failure modes in different programs/filters. **F115W (1182) is clean
-there (complete, no seam).** So for a joint F200W+F182M reference, at Dec -28.71 BOTH F200W (hole)
-and F182M (seam) are bad -> **use F115W**. The programs/filters are complementary: F115W fills the
-F200W hole; F200W/F115W bulk is clean where the 2221 N/M bands have their seam. Build the joint
-reference by selecting, per sky cell, the filter that is clean there (F115W as SW backbone).
+### Q1 whole-detector vs edge: whole-frame/detector shift (2221 seam) -> option (b) works. The F200W
+hole is NOT a coverage/detector issue at all (see 4i) -> use the daophot or per-filter combined
+catalog there, or fix the seam so the merge matches.
+### Q2 are the seams aligned between programs: the 2221 N/M seam and the F200W strip sit at the SAME
+Dec (~-28.71). **F115W (1182) is clean there.** For a joint F200W+F182M reference, at Dec -28.71 use
+F115W. F115W fills in where F200W's merged hole sits; F200W/F115W bulk is clean where the 2221 N/M
+bands have their seam. Build the joint reference from the per-filter COMBINED catalogs (complete) or
+the daophot merge, NOT the crowdsource qualcuts multiband merge.
+
+## 4i. F200W "hole" RESOLVED: merge-matching artifact, NOT missing data (2026-06-17)
+The earlier "F200W is missing a detector" conclusion is **WRONG**. Full forensic trace:
+- **Image:** F200W merged mosaic has 100% valid pixels at the hole (median flux 1.7, WHT 687). Data
+  present and fully reduced.
+- **Per-exposure detections:** dense and uniform across the strip. Visit002/nrca4 covers it (only
+  2-4 of 12 dithers near the edge), and **F115W has the identical coverage** (same detector, same
+  dithers) -- so it is not a coverage difference.
+- **Per-filter combined crowdsource catalog** (`f200w_merged_indivexp_merged_crowdsource_nsky0`):
+  dense, uniform, **good quality** on the strip (fracflux 0.42 vs 0.39 off-strip; qf=1.0). No hole.
+- **daophot merged catalog** (`ok2221or1182`): F200W **complete** at the hole. No hole.
+- **Crowdsource qualcuts multiband merge:** F200W hole present, and **F200W-only** (f115w, f405n,
+  f410m, f182m, f444w all complete in the same cells).
+- **Mechanism:** the strip is the nrca4-visit002 detector **edge** (thin 2-4-dither coverage)
+  coinciding with the **A/B-module seam** at Dec -28.709 -- a ~15 mas systematic dDec offset of the
+  1182 F200W positions relative to the f405n (2221) merge base. 66% of strip master-rows have
+  flux_f200w=NaN even though 98.8% have an F200W combined source within 100 mas (median ~34 mas =
+  the match radius). The thin-edge + seam offset defeats `merge_catalogs.py`'s mutual nearest-
+  neighbor matching (ref_filter=f405n, max_offset=0.10"); the F200W flux is simply not transferred.
+- **Conclusion:** NOT missing data, NOT a missing detector, NOT a quality cut. A multiband-merge
+  matching artifact tied to the seam. Fixes: (a) use the daophot or per-filter combined F200W
+  catalog (both complete there); (b) fix the seam (per-detector WCS for the A/B boundary) so the
+  merge matches; (c) make the merge matching robust to local systematic offsets at detector edges.
+- Plots: `f200w_hole_finemap.png`, `merged_multifilter_finemap.png`,
+  `f200w_qualcuts_vs_daophot_finemap.png`, `f200w_combined_finemap.png`,
+  `f200w_perexp_detections_nrca4v002.png` in `astrometry_retie_qualcuts_20251211/`.
+
+## 4j. Seam re-analysis on daophot BASIC + the joint F200W+F182M reference (2026-06-17)
+Crowdsource is deprecated; redone on daophot basic (`seam_edge_analysis.py`,
+`build_f200w_f182m_reference.py`; outputs in `astrometry_seam_dao_20251211/`).
+
+**Frame / edge / seam (internal cross-filter, bright + flux-ratio-clean):**
+- Frame-to-frame repeatability: `std_ra/std_dec` ~0.6 mas. No bulk per-frame residuals.
+- **No seam and no edge effect WITHIN either program.** 1182: F200W-F356W MAD(3.0,3.2), F200W-F444W
+  MAD(4.2,4.3); 2221: F182M-F212N MAD(0.7,0.6), F182M-F410M MAD(3.3,3.1) -- all flat across the
+  module boundary (seam jump <1 mas). The 0.7 mas F182M-F212N rules out any edge ramp (it would
+  inflate this). **The earlier "~25 mas 2221 N/M seam" was a CROWDSOURCE artifact; it does not
+  reproduce in daophot basic.**
+- **The only seam is CROSS-PROGRAM:** F200W(1182)-F182M(2221) = ~(-3.5,-2.0) mas bulk + a thin ~7"
+  band at Dec -28.709..-28.711 jumping to +15-20 mas. Both programs are internally flat through the
+  band -> it is a localized per-program tweakreg/WCS divergence (common to all bands in a program,
+  so it cancels intra-program and shows only cross-program). A single-program reference has no seam.
+- **F115W is NOT broken** (initial "75 mas broken" call was wrong). RAW f115w sits ~(+36,+68) mas
+  from the RAW Jun-7 bands only because it is a *different raw zero-point*: f115w dao_basic was
+  rebuilt 2026-06-17 with a newer per-frame alignment, while F200W/F356W/F444W/F182M are the Jun-7
+  builds aligned to the old VVV-2014 refcat. Vs the MEAN VIRAC2 frame, F115W RAW = (+5.7,+17.8) and
+  the others ~(-31,-50) -- F115W's raw frame is in fact closer to VIRAC2. Match quality is fine
+  (1645 matches, MAD ~11 mas like every band). After tying each band to the same mean VIRAC2 frame,
+  all bands agree.
+
+**PM policy (final):** PM-propagate the VIRAC2 reference PER-STAR to each program's observation epoch
+(matching the F115W `anchor_virac2_frame.py` method). The GC has no *net* bulk motion, but VIRAC2
+carries a real solar-reflex apparent field PM (median -2.66, -4.92 mas/yr) that must be applied to
+bring VIRAC2 to the obs epoch. Each VIRAC2 star is moved by its own pmRA/pmDE (missing -> 0).
+
+**VIRAC2 reference epoch = 2014.0 (reference-paper value, adopted).** Empirical cross-check
+(regression of (VIRAC2-Gaia) position vs Gaia PM, slope = E_virac - 2016.0): dRA -> 2014.47,
+dDec -> 2014.15, axis spread ~0.3 yr -> ~2014.3, consistent with 2014.0 at ~1 sigma; the ~0.3 yr
+difference is ~1 mas (negligible). **The F115W agent's `anchor_virac2_frame.py` uses 2016.0, ~2 yr
+too late -> its `*_VIRAC2FRAME` / `gaia_virac2_refcat` are ~10 mas under-propagated; that constant
+should be changed to 2014.0.** Program epochs (DATE-OBS): 1182 (F200W,F356W,F444W,F115W) =
+2022-09-14 = jyear 2022.703; 2221 (F182M,F187N,F212N,F405N,F410M,F466N) = 2022-08-28 = jyear
+2022.655. Total mean PM added to VIRAC2: 1182 dt=8.703 yr -> (-23.2,-42.9) mas; 2221 dt=8.655 yr ->
+(-23.0,-42.6) mas.
+
+**Joint reference catalog:** `catalogs/f200w_f182m_virac2_reference_catalog.fits` (519,045 rows =
+379,460 F200W@2022.703 + 139,585 F182M@2022.655). Each program tied independently to its
+PM-propagated VIRAC2 by a single rigid OFFSET-HISTOGRAM bulk shift (refined: 2 mas bins + iterative
+median in 20/12/8 mas windows). Columns: RA, DEC, flux, std_ra_mas, std_dec_mas, filter, program,
+`epoch` (jyear the positions are at), `virac2_pmra`, `virac2_pmde` (matched per-star VIRAC2 PM, NaN
+if unmatched; for downstream re-propagation). Meta records V2EPOCH=2014.0, mean PM, per-program dt +
+total PM added, and the bulk shifts (F200W -52.6,-93.7; F182M -51.9,-96.3 mas; residual vs propagated
+VIRAC2 ~(+0.1,+2.1)/(0,+0.1) mas). F200W-F182M agree to median(-2.8,-4.6), MAD(2.7,1.9) mas, plus
+the thin Dec -28.709 band (the only residual structure).
+
+**Validation (Gaia DR3 propagated PER-STAR to each obs epoch -- the clean check):** F200W (+1.2,-7.7),
+F182M (+0.7,-1.2), F356W (-1.6,-7.3), F405N (-1.3,+0.9), F212N (-0.5,+0.6), F444W (+0.6,-6.1) mas --
+all within ~1-8 mas of Gaia; the residual is the VIRAC2-Gaia tie (~5 mas) + epoch. The 1182 bands sit
+~-7 mas in Dec vs Gaia and 2221 ~0-1 mas (the small cross-program Dec frame difference). Plot:
+`reference_build_diagnostics.png`. (Earlier mean-frame / 2016-propagated / epoch-2014.3 variants are
+superseded by this per-star, epoch-2014.0 build.)
 
 ## 5. Recommendations for NIRSpec-grade pointing (<10 mas absolute)
 1. **Choose the operational frame = GSC 3.2 / Gaia DR3** (the current active JWST FGS catalog), not
