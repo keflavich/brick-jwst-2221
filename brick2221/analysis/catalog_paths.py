@@ -24,6 +24,10 @@ CANON = {
 
 def best_dao_basic(filt):
     filt = filt.lower()
+    # prefer the module-LOCKED combined catalog (lock_exposures.py) if present
+    locked = f'{CATDIR}/{filt}_merged_indivexp_LOCKED_dao_basic.fits'
+    if os.path.exists(locked):
+        return locked
     tag = CANON.get(filt, '_m3')
     path = f'{CATDIR}/{filt}_merged_indivexp_merged{tag}_dao_basic.fits'
     if not os.path.exists(path):
