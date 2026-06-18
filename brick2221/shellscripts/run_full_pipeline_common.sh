@@ -357,12 +357,13 @@ submit_target_flow() {
     if [[ -n "${DEF_MERGE_REF_FILTER:-}" ]]; then
         merge_ref_arg="--ref-filter=${DEF_MERGE_REF_FILTER}"
     fi
+    local merge_workers=${MERGE_WORKERS:-8}
     merge_jobid=$(sbatch --parsable --dependency=afterok:${catalog_dep} \
         --job-name="webb-merge-${name}" \
         --output="${logdir}/webb-merge-${name}_%j.log" \
         --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
-        --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
-        --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao,daoiterative --skip-crowdsource --target=${name} ${merge_ref_arg}")
+        --ntasks=1 --cpus-per-task=${merge_workers} --nodes=1 --mem=128gb --time=96:00:00 \
+        --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao,daoiterative --skip-crowdsource --target=${name} ${merge_ref_arg} --merge-workers=${merge_workers}")
     echo "Submitted merge job ${merge_jobid} for ${name}"
 }
 
