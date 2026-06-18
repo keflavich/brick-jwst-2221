@@ -48,8 +48,11 @@ OBS_EPOCH = {'f200w': 2022.703,   # prop 1182 obs004, 2022-09-14
 PROGRAM = {'f200w': 1182, 'f182m': 2221}
 
 
+from catalog_paths import best_dao_basic
+
+
 def load_jwst(filt):
-    t = Table.read(f'{CATDIR}/{filt}_merged_indivexp_merged_dao_basic.fits')
+    t = Table.read(best_dao_basic(filt))
     sc = SkyCoord(t['skycoord'])
     fluxcol = 'flux' if 'flux' in t.colnames else ('flux_fit' if 'flux_fit' in t.colnames else 'flux_init')
     flux = np.asarray(t[fluxcol], float)

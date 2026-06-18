@@ -49,8 +49,11 @@ def load_virac2(epoch):
     return v, SkyCoord(ra2 * u.deg, dec2 * u.deg)
 
 
+from catalog_paths import best_dao_basic
+
+
 def load_jwst(filt):
-    t = Table.read(f'{CATDIR}/{filt}_merged_indivexp_merged_dao_basic.fits')
+    t = Table.read(best_dao_basic(filt))
     sc = SkyCoord(t['skycoord'])
     fcol = 'flux' if 'flux' in t.colnames else ('flux_fit' if 'flux_fit' in t.colnames else 'flux_init')
     flux = np.asarray(t[fcol], float)

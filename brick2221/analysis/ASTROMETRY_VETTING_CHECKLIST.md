@@ -7,8 +7,14 @@ absolute tie, and cross-check overlapping programs. Reference implementations li
 
 ## Ground rules (DON'T skip)
 - [ ] **daophot BASIC only.** Crowdsource catalogs are deprecated (`*crowdsource*`, `*qualcuts*`).
-      As of June 2026 use only `*_merged_indivexp_merged_dao_basic.fits`. Re-verify any pre-existing
-      crowdsource conclusion on daophot basic.
+- [ ] **Use the CURRENT COMPLETE per-filter catalog, not the legacy base.** The no-suffix
+      `<filt>_merged_indivexp_merged_dao_basic.fits` is the STALE legacy build and is INCOMPLETE
+      (missing frames/detectors -> coverage holes; it produced false F200W-nrca4 blanks and a false
+      "F115W 75 mas off" result). The current complete products are the manual passes
+      `<filt>_merged_indivexp_merged_<m>_dao_basic.fits` (192 frames SW / 48 LW). Resolve via
+      `catalog_paths.best_dao_basic(filt)`. **Always check frame completeness** (FN meta count vs
+      expected 192/48; per-detector coverage) before trusting a catalog. Brick's stale base merges
+      were moved to `catalogs/stale_20260618/`.
 - [ ] **Reference-frame policy** (see `feedback_reference_frame_policy`):
       GC fields → VIRAC2 (II/387) positions PM-propagated **per-star** from VIRAC2 ref epoch **2014.0**
       to the obs epoch; non-GC → Gaia DR3 per-star from **2016.0**. VIRAC2 epoch is **2014.0** (NOT 2016.0).

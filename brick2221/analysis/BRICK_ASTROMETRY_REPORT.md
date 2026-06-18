@@ -334,13 +334,14 @@ Crowdsource is deprecated; redone on daophot basic (`seam_edge_analysis.py`,
   band at Dec -28.709..-28.711 jumping to +15-20 mas. Both programs are internally flat through the
   band -> it is a localized per-program tweakreg/WCS divergence (common to all bands in a program,
   so it cancels intra-program and shows only cross-program). A single-program reference has no seam.
-- **F115W is NOT broken** (initial "75 mas broken" call was wrong). RAW f115w sits ~(+36,+68) mas
-  from the RAW Jun-7 bands only because it is a *different raw zero-point*: f115w dao_basic was
-  rebuilt 2026-06-17 with a newer per-frame alignment, while F200W/F356W/F444W/F182M are the Jun-7
-  builds aligned to the old VVV-2014 refcat. Vs the MEAN VIRAC2 frame, F115W RAW = (+5.7,+17.8) and
-  the others ~(-31,-50) -- F115W's raw frame is in fact closer to VIRAC2. Match quality is fine
-  (1645 matches, MAD ~11 mas like every band). After tying each band to the same mean VIRAC2 frame,
-  all bands agree.
+- **F115W is fine; the "75 mas / different zero-point" was a STALE-CATALOG artifact** (corrected
+  2026-06-18). The whole analysis initially used the legacy base `_merged_dao_basic` catalogs
+  (Jun-7), which are STALE/INCOMPLETE for every filter (F200W 154/192 frames with nrca4 nearly
+  absent -> the diagnostic "blank chunks"; F115W base had a degenerate 0-frame format -> the false
+  offset). On the CURRENT COMPLETE manual-pass catalogs (`_m2/_m3..._dao_basic`, 192 SW / 48 LW;
+  selected via `catalog_paths.best_dao_basic`), all 1182 bands agree: f200w-f115w bulk (0.4,-6.6) mas
+  and F115W tied vs Gaia@obs (+2.7,-0.4) mas. Positions are pass-stable (F200W m2 vs m3 MAD 0.12 mas).
+  No re-cataloging was needed; the stale base merges were moved to `catalogs/stale_20260618/`.
 
 **PM policy (final):** PM-propagate the VIRAC2 reference PER-STAR to each program's observation epoch
 (matching the F115W `anchor_virac2_frame.py` method). The GC has no *net* bulk motion, but VIRAC2
