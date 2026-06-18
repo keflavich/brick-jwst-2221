@@ -97,3 +97,17 @@ No formal test suite. Validation happens through:
 - **Crowdsource**: Third-party photometry package (not in this repo)
 - **MAST**: Data archive queries via `astroquery.mast`
 - **VVV**: External astrometric reference catalog (loaded via `retrieve_vvv()` in `align_to_catalogs.py`)
+
+## Astrometric WCS corrections (READ BEFORE EDITING ALIGNMENT/WCS CODE)
+The authoritative map of which files get WCS corrections, the reproducible
+`*_cal.fits` → mosaic/catalog path, and double-correction prevention is in
+`jwst-gc-pipeline/jwst_gc_pipeline/reduction/ASTROMETRY_WCS_CORRECTION_FLOW.md`.
+Key rules:
+- Astrometry is authored at exactly two points: per-exposure `fix_alignment()`
+  (the science tie) and post-resample `realign_to_catalog()` (rigid mosaic
+  zero-point only). TweakRegStep is deliberately `skip=True`.
+- Per-exposure GWCS shifts use `jwst.tweakreg.utils.adjust_wcs` (idempotent via
+  `RAOFFSET` header). NEVER hand-edit a `_cal` GWCS.
+- `_cal.fits` and `_i2d.fits` are never edited in place; the realigned mosaic is
+  regenerated from a fresh copy of `_i2d` each run. Reference epochs: Gaia 2016.0,
+  VIRAC2 2014.0, observation epoch 2022.70.

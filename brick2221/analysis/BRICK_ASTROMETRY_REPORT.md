@@ -404,16 +404,22 @@ Current state vs policy:
 - **Brick (1182 o004, GC): COMPLIANT.** Uses `catalogs/gaia_virac2_refcat_epoch2022.70.fits` built by
   `jwst-gc-pipeline/.../build_gaia_virac2_refcat.py`, which propagates Gaia from 2016.0 and VIRAC2
   from **2014.0** per-star to 2022.70. Correct (matches the F200W+F182M reference here).
-- **Other GC targets: NOT on VIRAC2.** Sgr A* (1939), Arches/Quintuplet (2045), Gc2211 (2211),
-  Sickle (3958) bootstrap to **GNS** (`nircam_bootstrapped_to_gns_refcat.fits`); Sgr B2 (5365) uses
-  **VVV** (`crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv`). To make VIRAC2 the
-  GC default these must be switched to a VIRAC2 (PM-propagated-from-2014.0) reference. (Note GNS is
-  itself a defensible dense GC frame; switching is a policy choice -- pending.)
+- **GC targets (user decision 2026-06-18): SgrB2 -> VIRAC2; the rest STAY on GNS.**
+  - **Sgr B2 (5365): SWITCHED VVV -> Gaia+VIRAC2** (`catalogs/gaia_virac2_refcat_epoch2024.68.fits`
+    in the sgrb2 base; epoch 2024.685; 173,909 rows = 2000 Gaia + 171,909 VIRAC2 fill). Built by the
+    new general query-based builder
+    `jwst-gc-pipeline/jwst_gc_pipeline/reduction/build_gaia_virac2_refcat_byquery.py` (queries Vizier
+    II/387 + Gaia DR3, propagates VIRAC2 from 2014.0 / Gaia from 2016.0 to the obs epoch). Caveat:
+    Gaia archive was flaky that day -> direct-Gaia capped at 2000 of 9488 in cone; harmless (the rest
+    are kept as VIRAC2 fill on the same frame); re-run the builder to refresh when the archive is
+    healthy.
+  - Sgr A* (1939), Arches/Quintuplet (2045), Gc2211 (2211), Sickle (3958): **stay on GNS**
+    (`nircam_bootstrapped_to_gns_refcat.fits`) -- GNS is a defensible dense inner-GC frame.
 
-**Two epoch BUGS found (VIRAC2 propagated from 2016.0 instead of 2014.0 -> ~10 mas under-propagation):**
-- `brick2221/analysis/anchor_virac2_frame.py:47` -- `EPOCH-2016.0` for VIRAC2 (F115W agent's; flag).
-- `jwst-gc-pipeline/jwst_gc_pipeline/photometry/generate_offsets_table.py:72` -- `EPOCH-2016.0` for
-  VIRAC2 validation. Both should be `EPOCH-2014.0`.
+**Two epoch BUGS fixed 2026-06-18 (VIRAC2 propagated from 2016.0 -> 2014.0; ~10 mas under-propagation):**
+- `brick2221/analysis/anchor_virac2_frame.py:47` -- now `EPOCH-2014.0`.
+- `jwst-gc-pipeline/jwst_gc_pipeline/photometry/generate_offsets_table.py:72` -- now `EPOCH-2014.0`.
 
-Correct reference implementations to copy: `build_gaia_virac2_refcat.py` (GAIA_EPOCH=2016.0,
-VIRAC2_EPOCH=2014.0) and `build_gaia_refcat.py` (per-star from Gaia ref_epoch).
+Correct reference implementations: `build_gaia_virac2_refcat.py` (Brick; GAIA_EPOCH=2016.0,
+VIRAC2_EPOCH=2014.0), `build_gaia_virac2_refcat_byquery.py` (general GC, query-based), and
+`build_gaia_refcat.py` (non-GC, per-star from Gaia ref_epoch).

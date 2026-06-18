@@ -44,7 +44,7 @@ def off(a, b, sep=0.3*u.arcsec, clip=120):
 
 
 v = Table.read(f'{BASE}/astrometry_diag/refcache/virac2.fits')
-virac = SkyCoord(*prop(farr(v['RAJ2000']), farr(v['DEJ2000']), farr(v['pmRA']), farr(v['pmDE']), EPOCH-2016.0), unit='deg')
+virac = SkyCoord(*prop(farr(v['RAJ2000']), farr(v['DEJ2000']), farr(v['pmRA']), farr(v['pmDE']), EPOCH-2014.0), unit='deg')  # VIRAC2 ref epoch 2014.0 (II/387), NOT 2016.0
 g = Table.read(f'{BASE}/astrometry_analysis/reference_cache/basic_merged_photometry_tables_merged_gaia.fits')
 gaia = SkyCoord(*prop(farr(g['RA_ICRS']), farr(g['DE_ICRS']), farr(g['pmRA']), farr(g['pmDE']), EPOCH-2016.0), unit='deg')
 
