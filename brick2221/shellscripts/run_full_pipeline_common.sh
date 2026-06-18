@@ -336,7 +336,16 @@ submit_target_flow() {
             continue
         fi
         echo "Cat (manual-iteration, single job) for ${name} ${filter} obs ${fld}: n_files=${n_files}" >&2
+        # Per-worker memory covers the parallel per-exposure cataloging, but the
+        # manual-iteration merge phase (Phase 1 ra/dec/flux stack) loads ALL
+        # per-exposure catalogs into one process at once.  For SW filters with
+        # many exposures that peaks ~96GB, far above MEM_PER_WORKER_GB*workers,
+        # so floor the request at CAT_MIN_MEM_GB to avoid OOM at the merge.
         local cat_mem_gb=$(( MEM_PER_WORKER_GB * PARALLEL_WORKERS ))
+        local cat_min_mem_gb=${CAT_MIN_MEM_GB:-128}
+        if (( cat_mem_gb < cat_min_mem_gb )); then
+            cat_mem_gb=${cat_min_mem_gb}
+        fi
         local parallel_args=""
         if (( PARALLEL_WORKERS > 1 )); then
             parallel_args="--parallel-workers=${PARALLEL_WORKERS} --parallel-chunk-size=${PARALLEL_CHUNK_SIZE}"
