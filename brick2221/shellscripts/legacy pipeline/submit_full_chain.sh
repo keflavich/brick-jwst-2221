@@ -180,6 +180,31 @@ get_each_suffix() {
 iter1_ids=()
 iter2_ids=()
 
+# Auto-detect frame count for the heaviest filter to size CPU allocation.
+# Each worker handles one detector-exposure; cap at 128 (largest hpg-default node).
+CAT_CPU_CAP=${MANUAL_CPU_CAP:-128}
+_cat_max_frames=0
+for _cf in ${filter//,/ }; do
+  _sfx=$(get_each_suffix "${fields[0]}")
+  _n=$( (shopt -s nullglob; a=( "${basepath}/${_cf^^}/pipeline/"*"${_sfx}.fits" ); echo ${#a[@]}) )
+  (( _n > _cat_max_frames )) && _cat_max_frames=$_n
+done
+if [[ -n "${MANUAL_CPUS:-}" ]]; then
+  CAT_CPUS=$MANUAL_CPUS
+elif (( _cat_max_frames > 0 )); then
+  CAT_CPUS=$(( _cat_max_frames < CAT_CPU_CAP ? _cat_max_frames : CAT_CPU_CAP ))
+else
+  CAT_CPUS=32
+fi
+(( CAT_CPUS < 1 )) && CAT_CPUS=1
+CAT_MEM=${MANUAL_MEM:-$(( CAT_CPUS * ${MANUAL_MEM_PER_CPU_GB:-6} ))gb}
+echo "chain resources: ${_cat_max_frames} frames -> CAT_CPUS=${CAT_CPUS} CAT_MEM=${CAT_MEM}" >&2
+
+# Merge step: spatial-chunked combine to avoid the serial ddec bottleneck.
+# 8 workers auto-tiles fields with >1M detections; safe no-op for smaller fields.
+MERGE_WORKERS=${CHAIN_MERGE_WORKERS:-8}
+MERGE_MEM=${CHAIN_MERGE_MEM:-128gb}
+
 for fld in "${fields[@]}"; do
   each_suffix=$(get_each_suffix "$fld")
   COMMON="--filternames=${filter} --modules=${module} --proposal_id=${proposal_id} --field=${fld} --target=${python_target} --each-suffix=${each_suffix} --each-exposure --daophot --skip-crowdsource --skip-if-done"
@@ -188,27 +213,28 @@ for fld in "${fields[@]}"; do
   # must NOT run under a SLURM array (SLURM_ARRAY_TASK_ID must be unset).
   ITER1=$(sbatch --parsable $DEP \
     --account=astronomy-dept --qos=astronomy-dept-b \
-    --ntasks=1 --cpus-per-task=4 --mem=64gb --time=96:00:00 \
+    --ntasks=1 --cpus-per-task=${CAT_CPUS} --mem=${CAT_MEM} --time=96:00:00 \
     --job-name=webb-cat-${target}-o${fld}-${filter}-${module}-iter1-${tag} \
     --output=${logdir}/webb-cat-${target}-o${fld}-${filter}-${module}-iter1-${tag}_%j.log \
-    --wrap "export OMP_NUM_THREADS=1; ${PYTHON} ${SCRIPT} ${COMMON}")
+    --wrap "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1; ${PYTHON} ${SCRIPT} ${COMMON} --parallel-workers=${CAT_CPUS}")
   iter1_ids+=("${ITER1}")
 
   ITER2=$(sbatch --parsable --dependency=afterok:${ITER1} \
     --account=astronomy-dept --qos=astronomy-dept-b \
-    --ntasks=1 --cpus-per-task=4 --mem=64gb --time=96:00:00 \
+    --ntasks=1 --cpus-per-task=${CAT_CPUS} --mem=${CAT_MEM} --time=96:00:00 \
     --job-name=webb-cat-${target}-o${fld}-${filter}-${module}-iter2-${tag} \
     --output=${logdir}/webb-cat-${target}-o${fld}-${filter}-${module}-iter2-${tag}_%j.log \
-    --wrap "export OMP_NUM_THREADS=1; ${PYTHON} ${SCRIPT} ${COMMON} --iteration-label=iter2 --postprocess-residuals")
+    --wrap "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1; ${PYTHON} ${SCRIPT} ${COMMON} --iteration-label=iter2 --postprocess-residuals --parallel-workers=${CAT_CPUS}")
   iter2_ids+=("${ITER2}")
 done
 
 merge_dep=$(IFS=:; echo "${iter2_ids[*]}")
 MERGE=$(sbatch --parsable --dependency=afterok:${merge_dep} \
-  --account=astronomy-dept --qos=astronomy-dept-b --mem=64gb --time=24:00:00 \
+  --account=astronomy-dept --qos=astronomy-dept-b \
+  --ntasks=1 --cpus-per-task=${MERGE_WORKERS} --mem=${MERGE_MEM} --time=24:00:00 \
   --job-name=webb-merge-${target}-iter2-${filter}-${tag} \
   --output=${logdir}/webb-merge-${target}-iter2-${filter}-${tag}_%j.log \
-  --wrap "${PYTHON} ${MERGE_SCRIPT} --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter2 --ref-filter=${ref_filter}")
+  --wrap "${PYTHON} ${MERGE_SCRIPT} --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter2 --ref-filter=${ref_filter} --merge-workers=${MERGE_WORKERS}")
 
 ITER3_LAUNCH=$(sbatch --parsable --dependency=afterok:${MERGE} \
   --account=astronomy-dept --qos=astronomy-dept-b --mem=4gb --time=00:30:00 \
