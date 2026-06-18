@@ -388,3 +388,32 @@ superseded by this per-star, epoch-2014.0 build.)
    only correction needed is the global ~20 mas frame shift.
 5. **Definitive module check**: run per-detector (NRCA1-4/B1-4) offsets on the raw F182M per-detector
    catalogs (the cross-filter proxy here already shows no module jumps to ±10 mas).
+
+## 6. Pipeline-wide reference-frame policy (verification, 2026-06-18)
+Desired standing policy: **GC fields -> VIRAC2 positions PM-propagated PER-STAR from the VIRAC2
+reference epoch 2014.0 to the observation epoch; non-GC fields -> Gaia DR3 PM-propagated per-star
+from the Gaia ref epoch 2016.0 to the observation epoch.**
+
+Per-target reference catalog selection lives in
+`jwst-gc-pipeline/jwst_gc_pipeline/reduction/PipelineRerunNIRCAM-LONG.py` (target dict ~lines 97-222).
+
+Current state vs policy:
+- **Non-GC (Gaia DR3): COMPLIANT.** W51 (6151), Wd1 (1905), Wd2 (3523) use `catalogs/gaia_refcat.fits`
+  built by `brick2221/reduction/build_gaia_refcat.py`, which propagates per-star from the Gaia
+  `ref_epoch` (2016.0) to the target epoch. Correct.
+- **Brick (1182 o004, GC): COMPLIANT.** Uses `catalogs/gaia_virac2_refcat_epoch2022.70.fits` built by
+  `jwst-gc-pipeline/.../build_gaia_virac2_refcat.py`, which propagates Gaia from 2016.0 and VIRAC2
+  from **2014.0** per-star to 2022.70. Correct (matches the F200W+F182M reference here).
+- **Other GC targets: NOT on VIRAC2.** Sgr A* (1939), Arches/Quintuplet (2045), Gc2211 (2211),
+  Sickle (3958) bootstrap to **GNS** (`nircam_bootstrapped_to_gns_refcat.fits`); Sgr B2 (5365) uses
+  **VVV** (`crowdsource_based_nircam-f405n_reference_astrometric_catalog.ecsv`). To make VIRAC2 the
+  GC default these must be switched to a VIRAC2 (PM-propagated-from-2014.0) reference. (Note GNS is
+  itself a defensible dense GC frame; switching is a policy choice -- pending.)
+
+**Two epoch BUGS found (VIRAC2 propagated from 2016.0 instead of 2014.0 -> ~10 mas under-propagation):**
+- `brick2221/analysis/anchor_virac2_frame.py:47` -- `EPOCH-2016.0` for VIRAC2 (F115W agent's; flag).
+- `jwst-gc-pipeline/jwst_gc_pipeline/photometry/generate_offsets_table.py:72` -- `EPOCH-2016.0` for
+  VIRAC2 validation. Both should be `EPOCH-2014.0`.
+
+Correct reference implementations to copy: `build_gaia_virac2_refcat.py` (GAIA_EPOCH=2016.0,
+VIRAC2_EPOCH=2014.0) and `build_gaia_refcat.py` (per-star from Gaia ref_epoch).
