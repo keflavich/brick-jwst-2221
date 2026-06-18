@@ -22,11 +22,18 @@ CANON = {
 }
 
 
+# Only the 1182 bands benefit from module-locking: their per-filter tweakreg solutions were
+# inconsistent (quiltwork). The 2221 bands already share a consistent per-detector solution
+# (f182m-f212n agree to <1 mas), and independent VIRAC2-locking would only inject VIRAC2's
+# ~few-mas per-detector noise and DEGRADE them -- so 2221 stays on the unlocked m-pass.
+LOCK_FILTERS = {'f115w', 'f200w', 'f356w', 'f444w'}
+
+
 def best_dao_basic(filt):
     filt = filt.lower()
-    # prefer the module-LOCKED combined catalog (lock_exposures.py) if present
+    # prefer the module-LOCKED combined catalog (lock_exposures.py) for 1182 bands only
     locked = f'{CATDIR}/{filt}_merged_indivexp_LOCKED_dao_basic.fits'
-    if os.path.exists(locked):
+    if filt in LOCK_FILTERS and os.path.exists(locked):
         return locked
     tag = CANON.get(filt, '_m3')
     path = f'{CATDIR}/{filt}_merged_indivexp_merged{tag}_dao_basic.fits'

@@ -224,11 +224,14 @@ def main():
     # (now that the reference is at the obs epoch, Gaia must be propagated to the same epoch with
     #  its own per-star PMs -- this is the correct, clean check; foreground PMs are handled.)
     print("\n---- VALIDATION (Gaia DR3 propagated per-star to each obs epoch) ----")
-    for jr, nm, filt in [(joint_rows[0], 'F200W', 'f200w'), (joint_rows[1], 'F182M', 'f182m')]:
+    try:
+      for jr, nm, filt in [(joint_rows[0], 'F200W', 'f200w'), (joint_rows[1], 'F182M', 'f182m')]:
         sc = SkyCoord(jr['RA'], jr['DEC'], unit='deg')
         gaia_ep = gaia_at_epoch(epoch=OBS_EPOCH[filt])
         pr, pd = offhist_shift_sc(sc, gaia_ep, search=0.25 * u.arcsec)
         print(f"  tied {nm} vs Gaia@{OBS_EPOCH[filt]}: ({pr:+.1f},{pd:+.1f}) mas  [target ~0]")
+    except Exception as e:
+        print(f"  Gaia validation skipped (archive error): {e!r}")
     # other bands tied the same way (per-star VIRAC2 PM to their own epoch) then vs Gaia@epoch
     for ob in ['f356w', 'f405n', 'f212n', 'f444w', 'f115w']:
         try:
