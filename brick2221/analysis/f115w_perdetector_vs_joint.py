@@ -31,9 +31,9 @@ os.makedirs(OUTD, exist_ok=True)
 # Joint reference = the all-exposure merged catalog.  Prefer the canonical no-suffix
 # file; fall back to the newest iteration-merged catalog produced by the recat.
 def _pick_joint():
-    cand = f'{BASE}/catalogs/f115w_merged_indivexp_merged_dao_basic.fits'
-    if os.path.exists(cand):
-        return cand
+    # newest merged catalog by mtime (so a stale canonical no-suffix file from a
+    # PRIOR run does not get used against freshly-recatalogued per-frame data --
+    # both must be from the same run for the internal comparison to be meaningful)
     its = sorted(glob.glob(f'{BASE}/catalogs/f115w_merged_indivexp_merged_*dao_basic.fits'),
                  key=os.path.getmtime)
     its = [f for f in its if 'allcols' not in f and 'i2dseed' not in f]
@@ -56,15 +56,20 @@ frames = sorted(glob.glob(f'{BASE}/F115W/f115w_*_visit*_exp*_daophot_basic.fits'
 frames = [f for f in frames if not any(t in f for t in ('_m1', '_m2', '_m3', '_m4', '_m5',
                                                         '_m6', 'iter', 'resbgsub', '_group'))]
 
-# accumulate per detector: x, y, dra, ddec (mas)
-acc = {d: {'x': [], 'y': [], 'dra': [], 'ddec': []} for d in DETS}
+# The merged catalog applies its OWN offsets table (shift_individual_catalog) and so
+# sits on a different frame than the per-frame skycoord_centroid (fix_alignment frame).
+# Comparing per-frame directly to it would mix per-detector structure with that
+# table difference.  So: use the merged catalog ONLY to define clusters (robust within
+# 0.15"), then build the JOINT position as the mean of the per-frame skycoord_centroid
+# in each cluster -> per-frame and joint share the fix_alignment frame, isolating real
+# per-detector / intra-detector structure.
+cid_l, ra_l, dec_l, det_l, x_l, y_l = [], [], [], [], [], []
+DIDX = {d: k for k, d in enumerate(DETS)}
 for fn in frames:
     mr = re.search(r'(nrc[ab]\d)_visit(\d+)', fn)
-    if not mr:
+    if not mr or mr.group(1) not in DIDX:
         continue
-    det = mr.group(1)
-    if det not in acc:
-        continue
+    di = DIDX[mr.group(1)]
     t = Table.read(fn)
     if 'x_fit' in t.colnames:
         x = farr(t['x_fit']); y = farr(t['y_fit'])
@@ -77,16 +82,24 @@ for fn in frames:
         continue
     i, sep, _ = sc.match_to_catalog_sky(jsc)
     k = sep < MATCH
-    dra = (sc[k].ra.deg - jsc[i[k]].ra.deg) * np.cos(np.radians(sc[k].dec.deg)) * 3.6e6
-    dd = (sc[k].dec.deg - jsc[i[k]].dec.deg) * 3.6e6
-    # clip gross mismatches
-    cl = np.hypot(dra, dd) < 100
-    acc[det]['x'].append(x[k][cl]); acc[det]['y'].append(y[k][cl])
-    acc[det]['dra'].append(dra[cl]); acc[det]['ddec'].append(dd[cl])
+    cid_l.append(i[k]); ra_l.append(sc[k].ra.deg); dec_l.append(sc[k].dec.deg)
+    det_l.append(np.full(k.sum(), di)); x_l.append(x[k]); y_l.append(y[k])
 
-for d in DETS:
-    for key in acc[d]:
-        acc[d][key] = np.concatenate(acc[d][key]) if acc[d][key] else np.array([])
+cid = np.concatenate(cid_l); ra = np.concatenate(ra_l); dec = np.concatenate(dec_l)
+detarr = np.concatenate(det_l); xall = np.concatenate(x_l); yall = np.concatenate(y_l)
+# joint position per cluster = mean of per-frame positions (fix_alignment frame)
+nc = len(jsc); cnt = np.bincount(cid, minlength=nc)
+jr = np.bincount(cid, weights=ra, minlength=nc) / np.maximum(cnt, 1)
+jd = np.bincount(cid, weights=dec, minlength=nc) / np.maximum(cnt, 1)
+# only clusters with >=3 contributing detections (well-defined consensus)
+good = cnt[cid] >= 3
+dra_all = (ra - jr[cid]) * np.cos(np.radians(dec)) * 3.6e6
+dd_all = (dec - jd[cid]) * 3.6e6
+clip = good & (np.hypot(dra_all, dd_all) < 100)
+acc = {}
+for d, di in DIDX.items():
+    m = clip & (detarr == di)
+    acc[d] = {'x': xall[m], 'y': yall[m], 'dra': dra_all[m], 'ddec': dd_all[m]}
 
 # --- summary numbers ---
 L = ["F115W per-detector residuals vs JOINT internal catalog (self-reference)"]
