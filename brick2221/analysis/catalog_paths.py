@@ -22,11 +22,13 @@ CANON = {
 }
 
 
-# Only the 1182 bands benefit from module-locking: their per-filter tweakreg solutions were
-# inconsistent (quiltwork). The 2221 bands already share a consistent per-detector solution
-# (f182m-f212n agree to <1 mas), and independent VIRAC2-locking would only inject VIRAC2's
-# ~few-mas per-detector noise and DEGRADE them -- so 2221 stays on the unlocked m-pass.
-LOCK_FILTERS = {'f115w', 'f200w', 'f356w', 'f444w'}
+# EXACT per-exposure module-lock (relock_exposures.py): undo the recorded per-detector offset ->
+# SIAF -> one VIRAC2-tied shift per exposure. This is exact (not VIRAC2-per-detector-noise-limited),
+# so it does NOT degrade the already-consistent 2221 bands (F182M cross-frame scatter 2.3 mas) and
+# puts ALL filters on one common VIRAC2-referenced per-exposure solution. Use LOCKED for every
+# relocked band. (The earlier note about 2221 degrading applied to the VIRAC2-DEVIATION method,
+# now superseded by the exact relock.)
+LOCK_FILTERS = {'f115w', 'f200w', 'f356w', 'f444w', 'f182m', 'f187n', 'f212n', 'f405n', 'f410m', 'f466n'}
 
 
 def best_dao_basic(filt):
