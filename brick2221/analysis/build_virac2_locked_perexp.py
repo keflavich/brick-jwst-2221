@@ -43,8 +43,12 @@ CLUSTER_MAS = 50.0
 FILT_CFG = {  # filt: (subdir, vgroup, obs-epoch, mtag, proposal)
     'f115w': ('F115W', '02101', 2022.703, '_m3', '1182'),
     'f200w': ('F200W', '04101', 2022.703, '_m3', '1182'),
+    'f356w': ('F356W', '02101', 2022.703, '_m2', '1182'),
+    'f444w': ('F444W', '04101', 2022.703, '_m2', '1182'),
 }
-DETS = ['nrca1', 'nrca2', 'nrca3', 'nrca4', 'nrcb1', 'nrcb2', 'nrcb3', 'nrcb4']
+SW = {'f115w', 'f200w', 'f182m', 'f187n', 'f212n'}
+SW_DETS = ['nrca1', 'nrca2', 'nrca3', 'nrca4', 'nrcb1', 'nrcb2', 'nrcb3', 'nrcb4']
+LW_DETS = ['nrcalong', 'nrcblong']
 
 
 def farr(x):
@@ -117,10 +121,11 @@ def lock_filter(filt):
     sub, vg, ep, mtag, prop = FILT_CFG[filt]
     print(f"=== per-exposure relock {filt} ({prop}, epoch {ep}) ===", flush=True)
     ref = virac2(ep)
+    dets = SW_DETS if filt in SW else LW_DETS
     from collections import defaultdict
     # gather SIAF positions per (visit, exp) pooled over detectors; track RAOFFSET for coarse
     byve = defaultdict(lambda: [[], []]); byv = defaultdict(list); coarse = defaultdict(lambda: [[], []])
-    for det in DETS:
+    for det in dets:
         for f in glob.glob(f'{BASE}/{sub}/{filt}_{det}_visit*_vgroup{vg}_exp*{mtag}_daophot_basic.fits'):
             b = os.path.basename(f)
             vis = b.split('_visit')[1][:3]; exp = int(re.search(r'_exp(\d+)', b).group(1))
