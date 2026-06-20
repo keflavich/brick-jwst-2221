@@ -22,3 +22,7 @@ cd /orange/adamginsburg/jwst/sickle
     --each-suffix=o002_crf \
     --daophot --skip-crowdsource \
     --group --max-group-size=10 --manual-group-min-sep-fwhm=3.0
+
+# refresh the A/B/C/D satstar diagnostic figure each round (visual review)
+/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
+    /blue/adamginsburg/adamginsburg/repos/brick-jwst-2221/brick2221/shellscripts/make_satstar_diagnostic.py o002
