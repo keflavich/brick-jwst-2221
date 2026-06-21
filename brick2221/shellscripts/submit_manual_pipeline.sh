@@ -261,7 +261,7 @@ for fld in "${fields[@]}"; do
   fi
 
   JOB=$(sbatch --parsable $DEP \
-    --account=astronomy-dept --qos=astronomy-dept-b \
+    --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
     --partition=${PARTITION} \
     --ntasks=1 --cpus-per-task=${CPUS} --nodes=1 \
     --mem=${MEM} --time=${WALLTIME} \
