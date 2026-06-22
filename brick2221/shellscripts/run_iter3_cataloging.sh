@@ -37,6 +37,24 @@ ITER3_CPUS_PER_TASK=${ITER3_CPUS_PER_TASK:-4}
 SLURM_ACCOUNT_ITER3=${SLURM_ACCOUNT_ITER3:-astronomy-dept}
 SLURM_QOS_ITER3=${SLURM_QOS_ITER3:-astronomy-dept-b}
 
+# Opt-in ZEROFRAME deblend of merged saturated cores (crowded GC fields, e.g.
+# gc2211): set DEBLEND_SATSTARS=1 -> appends --deblend-satstars to the per-frame
+# cataloging.  Empty by default, so no effect on any other target/worker.
+DEBLEND_SATSTARS=${DEBLEND_SATSTARS:-}
+DEBLEND_ARG_ITER3=""
+[ -n "${DEBLEND_SATSTARS}" ] && DEBLEND_ARG_ITER3=" --deblend-satstars"
+# Pin a non-installed checkout (e.g. a worktree/branch) by setting PIPE_ROOT:
+# prepends it to PYTHONPATH inside each --wrap so the pinned jwst_gc_pipeline
+# wins over the pip-installed one.  Empty by default.
+PIPE_ROOT=${PIPE_ROOT:-}
+PYTHONPATH_PIN=""
+[ -n "${PIPE_ROOT}" ] && PYTHONPATH_PIN="export PYTHONPATH=${PIPE_ROOT}:\${PYTHONPATH:-}; "
+# Also pin the DRIVER-side python calls (compute_array_range --list-missing-tasks,
+# seed builder) so they see the pinned package too.  Without this, the local
+# range scan runs the pip-installed pkg, errors on --deblend-satstars, prints no
+# __MISSING_TASKS__, and every module falsely reports "already complete".
+[ -n "${PIPE_ROOT}" ] && export PYTHONPATH="${PIPE_ROOT}:${PYTHONPATH:-}"
+
 # Per-target LW chunking.  Splits the union seed catalog into N image-pixel
 # tiles per LW frame (one SLURM array job per chunk index, gated together at
 # merge time).  Set to 1 to disable chunking for a target.  brick LW iter3
@@ -429,7 +447,7 @@ submit_catalog_array() {
         chunk_arg=" --n-seed-chunks=${n_chunks} --seed-chunk-index=${chunk_index}"
         chunk_tag=$(printf -- "-chunk%02dof%02d" "${chunk_index}" "${n_chunks}")
     fi
-    local cat_args="--daophot --skip-crowdsource --iteration-label=iter3 --postprocess-residuals --seed-catalog=${seed_path}${bgsub_arg}${cap_arg}${chunk_arg}"
+    local cat_args="--daophot --skip-crowdsource --iteration-label=iter3 --postprocess-residuals --seed-catalog=${seed_path}${bgsub_arg}${cap_arg}${chunk_arg}${DEBLEND_ARG_ITER3}"
     # Compute sparse array: only the bundled task indices that still need work.
     local range
     range=$(compute_array_range "${filter}" "${module}" "${cat_args}" "${filt_each_suffix}")
@@ -438,15 +456,21 @@ submit_catalog_array() {
         echo ""
         return
     fi
+    # The manual-iteration pipeline (current default) runs ALL of a
+    # (filter, module[, chunk])'s exposures sequentially in ONE in-process job
+    # and REFUSES to run under a SLURM array (SLURM_ARRAY_TASK_ID set -> SystemExit;
+    # see crowdsource_catalogs_long.py "cannot be split across a SLURM array").
+    # So submit a single non-array job and defensively unset the array env in the
+    # wrap.  ${range} is now only a skip-gate (empty -> nothing missing -> skip);
+    # --skip-if-done makes the in-process loop skip the already-done frames.
     local job
     job=$(sbatch --parsable "${dep_args[@]}" \
-        --array="${range}" \
         --job-name=webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp \
-        --output=${logdir}/webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp_%j-%A_%a.log \
+        --output=${logdir}/webb-cat-${target}-iter3-${filter}-${module}${bgsub_tag}${chunk_tag}-eachexp_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --cpus-per-task=${ITER3_CPUS_PER_TASK} --nodes=1 --mem=${mem} --time=96:00:00 \
-        --wrap "export OMP_NUM_THREADS=1; export MKL_NUM_THREADS=1; export OPENBLAS_NUM_THREADS=1; export NUMEXPR_NUM_THREADS=1; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --field=${field} --target=${python_target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done --parallel-workers=\${SLURM_CPUS_PER_TASK:-1} --parallel-chunk-size=${ITER3_PARALLEL_CHUNK_SIZE:-100}")
-    echo "Submitted iter3 array ${job} for ${target} ${filter} ${module} (${bgsub_opt}${chunk_tag}) range=${range}" >&2
+        --wrap "unset SLURM_ARRAY_TASK_ID SLURM_ARRAY_JOB_ID; ${PYTHONPATH_PIN}export OMP_NUM_THREADS=1; export MKL_NUM_THREADS=1; export OPENBLAS_NUM_THREADS=1; export NUMEXPR_NUM_THREADS=1; ${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --field=${field} --target=${python_target} --each-suffix=${filt_each_suffix} ${cat_args} --bundle-size=${BUNDLE_SIZE} --skip-if-done --parallel-workers=\${SLURM_CPUS_PER_TASK:-1} --parallel-chunk-size=${ITER3_PARALLEL_CHUNK_SIZE:-100}")
+    echo "Submitted iter3 job ${job} for ${target} ${filter} ${module} (${bgsub_opt}${chunk_tag}) range=${range}" >&2
     echo "${job}"
 }
 
@@ -461,7 +485,7 @@ submit_mosaic_job() {
         --output=${logdir}/webb-mosaic-${target}-iter3-${filter}-${module}${bgsub_tag}_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=64gb --time=24:00:00 \
-        --wrap "${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --field=${field} --target=${python_target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
+        --wrap "${PYTHONPATH_PIN}${python_exec} ${script} --filternames=${filter} --modules=${module} --each-exposure --proposal_id=${proposal_id} --field=${field} --target=${python_target} --each-suffix=${each_suffix} --daophot --skip-crowdsource ${bgsub_arg} --finalize-only --iteration-labels=iter3"
 }
 
 all_iter3_jobids=()
