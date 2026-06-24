@@ -621,12 +621,19 @@ if [[ ${#all_iter3_jobids[@]} -gt 0 ]]; then
     if [[ -n "${merge_ref_filter:-}" ]]; then
         merge_ref_arg="--ref-filter=${merge_ref_filter}"
     fi
+    # gc2211 is 5 separate observations sharing one basepath whose per-frame
+    # catalog tables reuse visit/vgroup/exp tuples -> they carry an _o{field}
+    # token.  Pass --field so the merge runs PER-OBS (globs only this obs's frames,
+    # writes per-obs output catalogs, tolerates filters this obs lacks).  Other
+    # targets are single-obs and omit it (target-wide merge, unchanged).
+    merge_field_arg=""
+    [[ "${python_target}" == "gc2211" ]] && merge_field_arg="--field=${field}"
     merge_job=$(sbatch --parsable --dependency=afterok:${merge_dep} \
         --job-name=webb-cat-merge-${target}-iter3 \
         --output=${logdir}/webb-cat-merge-${target}-iter3_%j.log \
         --account=${SLURM_ACCOUNT_ITER3} --qos=${SLURM_QOS_ITER3} \
         --ntasks=1 --nodes=1 --mem=128gb --time=96:00:00 \
-        --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter3 ${merge_ref_arg}")
+        --wrap "${python_exec} ${analysis_dir}/merge_catalogs.py --merge-singlefields --modules=merged --indiv-merge-methods=daoiterative --skip-crowdsource --target=${python_target} --iteration-label=iter3 ${merge_field_arg} ${merge_ref_arg}")
     echo "Submitted iter3 merge job ${merge_job} for ${target}"
 fi
 
