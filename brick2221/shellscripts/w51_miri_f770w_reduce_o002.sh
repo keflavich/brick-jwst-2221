@@ -25,4 +25,4 @@ cd /orange/adamginsburg/jwst/w51
 # snr 30-25 / resample) -- the steps that actually fix the NaN.
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
     /orange/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/reduction/PipelineMIRI.py \
-    -f F770W -d 002 -p 6151
+    -f F770W -d 002 -p 6151 -s

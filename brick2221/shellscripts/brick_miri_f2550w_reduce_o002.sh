@@ -15,4 +15,4 @@
 cd /orange/adamginsburg/jwst/brick
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
     /orange/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/reduction/PipelineMIRI.py \
-    -f F2550W -d 002 -p 2221
+    -f F2550W -d 002 -p 2221 -s

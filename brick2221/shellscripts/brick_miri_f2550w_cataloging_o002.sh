@@ -27,7 +27,7 @@ rm -f F2550W/pipeline/jw02221*_mirimage_*o002_crf*satstar_catalog.fits \
     "$WT/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py" \
     --filternames=F2550W --modules=mirimage --each-exposure \
     --proposal_id=2221 --field=002 --target=brick \
-    --each-suffix=align_o002_crf \
+    --each-suffix=o002_crf \
     --daophot --skip-crowdsource \
     --parallel-workers=4 \
     --group --max-group-size=10 --manual-group-min-sep-fwhm=3.0
