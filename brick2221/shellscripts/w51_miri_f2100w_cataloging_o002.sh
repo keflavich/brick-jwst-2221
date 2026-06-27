@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=webb-cat-w51-F2100W-o002
 #SBATCH --account=astronomy-dept
-#SBATCH --qos=astronomy-dept
+#SBATCH --qos=astronomy-dept-b
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=96gb

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=webb-cat-cloudc2526-G0-F770W-o021
 #SBATCH --account=astronomy-dept
-#SBATCH --qos=astronomy-dept
+#SBATCH --qos=astronomy-dept-b
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=96gb
