@@ -12,6 +12,9 @@
 # CAL_VER 1.14.1 / 2024-05-07 (2-year-stale calibration); the rightmost mosaic
 # tile shows artifacts/speckle.  Re-reduce with the current pipeline + good
 # outlier params (marshall OFF -> subtract=True, snr 30/25), same as w51.
+# EAST trim is now ADAPTIVE (per-frame glow detection) -- leave MIRI_TRIM_EAST
+# unset (floor=0) so clean east edges (e.g. visit-001 _08/10/12101 covering the
+# detector-gap notch) are preserved while glowing frames are trimmed.
 cd /orange/adamginsburg/jwst/brick
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
     /orange/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/reduction/PipelineMIRI.py \
