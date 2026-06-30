@@ -27,6 +27,13 @@ export MIRI_SATSTAR_SEED_PROM_ROBUST=1
 export MIRI_SATSTAR_SEED_CORE_MIN=250
 export MIRI_SATSTAR_SEED_PROM_MIN=6
 export MIRI_SATSTAR_SEED_CONC_MIN=1.1
+# First-group SATURATED DQ correction: the cal/crf SATURATED flag marks pixels
+# saturated in ANY ramp group, flooding the bright filament (62705 px / one
+# 16231-px DQ blob fusing many real stars) though the ramp fitter recovers their
+# flux; only first-group-saturated pixels (720 px / 26 genuine cores) are truly
+# unrecoverable.  Correcting it lets daophot fit the embedded stars-on-emission
+# normally and leaves only the genuine bright cores to the satstar channel.
+export MIRI_FIRSTGROUP_SAT_DQ=1
 cd /orange/adamginsburg/jwst/cloudc
 rm -f F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_catalog.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_model*.fits \
