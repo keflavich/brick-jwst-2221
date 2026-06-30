@@ -39,6 +39,11 @@ export MIRI_FIRSTGROUP_SAT_DQ=1
 # because a bright neighbour inflates the annulus MAD (cloudc: last 6 by-eye
 # stars, prominence 1.7-4.8). Robust 25th-pct floor + lower-half spread.
 export MIRI_DAOPHOT_PROM_ROBUST=1
+# Prominence-gate threshold (both MIRI gates). Default 5 left many real faint
+# stars on emission uncatalogued (user verified the threshold-5 catalog is clean
+# but incomplete); lower to recover more. With robust prominence real stars
+# score ~16, emission ~5, so 3 still rejects flat emission.
+export MIRI_PROM_SNR=3
 cd /orange/adamginsburg/jwst/cloudc
 rm -f F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_catalog.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_model*.fits \
