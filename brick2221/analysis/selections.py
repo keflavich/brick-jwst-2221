@@ -87,6 +87,24 @@ def load_table(basetable, ww, verbose=False):
     except Exception as ex:
         print(f"Failed to mask flux column f410m {ex}")
 
+    # --- m8 forced cross-band fill handling ---
+    # Forced-filled cross-band values (m8) are not independent detections, so
+    # they must not count as detections in any mask-based selection.  Mask the
+    # mag/flux for forced-filled rows (the raw catalog retains the values), and
+    # expose a _not_forced(filt) helper for the emag/qfit-based ok2221/ok1182
+    # cuts that don't test the mask.  No-ops on pre-m8 catalogs (no such cols).
+    forced = {}
+    for _col in list(basetable.colnames):
+        if _col.startswith('forced_filled_'):
+            _filt = _col[len('forced_filled_'):]
+            forced[_filt] = np.asarray(basetable[_col], dtype=bool)
+            for _mcol in (f'mag_ab_{_filt}', f'mag_vega_{_filt}', f'flux_{_filt}'):
+                if _mcol in basetable.colnames and hasattr(basetable[_mcol], 'mask'):
+                    basetable[_mcol].mask |= forced[_filt]
+
+    def _not_forced(filt):
+        return ~forced[filt] if filt in forced else True
+
     filternames = [basetable.meta[key] for key in basetable.meta if 'FILT' in key]
     if verbose:
         print(f"Selecting based on filters {filternames}")
@@ -148,6 +166,20 @@ def load_table(basetable, ww, verbose=False):
     # daophot parameters
     max_qfit = 0.4
     max_cfit = 0.1
+    # STRICT qfit for color/excess science: a line-band "excess" (PaA F187N,
+    # BrA F405N) is only believable if the source is a well-fit PSF in BOTH
+    # bands of the color.  qfit<0.4 is too loose -- it admits offset/structure
+    # detections (catalog pos ~165 mas off the real peak; spurious embedded
+    # reddened-F405N-excess set, 2026-06-30).  Empirically qfit<0.15 in the
+    # excess bands rejects ~74% of those spurious sources while keeping ~91% of
+    # real point-source excess candidates and ~99% of clean bright stars.
+    max_qfit_strict = 0.15
+
+    def _strict_qfit(filt):
+        col = f'qfit_{filt}'
+        if col in basetable.colnames:
+            return np.asarray(basetable[col] < max_qfit_strict) & np.asarray(~basetable[col].mask if hasattr(basetable[col], 'mask') else True)
+        return np.ones(len(basetable), dtype=bool)  # crowdsource: no qfit -> skip
 
     for filt in filternames:
         filt = filt.lower()
@@ -324,17 +356,20 @@ def load_table(basetable, ww, verbose=False):
     blue_405_410 = (oksep & ~any_saturated & (~(basetable['mag_ab_410m405'].mask)) &
                     ((basetable['mag_ab_405m410'] - basetable['mag_ab_410m405']) +
                      (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -1)
-                    & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+                    & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
+                    & _strict_qfit('f405n') & _strict_qfit('f410m'))
     blue_405_410b = (oksep & ~any_saturated & (basetable['flux_f405n'] > basetable['flux_f410m']) &
                      (~(basetable['mag_ab_f405n'].mask)) &
                      ((basetable['mag_ab_f405n'] - basetable['mag_ab_f410m']) +
                       (basetable['emag_ab_f410m']**2 + basetable['emag_ab_f405n']**2)**0.5 < -0.5)
-                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+                     & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
+                     & _strict_qfit('f405n') & _strict_qfit('f410m'))
     blue_187_182 = (oksep & ~any_saturated & (basetable['flux_f187n'] > basetable['flux_f182m']) &
                      (~(basetable['mag_ab_f187n'].mask)) &
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
                       (basetable['emag_ab_f182m']**2 + basetable['emag_ab_f187n']**2)**0.5 < -1)
-                    & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong))
+                    & ~magerr_gtpt1 & (~badqflong) & (~badspreadlong) & (~badfracfluxlong)
+                    & _strict_qfit('f187n') & _strict_qfit('f182m'))
     if verbose:
         print(f"Possible BrA excess (405-410 < -1): {blue_405_410.sum()}, (405-410 < -0.5): {blue_405_410b.sum()}.")
 
@@ -353,7 +388,9 @@ def load_table(basetable, ww, verbose=False):
                         basetable['good_f405n'] &
                         basetable['good_f410m'] &
                         basetable['good_f187n'] &
-                        basetable['good_f182m']
+                        basetable['good_f182m'] &
+                        _strict_qfit('f405n') & _strict_qfit('f410m') &
+                        _strict_qfit('f187n') & _strict_qfit('f182m')
                        )
     prettyblue_BrA_and_PaA = (blue_BrA_and_PaA &
                      ((basetable['mag_ab_f187n'] - basetable['mag_ab_f182m']) +
@@ -477,7 +514,11 @@ def load_table(basetable, ww, verbose=False):
                 & (basetable['qfit_f405n'] < max_qfit)
                 & (basetable['qfit_f182m'] < max_qfit)
                 & (basetable['qfit_f212n'] < max_qfit)
-                & (basetable['qfit_f466n'] < max_qfit))
+                & (basetable['qfit_f466n'] < max_qfit)
+                # m8: require independent (non-forced) detections
+                & _not_forced('f182m') & _not_forced('f212n')
+                & _not_forced('f466n') & _not_forced('f405n')
+                & _not_forced('f410m') & _not_forced('f187n'))
         if 'emag_ab_f444w' in basetable.colnames:
             ok1182 = ((basetable['emag_ab_f444w'] < 0.1)
                       & (basetable['emag_ab_f356w'] < 0.1)
@@ -669,6 +710,14 @@ def main():
         globals().update(result)
         basetable = basetable_merged1182_daophot
         print("Loaded merged1182_daophot_basic_indivexp")
+    elif options.module == 'm8_dedup':
+        # current best: m8 forced cross-band fill + post-merge de-duplication
+        from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
+        basetable_m8dedup = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_resbgsub_m8_dedup.fits')
+        result = load_table(basetable_m8dedup, ww=ww)
+        globals().update(result)
+        basetable = basetable_m8dedup
+        print("Loaded m8_dedup")
     elif options.module == 'merged1182_daophot_basic':
         from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
         basetable_merged1182_daophot = Table.read(f'{basepath}/catalogs/basic_merged_photometry_tables_merged.fits')
@@ -777,6 +826,32 @@ def make_downselected_table_20251211():
         except:
             pass
 
+    return basetable
+
+
+def make_downselected_table_m8dedup():
+    """Downselected (ok2221 | ok1182) table from the current best catalog:
+    m8 forced cross-band fill + post-merge de-duplication.
+    """
+    stem = 'basic_merged_indivexp_photometry_tables_merged_resbgsub_m8_dedup'
+    out = f'{basepath}/catalogs/{stem}_ok2221or1182.fits'
+    if os.path.exists(out):
+        basetable = Table.read(out)
+        print("Loaded m8_dedup ok2221or1182 (cached)", flush=True)
+    else:
+        from brick2221.analysis.analysis_setup import ww410_merged as ww
+        from brick2221.analysis.selections import load_table as load_table_
+        basetable_full = Table.read(f'{basepath}/catalogs/{stem}.fits')
+        result = load_table_(basetable_full, ww=ww)
+        ok2221 = result['ok2221']
+        ok1182 = result['ok1182']
+        basetable = basetable_full[ok2221 | ok1182]
+        del result
+        print("Loaded m8_dedup; applied ok2221|ok1182", flush=True)
+        try:
+            basetable.write(out, overwrite=False)
+        except Exception as ex:
+            print(f"Could not write {out}: {ex}")
     return basetable
 
 
