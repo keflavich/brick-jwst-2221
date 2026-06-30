@@ -34,6 +34,11 @@ export MIRI_SATSTAR_SEED_CONC_MIN=1.1
 # unrecoverable.  Correcting it lets daophot fit the embedded stars-on-emission
 # normally and leaves only the genuine bright cores to the satstar channel.
 export MIRI_FIRSTGROUP_SAT_DQ=1
+# Neighbour-robust daophot prominence gate: recovers faint point sources on
+# bright emission that the median+MAD prominence (miri_prominence_snr=5) drops
+# because a bright neighbour inflates the annulus MAD (cloudc: last 6 by-eye
+# stars, prominence 1.7-4.8). Robust 25th-pct floor + lower-half spread.
+export MIRI_DAOPHOT_PROM_ROBUST=1
 cd /orange/adamginsburg/jwst/cloudc
 rm -f F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_catalog.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_model*.fits \
