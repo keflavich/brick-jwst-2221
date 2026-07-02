@@ -46,6 +46,11 @@ export MIRI_DAOPHOT_PROM_ROBUST=1
 export MIRI_PROM_SNR_PROGRESSIVE=1
 export MIRI_PROM_SNR_HI=8
 export MIRI_PROM_SNR_LO=3
+# Per-frame detector-edge detection margin (px). Default 8 masks bright real
+# stars near the mosaic boundary out of every covering frame (byeye pt5/6/7:
+# 1196-3660, prominence 130-313, lost). Lower to recover them; the prominence
+# gate + qfit vetting still reject edge-glow false detections.
+export MIRI_EDGE_DETECT_MARGIN=3
 cd /orange/adamginsburg/jwst/cloudc
 rm -f F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_catalog.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_model*.fits \
