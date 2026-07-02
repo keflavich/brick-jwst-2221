@@ -16,6 +16,7 @@
 # on reduction-mosaic grid).  Reuses crf from the standard-tree reduction.
 WT=/blue/adamginsburg/adamginsburg/repos/jwst-gc-pipeline-wt-miri-joint
 export PYTHONPATH="$WT:$PYTHONPATH"
+source /blue/adamginsburg/adamginsburg/repos/brick-jwst-2221/brick2221/shellscripts/miri_cataloging_gains.sh  # MIRI cataloging gains (2026-07)
 cd /orange/adamginsburg/jwst/sgrb2
 rm -f F770W/pipeline/jw05365*_mirimage_*o[09][09][28]_crf*satstar_catalog.fits \
       F770W/pipeline/jw05365*_mirimage_*o[09][09][28]_crf*satstar_model*.fits \

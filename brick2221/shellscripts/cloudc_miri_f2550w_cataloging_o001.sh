@@ -15,6 +15,7 @@
 # built from crf by the cataloging run.  Canonical MIRI PSFs symlinked into cloudc/psfs.
 WT=/blue/adamginsburg/adamginsburg/repos/jwst-gc-pipeline-wt-miri-joint
 export PYTHONPATH="$WT:$PYTHONPATH"
+source /blue/adamginsburg/adamginsburg/repos/brick-jwst-2221/brick2221/shellscripts/miri_cataloging_gains.sh  # MIRI cataloging gains (2026-07)
 cd /orange/adamginsburg/jwst/cloudc
 rm -f F2550W/pipeline/jw02221001001_*_mirimage_o001_crf*satstar_catalog.fits \
       F2550W/pipeline/jw02221001001_*_mirimage_o001_crf*satstar_model*.fits \
