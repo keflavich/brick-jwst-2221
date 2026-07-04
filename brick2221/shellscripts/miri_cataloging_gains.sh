@@ -36,3 +36,16 @@ export MIRI_EDGE_DETECT_MARGIN=3
 export MIRI_SATSTAR_SEED_CORE_MIN=250
 export MIRI_SATSTAR_SEED_PROM_MIN=6
 export MIRI_SATSTAR_SEED_CONC_MIN=1.1
+#
+# POST-FIT bright-phantom gate -- rejects spurious SUPER-BRIGHT satstars on
+# saturated extended emission (W51 F770W: real stars + emission knots saturate
+# into one connected ~1e5-px blob, so every PRE-fit metric ranks the phantom >= a
+# real star).  Caught only post-fit: a very bright fit (flux>floor) whose model
+# leaves a badly structured residual (ssr_ratio) OR whose flux was extrapolated
+# far above its seed (flux/flux_init).  The flux floor is load-bearing -- it
+# protects genuine deep-sat stars whose faint wing-seed gives a high ratio.
+# Verified W51 F770W: flags 7/153, all emission phantoms, zero real-star loss.
+# Floor is surface-brightness-dependent -> re-tune per field/filter.
+export MIRI_SATSTAR_PHANTOM_FLUX_FLOOR=1e5
+export MIRI_SATSTAR_PHANTOM_SSR_MAX=50
+export MIRI_SATSTAR_PHANTOM_RATIO_MAX=50
