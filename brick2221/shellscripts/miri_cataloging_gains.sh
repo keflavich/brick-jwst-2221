@@ -49,3 +49,12 @@ export MIRI_SATSTAR_SEED_CONC_MIN=1.1
 export MIRI_SATSTAR_PHANTOM_FLUX_FLOOR=1e5
 export MIRI_SATSTAR_PHANTOM_SSR_MAX=50
 export MIRI_SATSTAR_PHANTOM_RATIO_MAX=50
+#
+# Merge dedup radius scaled to the PSF FWHM (fraction).  The default 0.10"
+# min/max_offset is NIRCam-calibrated and far too tight for the broad MIRI PSF
+# (F2550W FWHM 0.80"): daofind splits one star into many detections (~0.14"
+# scatter) that survive un-merged, stack their models in the coadd -> deep
+# over-subtraction "pockmarks" + a ~3x over-counted catalog.  0.5xFWHM (F2550W
+# 0.40", F770W 0.13") merges only physically-unresolvable duplicates.  Per-filter
+# MIRI FWHM table in merge_catalogs.py.  See project_miri_f2550w_dedup_pileup.
+export MERGE_DEDUP_FWHM_FRAC=0.5
