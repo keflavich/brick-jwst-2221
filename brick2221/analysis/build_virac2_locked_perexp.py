@@ -202,13 +202,16 @@ def load_siaf(f):
     return sc.ra.deg[good] - ra0 / 3600.0, sc.dec.deg[good] - de0 / 3600.0, ra0, de0
 
 
-def lock_filter(filt, rc):
-    sub, ep, mtag = rc['filts'][filt]
-    prop, field, base = rc['proposal'], rc['field'], rc['basepath']
-    cache = f'{base}/astrometry_diag/refcache/virac2.fits'
-    print(f"=== per-exposure relock {filt} ({prop}/{field}, epoch {ep}) ===", flush=True)
-    ref = virac2(ep, cache)
-    dets = SW_DETS if filt in SW else LW_DETS
+def module_key(det):
+    """fix_alignment (PipelineRerunNIRCAM-LONG.py:1208) matches a 'Module' cell against
+    the detector name OR its digit-stripped root.  SW detectors nrca1..4 -> 'nrca',
+    nrcb1..4 -> 'nrcb'; LW nrcalong/nrcblong keep their full names (strip('1234') is a
+    no-op there).  Grouping by this key gives one tie per PHYSICAL module (A vs B)."""
+    return det if det in LW_DETS else det[:4]
+
+
+def _gather(filt, base, sub, mtag, dets):
+    """Collect per-(visit,exp) and per-visit SIAF positions + legacy coarse for a det set."""
     from collections import defaultdict
     byve = defaultdict(lambda: [[], []]); byv = defaultdict(list); coarse = defaultdict(lambda: [[], []])
     for det in dets:
@@ -218,18 +221,15 @@ def lock_filter(filt, rc):
             ra, dec, ra0, de0 = load_siaf(f)
             byve[(vis, exp)][0].append(ra); byve[(vis, exp)][1].append(dec)
             byv[vis].append((ra, dec)); coarse[vis][0].append(ra0); coarse[vis][1].append(de0)
-    # PER-FILTER coarse bulk tie, measured ONCE on the clean drizzled mosaic vs VIRAC2.
-    # This replaces the old per-visit coarse that was sourced from each catalog's
-    # previously-applied RAOFFSET -- which, when ~0 (brick 1182), left the fine NN unable
-    # to recover the real ~2" offset and the table self-perpetuated at ~0 every rebuild.
-    # The i2d source list is high-SNR (peak/bg~55 vs ~1.5 for raw per-frame SIAF), so the
-    # xcorr peak is unambiguous; the per-visit/per-exposure fine NN below resolves the
-    # remaining <SEARCH residual.  FAIL LOUD if the mosaic tie is not clean.
-    i2d_coarse = coarse_from_i2d(filt, rc, ref)
-    if i2d_coarse is None:
-        raise SystemExit(f"[FAIL] {filt}: could not measure a clean i2d coarse tie; "
-                         f"refusing to write a lock table (would re-perpetuate ~0).")
-    c_ra, c_dec = i2d_coarse
+    return byve, byv, coarse
+
+
+def _solve(byve, byv, coarse, c_ra, c_dec, ref, prop, field, filt, modlabel=None):
+    """Per-visit bulk tie (consensus vs VIRAC2, seeded by the merged i2d coarse) + per-exposure
+    relative shift vs that consensus.  modlabel=None -> module-LOCKED (one shift/exposure over all
+    detectors, no Module column).  modlabel set -> that module's own tie, written with a Module
+    cell so fix_alignment applies it per-module (removes a real inter-module A/B offset)."""
+    tag = f"[{modlabel}] " if modlabel else ""
     rows = []
     for vis in sorted(byv):
         # legacy coarse (median of previously-applied RAOFFSET) -- diagnostic only.
@@ -242,7 +242,7 @@ def lock_filter(filt, rc):
             res = (0.0, 0.0, 0.0, 0.0, 0)
             print(f"  visit{vis}: fine tie weak; using i2d coarse alone")
         bulk_ra = c_ra + res[0]; bulk_dec = c_dec + res[1]
-        print(f"  visit{vis}: i2d_coarse({c_ra:+.4f},{c_dec:+.4f})\" [legacy {c_ra_legacy:+.4f},"
+        print(f"  {tag}visit{vis}: i2d_coarse({c_ra:+.4f},{c_dec:+.4f})\" [legacy {c_ra_legacy:+.4f},"
               f"{c_dec_legacy:+.4f}] + fine({res[0]*1000:+.1f},{res[1]*1000:+.1f})mas "
               f"=> BULK ({bulk_ra:.4f},{bulk_dec:.4f})\" SEM {res[2]:.2f}/{res[3]:.2f}mas "
               f"n={res[4]}; consensus={len(consensus)}", flush=True)
@@ -250,31 +250,72 @@ def lock_filter(filt, rc):
             ra = np.concatenate(byve[(vis, exp)][0]); dec = np.concatenate(byve[(vis, exp)][1])
             rel = coord_shift(ra, dec, consensus)
             if rel is None:
-                print(f"    exp{exp}: relative failed"); continue
+                print(f"    {tag}exp{exp}: relative failed"); continue
             tot_ra = bulk_ra + rel[0]; tot_dec = bulk_dec + rel[1]
-            rows.append(dict(Visit=f'jw0{prop}{field}{vis}', Exposure=int(exp), Filter=filt.upper(),
-                             dra=tot_ra, ddec=tot_dec, nmatch=rel[4],
-                             rel_ra_mas=rel[0] * 1000, rel_dec_mas=rel[1] * 1000))
-            print(f"    exp{exp:>2}: rel({rel[0]*1000:+.2f},{rel[1]*1000:+.2f})mas n={rel[4]}"
+            row = dict(Visit=f'jw0{prop}{field}{vis}', Exposure=int(exp), Filter=filt.upper(),
+                       dra=tot_ra, ddec=tot_dec, nmatch=rel[4],
+                       rel_ra_mas=rel[0] * 1000, rel_dec_mas=rel[1] * 1000)
+            if modlabel is not None:
+                row['Module'] = modlabel
+            rows.append(row)
+            print(f"    {tag}exp{exp:>2}: rel({rel[0]*1000:+.2f},{rel[1]*1000:+.2f})mas n={rel[4]}"
                   f"  -> total({tot_ra:.4f},{tot_dec:.4f})\"", flush=True)
+    return rows
+
+
+def lock_filter(filt, rc, per_module=False):
+    sub, ep, mtag = rc['filts'][filt]
+    prop, field, base = rc['proposal'], rc['field'], rc['basepath']
+    cache = f'{base}/astrometry_diag/refcache/virac2.fits'
+    print(f"=== per-exposure relock {filt} ({prop}/{field}, epoch {ep}) "
+          f"[{'PER-MODULE' if per_module else 'module-locked'}] ===", flush=True)
+    ref = virac2(ep, cache)
+    dets = SW_DETS if filt in SW else LW_DETS
+    # PER-FILTER coarse bulk tie, measured ONCE on the clean drizzled mosaic vs VIRAC2.
+    # Seeds every visit; the per-visit/per-exposure fine NN below resolves the residual
+    # (including any per-module <SEARCH difference).  FAIL LOUD if the mosaic tie is dirty.
+    i2d_coarse = coarse_from_i2d(filt, rc, ref)
+    if i2d_coarse is None:
+        raise SystemExit(f"[FAIL] {filt}: could not measure a clean i2d coarse tie; "
+                         f"refusing to write a lock table (would re-perpetuate ~0).")
+    c_ra, c_dec = i2d_coarse
+    if not per_module:
+        byve, byv, coarse = _gather(filt, base, sub, mtag, dets)
+        return _solve(byve, byv, coarse, c_ra, c_dec, ref, prop, field, filt, modlabel=None)
+    # PER-MODULE: solve a separate tie for each physical module (A=nrca*, B=nrcb*/LW
+    # nrcalong/nrcblong).  A single module-locked shift cannot remove a real A/B offset
+    # (the ~20 mas Dec-28.71 seam / NRCB distortion residual); two independent ties do.
+    groups = {}
+    for det in dets:
+        groups.setdefault(module_key(det), []).append(det)
+    rows = []
+    for modlabel, gdets in sorted(groups.items()):
+        print(f"  --- module '{modlabel}': {gdets} ---", flush=True)
+        byve, byv, coarse = _gather(filt, base, sub, mtag, gdets)
+        rows.extend(_solve(byve, byv, coarse, c_ra, c_dec, ref, prop, field, filt, modlabel=modlabel))
     return rows
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--region', default='1182', choices=list(REGION))
+    ap.add_argument('--per-module', action='store_true',
+                    help='solve a separate per-module (A/B) tie and emit a Module column '
+                         '(removes a real inter-module offset; fix_alignment narrows by Module)')
+    ap.add_argument('--out', default=None, help='override output path (for validation before '
+                    'overwriting the production table)')
     ap.add_argument('filts', nargs='*', help='filters (default: all of region)')
     args = ap.parse_args()
     rc = REGION[args.region]
     filts = args.filts or list(rc['filts'])
     rows = []
     for f in filts:
-        rows.extend(lock_filter(f, rc))
+        rows.extend(lock_filter(f, rc, per_module=args.per_module))
     if not rows:
         print("no rows produced"); sys.exit(1)
     t = Table(rows)
     t['dra (arcsec)'] = t['dra']; t['ddec (arcsec)'] = t['ddec']
-    path = f"{rc['basepath']}/offsets/Offsets_JWST_Brick{rc['proposal']}_VIRAC2locked.csv"
+    path = args.out or f"{rc['basepath']}/offsets/Offsets_JWST_Brick{rc['proposal']}_VIRAC2locked.csv"
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # FIELD-SAFE merge: replace only rows for the SAME (Filter, proposal+field Visit prefix);
     # preserve every other filter AND every other field that shares this per-proposal table.
