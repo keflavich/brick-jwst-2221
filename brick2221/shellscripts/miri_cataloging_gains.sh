@@ -58,3 +58,17 @@ export MIRI_SATSTAR_PHANTOM_RATIO_MAX=50
 # 0.40", F770W 0.13") merges only physically-unresolvable duplicates.  Per-filter
 # MIRI FWHM table in merge_catalogs.py.  See project_miri_f2550w_dedup_pileup.
 export MERGE_DEDUP_FWHM_FRAC=0.5
+#
+# Flat-topped saturated-core model.  STPSF is sharply peaked, but a charge-bled
+# saturated core is a flat-topped PLATEAU, so amp*PSF under-subtracts the core
+# (bright ring at r~3px; cloudc F770W "every saturated-core star undersubtracted")
+# or, when the amplitude is inflated to clear it, over-subtracts (central pit).
+# When enabled, an accepted in-FOV satstar's model is replaced inside a geometric
+# core+shoulder footprint (radius sqrt(sat_area/pi)+SHOULDER_FWHM*FWHM) by the
+# bg-subtracted DATA, driving the core residual to ~0 without touching the PSF
+# wings or the reported flux.  MIRI-only; post-gate.  Verified cloudc F770W:
+# brightest core residual 1601->226 (=bg), over-sub pit -184->0, bg untouched.
+# See flattop_satstar_model + project notes.
+export MIRI_SATSTAR_FLATTOP=1
+export MIRI_SATSTAR_FLATTOP_SHOULDER_FWHM=2.0
+export MIRI_SATSTAR_FLATTOP_PLATEAU_FRAC=0.15
