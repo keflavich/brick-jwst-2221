@@ -72,3 +72,14 @@ export MERGE_DEDUP_FWHM_FRAC=0.5
 export MIRI_SATSTAR_FLATTOP=1
 export MIRI_SATSTAR_FLATTOP_SHOULDER_FWHM=2.0
 export MIRI_SATSTAR_FLATTOP_PLATEAU_FRAC=0.15
+#
+# Pedestal-capped saturated-star mergedcat re-render.  A star saturated in only
+# SOME frames is re-rendered in the UNsaturated frames at its merged (clipped)
+# flux as a peaked point source, over-predicting it and gouging the large MIRI
+# thermal-background pedestal into a negative hole (cloudc F2550W bright star at
+# 17:46:17.01 -28:35:19.5: -711 below bg; positive-valued so the deep-pit mask
+# misses it).  Cap that render to clip(base-bg_coarse,0) -> core residual = bg
+# (flat, no hole), wings kept.  MIRI-only.  The render stamp is ALSO FWHM-scaled
+# now (auto; MERGE_RENDER_FWHM_MULT default 3) so broad F2550W/F2100W wings are
+# no longer clipped by the old 21px stamp.
+export MERGE_SATSTAR_RENDER_CAP=1
