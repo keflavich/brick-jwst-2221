@@ -81,5 +81,9 @@ export MIRI_SATSTAR_FLATTOP_PLATEAU_FRAC=0.15
 # misses it).  Cap that render to clip(base-bg_coarse,0) -> core residual = bg
 # (flat, no hole), wings kept.  MIRI-only.  The render stamp is ALSO FWHM-scaled
 # now (auto; MERGE_RENDER_FWHM_MULT default 3) so broad F2550W/F2100W wings are
-# no longer clipped by the old 21px stamp.
+# no longer clipped by the old 21px stamp.  This same flag ALSO flat-tops VERY
+# BRIGHT non-saturated stars (rendered peak > MERGE_BRIGHT_FLATTOP_MULT[=1] x
+# pedestal), whose broad near-saturation core the peaked PSF under-predicts
+# (cloudc F2550W 17:46:17.61 -28:35:36.1: +110 r3-9 shoulder ring), over a
+# k*FWHM (MERGE_BRIGHT_FLATTOP_SHOULDER_FWHM=1.5) core mask.
 export MERGE_SATSTAR_RENDER_CAP=1
