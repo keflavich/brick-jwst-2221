@@ -711,9 +711,16 @@ def main():
         basetable = basetable_merged1182_daophot
         print("Loaded merged1182_daophot_basic_indivexp")
     elif options.module == 'm8_dedup':
-        # current best: m8 forced cross-band fill + post-merge de-duplication
+        # current best: m8 forced cross-band fill + post-merge de-duplication.
+        # Prefer the 2221-scoped copy (_o001): the generic name is CLOBBERED by the 1182
+        # broadband merge (both are target 'brick'; see cataloging._maybe_dedup_m8 anti-clobber
+        # copies + combine_brick_allband.py). The accretor selection needs the 2221 narrows
+        # (F405N/F187N/...), so never trust the generic name here.
         from brick2221.analysis.analysis_setup import fh_merged as fh, ww410_merged as ww410, ww410_merged as ww
-        basetable_m8dedup = Table.read(f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_resbgsub_m8_dedup.fits')
+        _stem = f'{basepath}/catalogs/basic_merged_indivexp_photometry_tables_merged_resbgsub_m8_dedup'
+        _cat = f'{_stem}_o001.fits' if os.path.exists(f'{_stem}_o001.fits') else f'{_stem}.fits'
+        print(f"Loading m8_dedup from {_cat}")
+        basetable_m8dedup = Table.read(_cat)
         result = load_table(basetable_m8dedup, ww=ww)
         globals().update(result)
         basetable = basetable_m8dedup
