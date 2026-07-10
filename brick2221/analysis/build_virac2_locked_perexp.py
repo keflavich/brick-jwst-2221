@@ -48,9 +48,15 @@ CLUSTER_MAS = 50.0
 # was taken from each catalog's previously-applied RAOFFSET, which was itself ~0, so
 # every rebuild re-confirmed ~0. COARSE_MAXSEP must exceed the largest expected raw
 # guide-star pointing error (~2" for brick); QA_FAIL_MAS rejects a bad solve.
-COARSE_MAXSEP = 5.0 * u.arcsec   # >= largest expected raw pointing error (1182 ~1.94"); headroom is cheap on clean i2d input
+COARSE_MAXSEP = 5.0 * u.arcsec   # per-FILTER i2d seed radius; refined per-visit below
 COARSE_BIN = 0.08          # arcsec, coarse-histogram bin (refined by the SEARCH fine step)
 COARSE_MIN_PEAK_RATIO = 5.0  # i2d xcorr peak/background below this -> tie ambiguous, fail loud
+# PER-VISIT coarse radius.  MUST exceed the largest raw per-visit guide-star pointing
+# error, NOT the ~2" once thought: brick-1182 visit001 is ~22" off (-17.5"/+13.5") while
+# visit002 is ~2".  The single mosaic-wide COARSE_MAXSEP seed captures only the dominant
+# visit; the other visit needs its OWN large-radius histogram xcorr (below) or it silently
+# inherits the dominant visit's shift (the 2026-07 brick-1182 visit001 corruption).
+COARSE_MAXSEP_VISIT = 25.0 * u.arcsec
 
 
 def coarse_xcorr(sc, ref, maxsep=COARSE_MAXSEP, binarc=COARSE_BIN):
@@ -359,14 +365,34 @@ def _solve(byve, byv, coarse, c_ra, c_dec, ref, prop, field, filt, modlabel=None
         c_ra_legacy = float(np.median(coarse[vis][0])); c_dec_legacy = float(np.median(coarse[vis][1]))
         consensus = build_consensus(byv[vis])
         cc_ra = consensus.ra.deg + c_ra / 3600.0; cc_dec = consensus.dec.deg + c_dec / 3600.0
+        # PER-VISIT coarse residual on top of the shared per-filter i2d seed.  REQUIRED:
+        # visits can carry very different raw guide-star pointing errors (brick-1182
+        # visit001 ~22" vs visit002 ~2").  The single mosaic-wide i2d coarse captures only
+        # the dominant visit, so the other visit is left mis-seeded and the <SEARCH fine NN
+        # below cannot bridge it -> it silently inherits the dominant visit's shift (the
+        # cause of the 2026-07 brick-1182 visit001 corruption: all visits got visit002's
+        # +1.9" instead of visit001's true -17.5").  A per-visit large-radius histogram
+        # xcorr (crowding-proof) recovers each visit's own bulk before the fine step.
+        cv_ra, cv_dec = c_ra, c_dec
+        vx = coarse_xcorr(SkyCoord(cc_ra * u.deg, cc_dec * u.deg), ref, maxsep=COARSE_MAXSEP_VISIT)
+        if vx[0] is not None:
+            vratio = vx[3] / vx[4] if vx[4] > 0 else np.inf
+            # only apply a MEANINGFUL per-visit correction (> the fine-NN radius); small
+            # residuals are left to the fine step to avoid double counting.
+            if vratio >= COARSE_MIN_PEAK_RATIO and np.hypot(vx[0], vx[1]) > SEARCH.to(u.arcsec).value:
+                cc_ra = cc_ra + vx[0] / 3600.0; cc_dec = cc_dec + vx[1] / 3600.0
+                cv_ra = c_ra + vx[0]; cv_dec = c_dec + vx[1]
+                print(f"  {tag}visit{vis}: PER-VISIT coarse ADD ({vx[0]:+.3f},{vx[1]:+.3f})\" "
+                      f"peak/bg={vratio:.1f} npairs={vx[2]}  (visit differs from mosaic seed)",
+                      flush=True)
         res = coord_shift(cc_ra, cc_dec, ref)
         if res is None:
             # coarse alone (no per-visit fine refinement available)
             res = (0.0, 0.0, 0.0, 0.0, 0)
-            print(f"  visit{vis}: fine tie weak; using i2d coarse alone")
-        bulk_ra = c_ra + res[0]; bulk_dec = c_dec + res[1]
+            print(f"  visit{vis}: fine tie weak; using coarse alone")
+        bulk_ra = cv_ra + res[0]; bulk_dec = cv_dec + res[1]
         print(f"  {tag}visit{vis}: i2d_coarse({c_ra:+.4f},{c_dec:+.4f})\" [legacy {c_ra_legacy:+.4f},"
-              f"{c_dec_legacy:+.4f}] + fine({res[0]*1000:+.1f},{res[1]*1000:+.1f})mas "
+              f"{c_dec_legacy:+.4f}] pervisit({cv_ra:+.4f},{cv_dec:+.4f}) + fine({res[0]*1000:+.1f},{res[1]*1000:+.1f})mas "
               f"=> BULK ({bulk_ra:.4f},{bulk_dec:.4f})\" SEM {res[2]:.2f}/{res[3]:.2f}mas "
               f"n={res[4]}; consensus={len(consensus)}", flush=True)
         for exp in sorted(e for (v, e) in byve if v == vis):

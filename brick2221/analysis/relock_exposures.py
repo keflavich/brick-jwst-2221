@@ -58,18 +58,44 @@ def virac2(epoch):
     return SkyCoord((ra + (pr * dt / 3.6e6) / np.cos(np.radians(dec))) * u.deg, (dec + pd * dt / 3.6e6) * u.deg)
 
 
-def robust_shift(sc, ref, search=0.3 * u.arcsec, clip=60.):
-    """one rigid (dRA,dDec) mas to add to sc to land on ref (ref-sc), clipped median."""
-    idx, sep, _ = sc.match_to_catalog_sky(ref)
+def robust_shift(sc, ref, search=0.3 * u.arcsec, clip=60.,
+                 coarse_maxsep=25. * u.arcsec, coarse_bin=0.08, min_peak_ratio=5.0):
+    """one rigid (dRA_cosd, dDec) mas to add to sc to land on ref (ref-sc), clipped median.
+
+    FIRST bridge any large per-visit guide-star offset with a crowding-proof
+    offset-HISTOGRAM stack (all pairs within ``coarse_maxsep``, take the 2-D peak).
+    A plain nearest-neighbour median within ``search`` CANNOT see past its own
+    radius: brick-1182 visit1 is ~17.5" off, so a 0.3" NN silently returns
+    too-few/~0 and the whole visit is dropped or mis-locked (the 2026-07 visit001
+    corruption).  Histogram stacking is crowding-immune and recovers the true
+    offset up to ``coarse_maxsep`` before the fine NN refines the residual."""
+    from astropy.coordinates import search_around_sky
+    cra = cdec = 0.0   # coarse coordinate offset (arcsec, NO cosd) to add to sc
+    ia, ib, _, _ = search_around_sky(sc, ref, coarse_maxsep)
+    if len(ia) >= 50:
+        dra_a = (ref[ib].ra - sc[ia].ra).to(u.arcsec).value
+        ddec_a = (ref[ib].dec - sc[ia].dec).to(u.arcsec).value
+        mm = coarse_maxsep.to(u.arcsec).value
+        bins = np.arange(-mm, mm + coarse_bin, coarse_bin)
+        H, xe, ye = np.histogram2d(dra_a, ddec_a, bins=[bins, bins])
+        i, j = np.unravel_index(H.argmax(), H.shape)
+        bg = float(np.median(H[H > 0])) if (H > 0).any() else 0.0
+        if bg > 0 and H.max() / bg >= min_peak_ratio:
+            cra = (xe[i] + xe[i + 1]) / 2.0; cdec = (ye[j] + ye[j + 1]) / 2.0
+    cosd = np.cos(np.radians(-28.70))
+    sc2 = SkyCoord((sc.ra.deg + cra / 3600.0) * u.deg, (sc.dec.deg + cdec / 3600.0) * u.deg)
+    idx, sep, _ = sc2.match_to_catalog_sky(ref)
     m = sep < search
     if m.sum() < 30:
         return None, None, int(m.sum())
-    a = sc[m]; b = ref[idx[m]]
+    a = sc2[m]; b = ref[idx[m]]
     dra = ((b.ra - a.ra) * np.cos(a.dec.radian)).to(u.mas).value
     ddec = (b.dec - a.dec).to(u.mas).value
     md, mdd = np.median(dra), np.median(ddec)
     cl = np.hypot(dra - md, ddec - mdd) < clip
-    return float(np.median(dra[cl])), float(np.median(ddec[cl])), int(cl.sum())
+    # total = coarse bridge (converted to cosd mas) + fine residual (already cosd mas)
+    return (float(cra * cosd * 1000.0 + np.median(dra[cl])),
+            float(cdec * 1000.0 + np.median(ddec[cl])), int(cl.sum()))
 
 
 def lock_filter(filt):
