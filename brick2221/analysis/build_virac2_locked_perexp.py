@@ -48,9 +48,15 @@ CLUSTER_MAS = 50.0
 # was taken from each catalog's previously-applied RAOFFSET, which was itself ~0, so
 # every rebuild re-confirmed ~0. COARSE_MAXSEP must exceed the largest expected raw
 # guide-star pointing error (~2" for brick); QA_FAIL_MAS rejects a bad solve.
-COARSE_MAXSEP = 5.0 * u.arcsec   # >= largest expected raw pointing error (1182 ~1.94"); headroom is cheap on clean i2d input
+COARSE_MAXSEP = 5.0 * u.arcsec   # per-FILTER i2d seed radius; refined per-visit below
 COARSE_BIN = 0.08          # arcsec, coarse-histogram bin (refined by the SEARCH fine step)
 COARSE_MIN_PEAK_RATIO = 5.0  # i2d xcorr peak/background below this -> tie ambiguous, fail loud
+# PER-VISIT coarse radius.  MUST exceed the largest raw per-visit guide-star pointing
+# error, NOT the ~2" once thought: brick-1182 visit001 is ~22" off (-17.5"/+13.5") while
+# visit002 is ~2".  The single mosaic-wide COARSE_MAXSEP seed captures only the dominant
+# visit; the other visit needs its OWN large-radius histogram xcorr (below) or it silently
+# inherits the dominant visit's shift (the 2026-07 brick-1182 visit001 corruption).
+COARSE_MAXSEP_VISIT = 25.0 * u.arcsec
 
 
 def coarse_xcorr(sc, ref, maxsep=COARSE_MAXSEP, binarc=COARSE_BIN):
@@ -137,6 +143,129 @@ REGION = {
 SW = {'f115w', 'f200w', 'f182m', 'f187n', 'f212n'}
 SW_DETS = ['nrca1', 'nrca2', 'nrca3', 'nrca4', 'nrcb1', 'nrcb2', 'nrcb3', 'nrcb4']
 LW_DETS = ['nrcalong', 'nrcblong']
+
+# STAGE-2 JWST<->JWST cross-tie (2026-07-06).  A field tied to VIRAC2 lands with a
+# ~15-30 mas residual (2MASS-tie floor + hardcoded per-module shifts in fix_alignment);
+# two fields tied INDEPENDENTLY (jw01182 broadbands vs jw02221 narrows -- SAME epoch,
+# same brick) therefore disagree ~15 mas, which is unacceptable for JWST<->JWST.  So
+# after the VIRAC2 solve we ADD a fixed per-filter shift that lands each secondary-field
+# filter on the dense 2221 MASTER (F212N) frame (~1-3 mas).  VIRAC2 stays the absolute
+# tie of the master (Gaia too sparse to tie per-visit here).
+#
+# The shift is a HARDCODED CONSTANT (Δα no-cosδ, Δδ; arcsec), NOT auto-measured each
+# build.  Rationale: the 1182<->2221 frame offset is a fixed physical quantity (the
+# VIRAC2 tie is deterministic + stable), so a constant is durable and cannot silently
+# regress -- whereas re-measuring the LIVE catalog residual each build self-cancels once
+# a prior cross-tie has already been drizzled in (catalog already on-frame -> measures 0
+# -> writes 0 -> regression).  Re-measure with `--remeasure-crosstie` (flux-vetted; it
+# PRINTS suggested constants, does not write) whenever the master 2221 frame moves, then
+# paste the new numbers here.  Values below measured flux-vetted vs the m7 F212N catalog
+# 2026-07-06 (fluxcorr 0.65-1.00, pk/bg 400-1000, n~22k), validated by simulation to
+# bring 1182<->F212N from 11-19 mas to 1-3 mas.  cloudc is single-proposal -> no cross-tie.
+CROSSTIE = {
+    '1182': dict(master_cat='/orange/adamginsburg/jwst/brick/catalogs/'
+                            'f212n_merged_indivexp_merged*_m[0-9]*_dao_basic_vetted.fits',
+                 master_name='2221 F212N',
+                 shifts={  # per-filter (Δα no-cosδ, Δδ) arcsec to ADD
+                     'f115w': (+0.01868, -0.00080),
+                     'f200w': (+0.01852, -0.00070),
+                     'f356w': (+0.02114, -0.00100),
+                     'f444w': (+0.02084, -0.00090),
+                 }),
+}
+
+
+def _region_key(rc):
+    for rk, rv in REGION.items():
+        if rv is rc:
+            return rk
+    return None
+
+
+def crosstie_constant(filt, rc):
+    """Hardcoded flux-vetted-derived (Δα no-cosδ, Δδ) arcsec to ADD to `filt`'s VIRAC2
+    tie so it lands on the master frame.  (0,0) if the region/filter has no cross-tie."""
+    cfg = CROSSTIE.get(_region_key(rc))
+    if cfg is None:
+        return 0.0, 0.0
+    return cfg['shifts'].get(filt, (0.0, 0.0))
+CROSSTIE_SEED_WIN = 0.5      # arcsec, candidate window for the pair histogram
+CROSSTIE_RIDGE_MAS = 60.0    # near-peak radius (mas) used to LEARN the cross-band mag ridge
+CROSSTIE_CORE_MAS = 50.0     # true-match core (mas) for the final clipped-median shift
+CROSSTIE_MIN_N = 200         # refuse (warn, apply 0) below this many vetted core matches
+
+
+def _load_cat_fluxpos(path_or_glob):
+    """(SkyCoord, instrumental mag) from a merged per-band vetted catalog."""
+    g = sorted(glob.glob(path_or_glob), key=os.path.getmtime)
+    if not g:
+        return None
+    t = Table.read(g[-1])
+    col = 'skycoord' if 'skycoord' in t.colnames else next(
+        (c for c in t.colnames if c.startswith('skycoord')), None)
+    if col is None:
+        return None
+    fx = farr(t['flux']) if 'flux' in t.colnames else np.full(len(t), np.nan)
+    return SkyCoord(t[col]), -2.5 * np.log10(np.where(fx > 0, fx, np.nan)), os.path.basename(g[-1])
+
+
+def _offhist_peak(dra_mas, dde_mas, win_mas=500.0, bin_mas=2.0):
+    e = np.arange(-win_mas, win_mas + bin_mas, bin_mas)
+    H, xe, ye = np.histogram2d(dra_mas, dde_mas, bins=[e, e])
+    i, j = np.unravel_index(H.argmax(), H.shape)
+    pk = H.max(); bg = np.median(H[H > 0]) if (H > 0).any() else 1.0
+    return (xe[i] + xe[i + 1]) / 2, (ye[j] + ye[j + 1]) / 2, pk / max(bg, 1.0)
+
+
+def crosstie_offset(filt, rc):
+    """Flux-vetted coordinate shift (Δα no-cosδ, Δδ; arcsec) to ADD to this filter's
+    VIRAC2-locked tie so it lands on the master (2221 F212N) frame.  Returns (0,0) with a
+    loud warning if it cannot be measured cleanly (never silently skips)."""
+    region = None
+    for rk, rv in REGION.items():
+        if rv is rc:
+            region = rk; break
+    cfg = CROSSTIE.get(region)
+    if cfg is None:
+        return 0.0, 0.0
+    master = _load_cat_fluxpos(cfg['master_cat'])
+    src = _load_cat_fluxpos(f"{rc['basepath']}/catalogs/"
+                            f"{filt}_merged_indivexp_merged*_m[0-9]*_dao_basic_vetted.fits")
+    if master is None or src is None:
+        print(f"  [crosstie] {filt}: missing master/src catalog -> APPLYING 0 (WARN)", flush=True)
+        return 0.0, 0.0
+    (msc, mmag, mnm), (ssc, smag, snm) = master, src
+    i2, i1, _, _ = msc.search_around_sky(ssc, CROSSTIE_SEED_WIN * u.arcsec)
+    if len(i1) < CROSSTIE_MIN_N:
+        print(f"  [crosstie] {filt}: only {len(i1)} candidate pairs -> APPLYING 0 (WARN)", flush=True)
+        return 0.0, 0.0
+    # on-sky separations (mas) for the seed peak + ridge learning
+    dra_gc = (ssc[i2].ra - msc[i1].ra).to(u.arcsec).value * np.cos(msc[i1].dec.rad) * 1000.0
+    dde = (ssc[i2].dec - msc[i1].dec).to(u.arcsec).value * 1000.0
+    dm = smag[i2] - mmag[i1]
+    ra0, de0, _ = _offhist_peak(dra_gc, dde)
+    near = (np.hypot(dra_gc - ra0, dde - de0) < CROSSTIE_RIDGE_MAS) & np.isfinite(dm)
+    if near.sum() < 20:
+        print(f"  [crosstie] {filt}: too few near-peak for ridge -> APPLYING 0 (WARN)", flush=True)
+        return 0.0, 0.0
+    med = np.median(dm[near]); mad = 1.4826 * np.median(np.abs(dm[near] - med))
+    tol = max(3 * mad, 0.5)
+    vet = np.isfinite(dm) & (np.abs(dm - med) < tol)          # FLUX VET
+    ra1, de1, pr = _offhist_peak(dra_gc[vet], dde[vet])
+    core = vet & (np.hypot(dra_gc - ra1, dde - de1) < CROSSTIE_CORE_MAS)
+    if core.sum() < CROSSTIE_MIN_N:
+        print(f"  [crosstie] {filt}: only {core.sum()} vetted core matches -> APPLYING 0 (WARN)", flush=True)
+        return 0.0, 0.0
+    # coordinate offset (src - master), NO cosδ on RA (table convention); ADD its NEGATION
+    dra_nc = (ssc[i2[core]].ra - msc[i1[core]].ra).to(u.arcsec).value
+    dde_c = (ssc[i2[core]].dec - msc[i1[core]].dec).to(u.arcsec).value
+    add_ra = -float(np.median(dra_nc)); add_de = -float(np.median(dde_c))
+    fcorr = np.corrcoef(mmag[i1[core]], smag[i2[core]])[0, 1]
+    print(f"  [crosstie] {filt} vs {cfg['master_name']}: residual "
+          f"({np.median(dra_nc) * 1000:+.1f},{np.median(dde_c) * 1000:+.1f})mas -> ADD "
+          f"({add_ra * 1000:+.1f},{add_de * 1000:+.1f})mas  n={core.sum()} pk/bg={pr:.0f} "
+          f"ridgeΔm={med:+.2f} fluxcorr={fcorr:.2f} [{mnm} <- {snm}]", flush=True)
+    return add_ra, add_de
 
 
 def farr(x):
@@ -236,14 +365,34 @@ def _solve(byve, byv, coarse, c_ra, c_dec, ref, prop, field, filt, modlabel=None
         c_ra_legacy = float(np.median(coarse[vis][0])); c_dec_legacy = float(np.median(coarse[vis][1]))
         consensus = build_consensus(byv[vis])
         cc_ra = consensus.ra.deg + c_ra / 3600.0; cc_dec = consensus.dec.deg + c_dec / 3600.0
+        # PER-VISIT coarse residual on top of the shared per-filter i2d seed.  REQUIRED:
+        # visits can carry very different raw guide-star pointing errors (brick-1182
+        # visit001 ~22" vs visit002 ~2").  The single mosaic-wide i2d coarse captures only
+        # the dominant visit, so the other visit is left mis-seeded and the <SEARCH fine NN
+        # below cannot bridge it -> it silently inherits the dominant visit's shift (the
+        # cause of the 2026-07 brick-1182 visit001 corruption: all visits got visit002's
+        # +1.9" instead of visit001's true -17.5").  A per-visit large-radius histogram
+        # xcorr (crowding-proof) recovers each visit's own bulk before the fine step.
+        cv_ra, cv_dec = c_ra, c_dec
+        vx = coarse_xcorr(SkyCoord(cc_ra * u.deg, cc_dec * u.deg), ref, maxsep=COARSE_MAXSEP_VISIT)
+        if vx[0] is not None:
+            vratio = vx[3] / vx[4] if vx[4] > 0 else np.inf
+            # only apply a MEANINGFUL per-visit correction (> the fine-NN radius); small
+            # residuals are left to the fine step to avoid double counting.
+            if vratio >= COARSE_MIN_PEAK_RATIO and np.hypot(vx[0], vx[1]) > SEARCH.to(u.arcsec).value:
+                cc_ra = cc_ra + vx[0] / 3600.0; cc_dec = cc_dec + vx[1] / 3600.0
+                cv_ra = c_ra + vx[0]; cv_dec = c_dec + vx[1]
+                print(f"  {tag}visit{vis}: PER-VISIT coarse ADD ({vx[0]:+.3f},{vx[1]:+.3f})\" "
+                      f"peak/bg={vratio:.1f} npairs={vx[2]}  (visit differs from mosaic seed)",
+                      flush=True)
         res = coord_shift(cc_ra, cc_dec, ref)
         if res is None:
             # coarse alone (no per-visit fine refinement available)
             res = (0.0, 0.0, 0.0, 0.0, 0)
-            print(f"  visit{vis}: fine tie weak; using i2d coarse alone")
-        bulk_ra = c_ra + res[0]; bulk_dec = c_dec + res[1]
+            print(f"  visit{vis}: fine tie weak; using coarse alone")
+        bulk_ra = cv_ra + res[0]; bulk_dec = cv_dec + res[1]
         print(f"  {tag}visit{vis}: i2d_coarse({c_ra:+.4f},{c_dec:+.4f})\" [legacy {c_ra_legacy:+.4f},"
-              f"{c_dec_legacy:+.4f}] + fine({res[0]*1000:+.1f},{res[1]*1000:+.1f})mas "
+              f"{c_dec_legacy:+.4f}] pervisit({cv_ra:+.4f},{cv_dec:+.4f}) + fine({res[0]*1000:+.1f},{res[1]*1000:+.1f})mas "
               f"=> BULK ({bulk_ra:.4f},{bulk_dec:.4f})\" SEM {res[2]:.2f}/{res[3]:.2f}mas "
               f"n={res[4]}; consensus={len(consensus)}", flush=True)
         for exp in sorted(e for (v, e) in byve if v == vis):
@@ -304,13 +453,36 @@ if __name__ == '__main__':
                          '(removes a real inter-module offset; fix_alignment narrows by Module)')
     ap.add_argument('--out', default=None, help='override output path (for validation before '
                     'overwriting the production table)')
+    ap.add_argument('--remeasure-crosstie', action='store_true',
+                    help='flux-vetted RE-MEASURE of the JWST<->JWST cross-tie vs the 2221 master; '
+                         'PRINTS suggested CROSSTIE constants and EXITS (writes nothing). Run this '
+                         'when the master 2221 frame moves, then paste the numbers into CROSSTIE.')
     ap.add_argument('filts', nargs='*', help='filters (default: all of region)')
     args = ap.parse_args()
     rc = REGION[args.region]
     filts = args.filts or list(rc['filts'])
+
+    if args.remeasure_crosstie:
+        cfg = CROSSTIE.get(args.region)
+        if cfg is None:
+            print(f"region {args.region} has no cross-tie master; nothing to measure."); sys.exit(0)
+        print(f"# flux-vetted cross-tie vs {cfg['master_name']} -- paste into CROSSTIE['{args.region}']['shifts']:")
+        for f in filts:
+            ra, de = crosstie_offset(f, rc)
+            print(f"    '{f}': ({ra:+.5f}, {de:+.5f}),")
+        sys.exit(0)
+
     rows = []
     for f in filts:
-        rows.extend(lock_filter(f, rc, per_module=args.per_module))
+        frows = lock_filter(f, rc, per_module=args.per_module)
+        # STAGE-2: JWST<->JWST cross-tie onto the master frame (hardcoded constant; 1182 only).
+        ct_ra, ct_de = crosstie_constant(f, rc)
+        if ct_ra or ct_de:
+            for r in frows:
+                r['dra'] += ct_ra; r['ddec'] += ct_de
+            print(f"  [crosstie] {f}: applied CONSTANT ({ct_ra*1000:+.1f},{ct_de*1000:+.1f})mas "
+                  f"to {len(frows)} rows", flush=True)
+        rows.extend(frows)
     if not rows:
         print("no rows produced"); sys.exit(1)
     t = Table(rows)

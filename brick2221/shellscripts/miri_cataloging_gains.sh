@@ -58,3 +58,32 @@ export MIRI_SATSTAR_PHANTOM_RATIO_MAX=50
 # 0.40", F770W 0.13") merges only physically-unresolvable duplicates.  Per-filter
 # MIRI FWHM table in merge_catalogs.py.  See project_miri_f2550w_dedup_pileup.
 export MERGE_DEDUP_FWHM_FRAC=0.5
+#
+# Flat-topped saturated-core model.  STPSF is sharply peaked, but a charge-bled
+# saturated core is a flat-topped PLATEAU, so amp*PSF under-subtracts the core
+# (bright ring at r~3px; cloudc F770W "every saturated-core star undersubtracted")
+# or, when the amplitude is inflated to clear it, over-subtracts (central pit).
+# When enabled, an accepted in-FOV satstar's model is replaced inside a geometric
+# core+shoulder footprint (radius sqrt(sat_area/pi)+SHOULDER_FWHM*FWHM) by the
+# bg-subtracted DATA, driving the core residual to ~0 without touching the PSF
+# wings or the reported flux.  MIRI-only; post-gate.  Verified cloudc F770W:
+# brightest core residual 1601->226 (=bg), over-sub pit -184->0, bg untouched.
+# See flattop_satstar_model + project notes.
+export MIRI_SATSTAR_FLATTOP=1
+export MIRI_SATSTAR_FLATTOP_SHOULDER_FWHM=2.0
+export MIRI_SATSTAR_FLATTOP_PLATEAU_FRAC=0.15
+#
+# Pedestal-capped saturated-star mergedcat re-render.  A star saturated in only
+# SOME frames is re-rendered in the UNsaturated frames at its merged (clipped)
+# flux as a peaked point source, over-predicting it and gouging the large MIRI
+# thermal-background pedestal into a negative hole (cloudc F2550W bright star at
+# 17:46:17.01 -28:35:19.5: -711 below bg; positive-valued so the deep-pit mask
+# misses it).  Cap that render to clip(base-bg_coarse,0) -> core residual = bg
+# (flat, no hole), wings kept.  MIRI-only.  The render stamp is ALSO FWHM-scaled
+# now (auto; MERGE_RENDER_FWHM_MULT default 3) so broad F2550W/F2100W wings are
+# no longer clipped by the old 21px stamp.  This same flag ALSO flat-tops VERY
+# BRIGHT non-saturated stars (rendered peak > MERGE_BRIGHT_FLATTOP_MULT[=1] x
+# pedestal), whose broad near-saturation core the peaked PSF under-predicts
+# (cloudc F2550W 17:46:17.61 -28:35:36.1: +110 r3-9 shoulder ring), over a
+# k*FWHM (MERGE_BRIGHT_FLATTOP_SHOULDER_FWHM=1.5) core mask.
+export MERGE_SATSTAR_RENDER_CAP=1

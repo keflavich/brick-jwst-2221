@@ -51,6 +51,27 @@ export MIRI_PROM_SNR_LO=3
 # 1196-3660, prominence 130-313, lost). Lower to recover them; the prominence
 # gate + qfit vetting still reject edge-glow false detections.
 export MIRI_EDGE_DETECT_MARGIN=3
+# Post-fit bright-phantom gate: rejects spurious SUPER-BRIGHT satstars on
+# saturated extended emission (flux>floor AND (ssr>50 OR flux/flux_init>50));
+# every pre-fit metric ranks these emission knots >= a real star.  Verified W51
+# F770W (7/153 dropped, zero real loss).  Floor is surface-brightness dependent
+# -> re-tune.  See project_miri_bright_phantom_gate / keflavich/jwst-gc-pipeline#36.
+export MIRI_SATSTAR_PHANTOM_FLUX_FLOOR=1e5
+export MIRI_SATSTAR_PHANTOM_SSR_MAX=50
+export MIRI_SATSTAR_PHANTOM_RATIO_MAX=50
+# FWHM-scaled merge dedup: 0.10" is too tight for the broad MIRI PSF -> daofind
+# split-detections survive un-merged, stack models in the coadd -> over-sub
+# pockmarks + over-counted catalog.  0.5xFWHM merges only unresolvable dupes.
+# See project_miri_f2550w_dedup_pileup / keflavich/jwst-gc-pipeline#44.
+export MERGE_DEDUP_FWHM_FRAC=0.5
+# Flat-topped saturated-core model: a charge-bled saturated core is a flat-topped
+# plateau, so amp*PSF under-subtracts it (bright ring; "every saturated-core star
+# undersubtracted" was reported for THIS field).  Replace the model inside a
+# geometric core+shoulder footprint by the bg-subtracted data -> core residual ~0,
+# wings + flux untouched.  MIRI-only, post-gate.  keflavich/jwst-gc-pipeline#(flattop).
+export MIRI_SATSTAR_FLATTOP=1
+export MIRI_SATSTAR_FLATTOP_SHOULDER_FWHM=2.0
+export MIRI_SATSTAR_FLATTOP_PLATEAU_FRAC=0.15
 cd /orange/adamginsburg/jwst/cloudc
 rm -f F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_catalog.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_model*.fits \
