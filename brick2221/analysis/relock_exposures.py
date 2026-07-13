@@ -22,10 +22,16 @@ import sys, glob, os
 import numpy as np
 from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord
+from astropy.io import fits
+from astropy.wcs import WCS
 from astropy import units as u
 from astropy.stats import mad_std
 import warnings
 warnings.filterwarnings('ignore')
+sys.path.insert(0, '/orange/adamginsburg/repos/jwst-gc-pipeline')
+# dra_coordinate = ra1-ra2 (what adjust_wcs / the offsets table consume); reprojection
+# recomputes RA/Dec from the stable detector x/y through the LIVE crf WCS (generation lock).
+from jwst_gc_pipeline.astrometry_utils import _resolve_existing_path  # noqa: E402
 
 CATDIR = '/orange/adamginsburg/jwst/brick/catalogs'
 OFFDIR = '/orange/adamginsburg/jwst/brick/offsets'
@@ -60,7 +66,13 @@ def virac2(epoch):
 
 def robust_shift(sc, ref, search=0.3 * u.arcsec, clip=60.,
                  coarse_maxsep=25. * u.arcsec, coarse_bin=0.08, min_peak_ratio=5.0):
-    """one rigid (dRA_cosd, dDec) mas to add to sc to land on ref (ref-sc), clipped median.
+    """one rigid (dRA_coordinate, dDec) mas to add to sc to land on ref (ref-sc), clipped median.
+
+    Returns the COORDINATE Delta-alpha (ra_ref - ra_sc, NO cos(dec)) -- the value
+    fix_alignment feeds to adjust_wcs(delta_ra=...), whose on-sky effect is *cos(dec).
+    (Previously returned the on-sky Delta-alpha*cos(dec); fix_alignment then applied
+    it as a coordinate rotation -> a ~cos(dec) under-correction, ~19-25 mas at the GC,
+    that helped put every Brick band ~69 mas off VIRAC2.)
 
     FIRST bridge any large per-visit guide-star offset with a crowding-proof
     offset-HISTOGRAM stack (all pairs within ``coarse_maxsep``, take the 2-D peak).
@@ -89,12 +101,15 @@ def robust_shift(sc, ref, search=0.3 * u.arcsec, clip=60.,
     if m.sum() < 30:
         return None, None, int(m.sum())
     a = sc2[m]; b = ref[idx[m]]
-    dra = ((b.ra - a.ra) * np.cos(a.dec.radian)).to(u.mas).value
+    # COORDINATE Delta-alpha = dra_coordinate = ra_ref - ra_sc (NO cos(dec)).
+    dra_coord = (b.ra - a.ra).to(u.mas).value
     ddec = (b.dec - a.dec).to(u.mas).value
-    md, mdd = np.median(dra), np.median(ddec)
-    cl = np.hypot(dra - md, ddec - mdd) < clip
-    # total = coarse bridge (converted to cosd mas) + fine residual (already cosd mas)
-    return (float(cra * cosd * 1000.0 + np.median(dra[cl])),
+    cosd_star = np.cos(a.dec.radian)
+    md, mdd = np.median(dra_coord), np.median(ddec)
+    cl = np.hypot((dra_coord - md) * cosd_star, ddec - mdd) < clip   # clip on ON-SKY distance
+    # total COORDINATE shift = coarse bridge (already coordinate, NO cosd) + fine coordinate
+    # residual.  cra came from a histogram of (ref-sc) with no cos(dec) -> already coordinate.
+    return (float(cra * 1000.0 + np.median(dra_coord[cl])),
             float(cdec * 1000.0 + np.median(ddec[cl])), int(cl.sum()))
 
 
@@ -118,14 +133,34 @@ def lock_filter(filt):
             byvisit[vis].append((det, f))
 
     def load_siac(f):
+        # GENERATION LOCK: recompute RA/Dec from the STABLE detector x_fit/y_fit through
+        # the LIVE crf WCS, NOT the catalog's cached skycoord_centroid.  The cached RA/Dec
+        # encode the crf WCS at catalog-build time; a re-drizzle with a different
+        # assign_wcs/distortion generation moves the frame (measured up to ~48 mas between
+        # Brick runs) while x/y are generation-invariant.  Solving on the cached (stale)
+        # RA/Dec is what left the tie a generation behind the crf it corrects.
         t = Table.read(f)
-        sc = SkyCoord(t['skycoord_centroid'])
-        ra0 = float(t.meta.get('RAOFFSET', 0.0)); de0 = float(t.meta.get('DEOFFSET', 0.0))  # arcsec applied
+        crf = _resolve_existing_path(t.meta['FILENAME'])
+        with fits.open(crf) as hl:
+            wcs = WCS(hl['SCI'].header)
+            # undo the RAOFFSET currently baked into THIS crf (not the possibly-stale
+            # catalog meta), so we recover the current-generation SIAF positions.
+            ra0 = float(hl['SCI'].header.get('RAOFFSET', t.meta.get('RAOFFSET', 0.0)))
+            de0 = float(hl['SCI'].header.get('DEOFFSET', t.meta.get('DEOFFSET', 0.0)))
+        sky = SkyCoord(wcs.pixel_to_world(np.asarray(t['x_fit'], float),
+                                          np.asarray(t['y_fit'], float)))
+        if 'skycoord_centroid' in t.colnames:   # drift diagnostic vs the cached positions
+            cached = SkyCoord(t['skycoord_centroid'])
+            drift = float(np.nanmedian((sky.ra.deg - cached.ra.deg)
+                                       * np.cos(np.radians(cached.dec.deg)) * 3.6e6))
+            if abs(drift) > 15:
+                print(f"    [genlock] {os.path.basename(f)}: cached skycoord {drift:+.0f} mas "
+                      f"stale vs live crf WCS -> reprojected from x/y", flush=True)
         fl = np.asarray(t['flux_fit'], float)
         q = np.asarray(t['qfit'], float) if 'qfit' in t.colnames else np.zeros(len(t))
-        good = np.isfinite(fl) & (fl > 0) & (q < 0.4)
+        good = np.isfinite(fl) & (fl > 0) & (q < 0.4) & np.isfinite(sky.ra.deg)
         # undo applied per-detector shift -> SIAF positions (raw RA/Dec arcsec)
-        return sc.ra.deg[good] - ra0 / 3600.0, sc.dec.deg[good] - de0 / 3600.0, fl[good]
+        return sky.ra.deg[good] - ra0 / 3600.0, sky.dec.deg[good] - de0 / 3600.0, fl[good]
 
     all_ra = []; all_dec = []; all_flux = []   # one entry PER FRAME (detector,exposure) for combine
     offrows = []
@@ -138,10 +173,11 @@ def lock_filter(filt):
             continue
         offrows.append(dict(Visit=f'jw01182004{vis}' if prop == '1182' else f'jw02221001{vis}',
                             Filter=filt.upper(), dra=sr / 1000.0, ddec=sd / 1000.0, nmatch=n))  # arcsec
-        # Pass 2: apply the per-visit shift to each FRAME separately (keeps within-visit grouping)
-        cosd = np.cos(np.radians(-28.70))
+        # Pass 2: apply the per-visit shift to each FRAME separately (keeps within-visit grouping).
+        # sr/sd are COORDINATE mas (dra_coordinate) now, so add straight to RA/Dec coordinates --
+        # NO /cos(dec) (that division belonged to the old on-sky convention).
         for (fra, fdec, ffl) in frames:
-            all_ra.append(fra + (sr / 1000.0 / 3600.0) / cosd)
+            all_ra.append(fra + (sr / 1000.0 / 3600.0))
             all_dec.append(fdec + (sd / 1000.0 / 3600.0))
             all_flux.append(ffl)
     print(f"  {len(offrows)} visits locked; {len(all_ra)} frames; {sum(len(a) for a in all_ra)} detections; combining...", flush=True)

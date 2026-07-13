@@ -32,9 +32,14 @@ import numpy as np
 import astropy.units as u
 from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord, search_around_sky
+from astropy.io import fits
+from astropy.wcs import WCS
 from astropy.stats import mad_std
 import warnings
 warnings.filterwarnings('ignore')
+sys.path.insert(0, '/orange/adamginsburg/repos/jwst-gc-pipeline')
+# GENERATION LOCK: recompute RA/Dec from stable detector x/y through the live crf WCS.
+from jwst_gc_pipeline.astrometry_utils import _resolve_existing_path  # noqa: E402
 
 V2EP = 2014.0
 SEARCH = 0.3 * u.arcsec
@@ -322,10 +327,32 @@ def build_consensus(frames):
 
 
 def load_siaf(f):
-    """Recover SIAF positions by undoing the recorded RAOFFSET/DEOFFSET. -> (ra,dec,ra0,de0)."""
+    """Recover current-generation SIAF positions. -> (ra,dec,ra0,de0).
+
+    GENERATION LOCK: RA/Dec are recomputed from the STABLE detector x_fit/y_fit
+    through the LIVE crf WCS (meta['FILENAME']), not the catalog's cached
+    skycoord_centroid (which encodes the WCS at build time and goes stale ~up to
+    48 mas across re-drizzle generations).  Then undo the RAOFFSET currently baked
+    into that crf to reach SIAF.
+    """
     t = Table.read(f)
-    sc = SkyCoord(t['skycoord_centroid'])
-    ra0 = float(t.meta.get('RAOFFSET', 0.0)); de0 = float(t.meta.get('DEOFFSET', 0.0))  # arcsec
+    if 'x_fit' in t.colnames and 'FILENAME' in t.meta:
+        crf = _resolve_existing_path(t.meta['FILENAME'])
+        with fits.open(crf) as hl:
+            wcs = WCS(hl['SCI'].header)
+            ra0 = float(hl['SCI'].header.get('RAOFFSET', t.meta.get('RAOFFSET', 0.0)))
+            de0 = float(hl['SCI'].header.get('DEOFFSET', t.meta.get('DEOFFSET', 0.0)))
+        sc = SkyCoord(wcs.pixel_to_world(farr(t['x_fit']), farr(t['y_fit'])))
+        if 'skycoord_centroid' in t.colnames:
+            cached = SkyCoord(t['skycoord_centroid'])
+            drift = float(np.nanmedian((sc.ra.deg - cached.ra.deg)
+                                       * np.cos(np.radians(cached.dec.deg)) * 3.6e6))
+            if abs(drift) > 15:
+                print(f"    [genlock] {os.path.basename(f)}: cached skycoord {drift:+.0f} mas "
+                      f"stale vs live crf WCS -> reprojected from x/y", flush=True)
+    else:   # legacy catalog without x/y or FILENAME: fall back to cached positions
+        sc = SkyCoord(t['skycoord_centroid'])
+        ra0 = float(t.meta.get('RAOFFSET', 0.0)); de0 = float(t.meta.get('DEOFFSET', 0.0))
     fl = farr(t['flux_fit']); q = farr(t['qfit']) if 'qfit' in t.colnames else np.zeros(len(t))
     good = np.isfinite(fl) & (fl > 0) & (q < 0.4) & np.isfinite(sc.ra.deg)
     return sc.ra.deg[good] - ra0 / 3600.0, sc.dec.deg[good] - de0 / 3600.0, ra0, de0
