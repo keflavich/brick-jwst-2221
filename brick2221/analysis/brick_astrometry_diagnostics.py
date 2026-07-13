@@ -387,7 +387,7 @@ def main():
                         outdir / f"spatial_{key}.png", f"{label} vs {key.upper()} (offset map)")
             report.append(f"    spatial map: spatial_{key}.png")
 
-    for key in keys:
+    for key in results.keys():
         d = results.get(key)
         if d and "_dra" in d:
             match = d.get("flux", {}).get("mask")
