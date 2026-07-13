@@ -75,6 +75,7 @@ RED_CPUS=${RED_CPUS:-8}          # reduction --ntasks (per filter)
 RED_MEM=${RED_MEM:-256gb}
 RED_TIME=${RED_TIME:-96:00:00}
 CAT_TIME=${CAT_TIME:-96:00:00}   # monolithic manual-iteration cataloging --time
+MERGE_MEM=${MERGE_MEM:-128gb}
 MERGE_TIME=${MERGE_TIME:-96:00:00}
 
 set_target_defaults() {
