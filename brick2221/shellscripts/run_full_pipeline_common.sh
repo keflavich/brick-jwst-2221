@@ -388,7 +388,7 @@ submit_target_flow() {
         --job-name="webb-merge-${name}" \
         --output="${logdir}/webb-merge-${name}_%j.log" \
         --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
-        --ntasks=1 --cpus-per-task=${merge_workers} --nodes=1 --mem=${MERGE_MEM:-128gb} --time=${MERGE_TIME} \
+        --ntasks=1 --cpus-per-task=${merge_workers} --nodes=1 --mem=${MERGE_MEM} --time=${MERGE_TIME} \
         --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao,daoiterative --skip-crowdsource --target=${name} ${merge_ref_arg} --merge-workers=${merge_workers}")
     echo "Submitted merge job ${merge_jobid} for ${name}"
 }
