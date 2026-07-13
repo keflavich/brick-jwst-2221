@@ -116,7 +116,7 @@ def compare(cat_coord, cat_k, ref_coord, ref_k, max_sep, label, do_flux=True):
             md, sd, n = robust(dra[mask]); mdd, sdd, _ = robust(ddec[mask])
             out["flux"] = dict(n=n, med_dra=md, med_ddec=mdd, vec=float(np.hypot(md, mdd)),
                                mad_dra=sd, mad_ddec=sdd)
-            out["flux"] = mask
+            out["flux"]["mask"] = mask
     out["label"] = label
     out["_dra"] = dra; out["_ddec"] = ddec
     out["_ra"] = cat_coord[ci].ra.deg; out["_dec"] = cat_coord[ci].dec.deg
@@ -390,8 +390,9 @@ def main():
     for key in keys:
         d = results.get(key)
         if d and "_dra" in d:
+            match = d.get("flux", {}).get("mask")
             plot_dra_ddec(d["_dra"], d["_ddec"], d["_ra"], d["_dec"],
-                          outdir / f"dRA_dDec_{key}.png", match=d.get("flux"))
+                          outdir / f"dRA_dDec_{key}.png", match=match)
             report.append(f"    dRA/dDec scatter: dRA_dDec_{key}.png")
 
     # --- internal repeatability ---
