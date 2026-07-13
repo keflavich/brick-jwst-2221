@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import os
 
 import numpy as np
 import matplotlib
@@ -252,12 +253,14 @@ def main():
     ap.add_argument("--refresh-cache", action="store_true")
     args = ap.parse_args()
 
-    outdir = Path(args.outdir); outdir.mkdir(parents=True, exist_ok=True)
+    outdir = Path(os.path.expanduser(args.outdir)); outdir.mkdir(parents=True, exist_ok=True)
     cachedir = outdir / "refcache"; cachedir.mkdir(exist_ok=True)
     max_sep = args.max_sep_arcsec * u.arcsec
 
-    cat = Table.read(args.catalog)
-    label = Path(args.catalog).stem
+    catalog_filepath = os.path.expanduser(args.catalog)
+
+    cat = Table.read(catalog_filepath)
+    label = Path(catalog_filepath).stem
     cat_coord = cat["skycoord_ref"]
     kcol = pick_jwst_k(cat)
     cat_k = np.asarray(np.ma.filled(cat[kcol], np.nan), float) if kcol else None
@@ -313,6 +316,7 @@ def main():
         results["virac_pm"] = r; report.append("    " + fmt(r)); print(fmt(r))
     except Exception as e:
         report.append(f"    VIRAC2 FAILED: {e}"); print("VIRAC2 failed:", e)
+        raise e
 
     # --- GSC 2.4.2 (proxy for GSC 3.1 / JWST FGS frame) ---
     try:
@@ -325,6 +329,7 @@ def main():
         results["gsc"] = r; report.append("    " + fmt(r)); print(fmt(r))
     except Exception as e:
         report.append(f"    GSC2.4.2 FAILED: {e}"); print("GSC2.4.2 failed:", e)
+        raise e
 
     # --- GSC 3.2 (CURRENT active JWST FGS catalog, Gaia DR3-sourced) ---
     try:
@@ -357,6 +362,8 @@ def main():
     (outdir / "diagnostics_report.md").write_text("\n".join(report) + "\n")
     print("\nWrote", outdir / "diagnostics_report.md")
 
+    return results
+
 
 if __name__ == "__main__":
-    main()
+    results = main()
