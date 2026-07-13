@@ -116,6 +116,7 @@ def compare(cat_coord, cat_k, ref_coord, ref_k, max_sep, label, do_flux=True):
             md, sd, n = robust(dra[mask]); mdd, sdd, _ = robust(ddec[mask])
             out["flux"] = dict(n=n, med_dra=md, med_ddec=mdd, vec=float(np.hypot(md, mdd)),
                                mad_dra=sd, mad_ddec=sdd)
+            out["flux"] = mask
     out["label"] = label
     out["_dra"] = dra; out["_ddec"] = ddec
     out["_ra"] = cat_coord[ci].ra.deg; out["_dec"] = cat_coord[ci].dec.deg
@@ -153,6 +154,35 @@ def spatial_map(ra, dec, dra, ddec, outpath, title, nbin=12):
     fig.tight_layout()
     fig.savefig(outpath, dpi=150, bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_dra_ddec(dra, ddec, ra, dec, outpath, match=None):
+    fig = plt.figure(figsize=(10, 10))
+    sp1 = plt.subplot(2, 2, 1)
+    sp1.hist(dra, bins=50)
+    sp1.axvline(np.median(dra), color="k", ls="--", lw=1)
+
+    sp2 = plt.subplot(2, 2, 2)
+    sp2.hist(ddec, bins=50)
+    sp2.axvline(np.median(ddec), color="k", ls="--", lw=1)
+
+    sp3 = plt.subplot(2, 2, 3)
+    sp3.scatter(dra, ddec, s=1)
+    sp3.scatter(np.median(dra), np.median(ddec), color="k", marker="x", s=50)
+
+    sp4 = plt.subplot(2, 2, 4)
+    sp4.scatter(ra, dec, s=1)
+
+    if match is not None:
+        sp1.hist(dra[match], bins=50)
+        sp2.hist(ddec[match], bins=50)
+        sp3.scatter(dra[match], ddec[match], s=1)
+        sp4.scatter(ra[match], dec[match], s=1)
+        sp1.axvline(np.median(dra[match]), color="b", ls="--", lw=1)
+        sp2.axvline(np.median(ddec[match]), color="b", ls="--", lw=1)
+        sp3.scatter(np.median(dra[match]), np.median(ddec[match]), color="b", marker="x", s=50)
+
+    fig.savefig(outpath, dpi=150, bbox_inches="tight")
 
 
 def internal_repeatability(cat: Table, outdir: Path, label: str):
@@ -347,6 +377,7 @@ def main():
             results["gsc32_bright"] = rb; report.append("    " + fmt(rb)); print(fmt(rb))
     except Exception as e:
         report.append(f"    GSC3.2 FAILED: {e}"); print("GSC3.2 failed:", e)
+        raise e
 
     # --- spatial maps vs VVV and vs GNS (module/frame structure) ---
     for key in ("vvv", "gns"):
@@ -355,6 +386,13 @@ def main():
             spatial_map(d["_ra"], d["_dec"], d["_dra"], d["_ddec"],
                         outdir / f"spatial_{key}.png", f"{label} vs {key.upper()} (offset map)")
             report.append(f"    spatial map: spatial_{key}.png")
+
+    for key in keys:
+        d = results.get(key)
+        if d and "_dra" in d:
+            plot_dra_ddec(d["_dra"], d["_ddec"], d["_ra"], d["_dec"],
+                          outdir / f"dRA_dDec_{key}.png", match=d.get("flux"))
+            report.append(f"    dRA/dDec scatter: dRA_dDec_{key}.png")
 
     # --- internal repeatability ---
     report += internal_repeatability(cat, outdir, label)
