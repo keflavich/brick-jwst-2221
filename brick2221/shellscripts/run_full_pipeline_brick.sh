@@ -62,7 +62,7 @@ submit_reduction() {
   sbatch --parsable \
     --account=astronomy-dept --qos=astronomy-dept-b \
     --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 \
-    --job-name="webb-pipe-brick-${prop}-${filt}" \
+    --job-name="brick${prop}-o${field}-reduce-${filt}" \
     --output="${LOGDIR}/webb-pipe-brick-${prop}-${filt}_%j.log" \
     --wrap "${wrap}"
 }
