@@ -60,6 +60,24 @@ PARALLEL_WORKERS=${PARALLEL_WORKERS:-8}
 MEM_PER_WORKER_GB=${MEM_PER_WORKER_GB:-4}
 PARALLEL_CHUNK_SIZE=${PARALLEL_CHUNK_SIZE:-100}
 
+# --- SLURM per-job sizing (parameterized so the "low-NCPU, spread, backfill-
+# friendly" policy can be applied via env WITHOUT editing this script).  Defaults
+# preserve the previous hardcoded values, so unset = no behaviour change.  The
+# HiPerGator queue delay is dominated by large-CPU/long-time asks; a 96h --time in
+# particular blocks backfill, so an operator wanting throughput can e.g.
+# RED_TIME=36:00:00 CAT_TIME=24:00:00 MERGE_TIME=12:00:00 RED_CPUS=4.
+# For the FINEST spread (many tiny jobs) use the per-frame fan-out entry point
+# instead of this monolithic per-filter cataloging:
+#   PROPOSAL=.. FIELD=.. TARGET=.. FILTERS=".." NSHARDS=24 \
+#     jwst-gc-pipeline/scripts/reduction/submit_cataloging_perframe.sh
+# (FANOUT_CPUS=2/12h shards + FINALIZE_CPUS=4/12h barriers, chained per phase).
+RED_CPUS=${RED_CPUS:-8}          # reduction --ntasks (per filter)
+RED_MEM=${RED_MEM:-256gb}
+RED_TIME=${RED_TIME:-96:00:00}
+CAT_TIME=${CAT_TIME:-96:00:00}   # monolithic manual-iteration cataloging --time
+MERGE_MEM=${MERGE_MEM:-128gb}
+MERGE_TIME=${MERGE_TIME:-96:00:00}
+
 set_target_defaults() {
     local name="$1"
     # DEF_MERGE_REF_FILTER = the filter used as astrometric reference
@@ -236,7 +254,7 @@ submit_pipeline_filter_jobs() {
             --job-name="webb-pipe-${name}-${filter}" \
             --output="${logdir}/webb-pipe-${name}-${filter}_%j.log" \
             --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
-            --ntasks=8 --nodes=1 --mem=256gb --time=96:00:00 \
+            --ntasks=${RED_CPUS} --nodes=1 --mem=${RED_MEM} --time=${RED_TIME} \
             --wrap "${wrap_cmd}")
         submitted+=("${jobid}")
         echo "Submitted pipeline job ${jobid} for ${name} ${filter} ${skip_step_flag}" >&2
@@ -354,7 +372,7 @@ submit_target_flow() {
             --job-name="webb-cat-${name}-${filter}-o${fld}-eachexp" \
             --output="${logdir}/webb-cat-${name}-${filter}-o${fld}-eachexp_%j.log" \
             --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
-            --ntasks=1 --cpus-per-task=${PARALLEL_WORKERS} --nodes=1 --mem=${cat_mem_gb}gb --time=96:00:00 \
+            --ntasks=1 --cpus-per-task=${PARALLEL_WORKERS} --nodes=1 --mem=${cat_mem_gb}gb --time=${CAT_TIME} \
             --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 ${python_exec} ${catalog_script} --filternames=${filter} --modules=${MODULES} --proposal_id=${proposal_id} --field=${fld} --target=${name} --each-exposure --each-suffix=${each_suffix} --daophot --skip-crowdsource --bundle-size=${BUNDLE_SIZE} --skip-if-done ${parallel_args}")
         catalog_jobids+=("${cat_jobid}")
         echo "Submitted catalog job ${cat_jobid} for ${name} ${filter} obs ${fld}"
@@ -371,7 +389,7 @@ submit_target_flow() {
         --job-name="webb-merge-${name}" \
         --output="${logdir}/webb-merge-${name}_%j.log" \
         --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
-        --ntasks=1 --cpus-per-task=${merge_workers} --nodes=1 --mem=128gb --time=96:00:00 \
+        --ntasks=1 --cpus-per-task=${merge_workers} --nodes=1 --mem=${MERGE_MEM} --time=${MERGE_TIME} \
         --wrap "CRDS_PATH=${CRDS_PATH} CRDS_SERVER_URL=https://jwst-crds.stsci.edu ${python_exec} ${merge_script} --merge-singlefields --modules=merged --indiv-merge-methods=dao,daoiterative --skip-crowdsource --target=${name} ${merge_ref_arg} --merge-workers=${merge_workers}")
     echo "Submitted merge job ${merge_jobid} for ${name}"
 }
