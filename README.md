@@ -31,7 +31,7 @@ The old import paths inside `brick2221.reduction.*` and
 they re-export the implementation from `jwst_gc_pipeline`. New code should
 import directly from `jwst_gc_pipeline`.
 
-## Iter1 / Iter2 / Iter3 / Iter4 cataloging cycle
+## Iter1 / Iter2 / Iter3 / Iter4 cataloging cycle [OBSOLETE]
 
 After the JWST pipeline (`PipelineRerunNIRCAM-LONG.py` etc.) produces
 per-frame `*_destreak_o<NNN>_crf.fits` images, photometry is built up
