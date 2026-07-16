@@ -84,9 +84,9 @@ with warnings.catch_warnings():
     ww410_merged = wcs.WCS(fh_merged[1].header)
     ww_merged = ww410_merged
 
-    fh_merged_reproject = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged-reproject_i2d.fits')
-    ww410_merged_reproject = wcs.WCS(fh_merged_reproject[1].header)
-    ww_merged_reproject = ww410_merged_reproject
+    #fh_merged_reproject = fits.open(f'{basepath}/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits')
+    #ww410_merged_reproject = wcs.WCS(fh_merged_reproject[1].header)
+    #ww_merged_reproject = ww410_merged_reproject
 
 avm_nostars = pyavm.AVM.from_image(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png')
 img_nostars = np.array(PIL.Image.open(f'{basepath}/images/BrickJWST_longwave_RGB_unrotated.png'))[::-1,:,:]
