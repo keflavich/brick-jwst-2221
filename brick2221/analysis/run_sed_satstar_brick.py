@@ -26,7 +26,6 @@ BRICK_BASE   = Path('/blue/adamginsburg/adamginsburg/jwst/brick')
 SICKLE_BASE  = Path('/orange/adamginsburg/jwst/sickle')
 BRICK_ORANGE = Path('/orange/adamginsburg/jwst/brick')
 IMGS_DIR     = BRICK_BASE / 'images'
-INPAINT_DIR  = IMGS_DIR / 'inpainted'
 
 MIRI_CAT_FILE   = SICKLE_BASE / 'catalogs' / 'o003_miri_cmd_matched.fits'
 NIRCAM_CAT_FILE = BRICK_ORANGE / 'catalogs' / 'basic_merged_indivexp_photometry_tables_merged_resbgsub_m8_dedup.fits'
@@ -36,16 +35,16 @@ OUT_DIR = BRICK_BASE / 'sed_figures_f1500w_all'
 OUT_DIR.mkdir(exist_ok=True)
 
 IMAGE_FILES = {
-    'f115w': INPAINT_DIR / 'jw01182-o004_t001_nircam_clear-f115w-merged_i2d_inpainted.fits',
-    'f200w': IMGS_DIR   / 'jw01182-o004_t001_nircam_clear-f200w-merged_i2d.fits',
-    'f356w': INPAINT_DIR / 'jw01182-o004_t001_nircam_clear-f356w-merged_i2d_inpainted.fits',
-    'f444w': INPAINT_DIR / 'jw01182-o004_t001_nircam_clear-f444w-merged_i2d_inpainted.fits',
-    'f182m': INPAINT_DIR / 'jw02221-o001_t001_nircam_clear-f182m-merged-reproject_i2d_inpainted.fits',
-    'f187n': INPAINT_DIR / 'jw02221-o001_t001_nircam_clear-f187n-merged-reproject_i2d_inpainted.fits',
-    'f212n': INPAINT_DIR / 'jw02221-o001_t001_nircam_clear-f212n-merged-reproject_i2d_inpainted.fits',
-    'f405n': INPAINT_DIR / 'jw02221-o001_t001_nircam_clear-f405n-merged-reproject_i2d_inpainted.fits',
-    'f410m': INPAINT_DIR / 'jw02221-o001_t001_nircam_clear-f410m-merged-reproject_i2d_inpainted.fits',
-    'f466n': INPAINT_DIR / 'jw02221-o001_t001_nircam_clear-f466n-merged-reproject_i2d_inpainted.fits',
+    'f115w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f115w-merged_i2d.fits',
+    'f200w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f200w-merged_i2d.fits',
+    'f356w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f356w-merged_i2d.fits',
+    'f444w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f444w-merged_i2d.fits',
+    'f182m': BRICK_ORANGE / 'F182M' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f182m-merged_i2d.fits',
+    'f187n': BRICK_ORANGE / 'F187N' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f187n-merged_i2d.fits',
+    'f212n': BRICK_ORANGE / 'F212N' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f212n-merged_i2d.fits',
+    'f405n': BRICK_ORANGE / 'F405N' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f405n-merged_i2d.fits',
+    'f410m': BRICK_ORANGE / 'F410M' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits',
+    'f466n': BRICK_ORANGE / 'F466N' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f466n-merged_i2d.fits',
     'f770w':  SICKLE_BASE / 'F770W/pipeline/jw03958-o003_t001_miri_f770w_i2d.fits',
     'f1130w': SICKLE_BASE / 'F1130W/pipeline/jw03958-o003_t001_miri_f1130w_i2d.fits',
     'f1500w': SICKLE_BASE / 'F1500W/pipeline/jw03958-o003_t001_miri_f1500w_i2d.fits',
