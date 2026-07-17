@@ -48,18 +48,21 @@ def save_rgb(img, filename, avm=None, flip=-1, alma_data=None, alma_level=None):
 
     return img
 
-# Updated image filenames for Brick data with correct project codes
+# Current drizzled pipeline mosaics (astrometry-corrected). Previously these
+# pointed at stale products -- 1182 at the images/ copies and 2221 at the
+# single-visit mastDownload/ i2d -- both of which predate the astrometry
+# corrections, so overlays/RGB landed ~0.1" off the true star positions.
 image_filenames_pipe = {
-    "f115w": "/orange/adamginsburg/jwst/brick/images/jw01182-o004_t001_nircam_clear-f115w-merged_i2d.fits",
-    "f182m": "/orange/adamginsburg/jwst/brick/mastDownload/jw02221-o002_t001_nircam_clear-f182m_i2d.fits",
-    "f187n": "/orange/adamginsburg/jwst/brick/mastDownload/jw02221-o001_t001_nircam_clear-f187n_i2d.fits",
-    "f200w": "/orange/adamginsburg/jwst/brick/images/jw01182-o004_t001_nircam_clear-f200w-merged_i2d.fits",
-    "f212n": "/orange/adamginsburg/jwst/brick/mastDownload/jw02221-o001_t001_nircam_clear-f212n_i2d.fits",
-    "f356w": "/orange/adamginsburg/jwst/brick/images/jw01182-o004_t001_nircam_clear-f356w-merged_i2d.fits",
-    "f405n": "/orange/adamginsburg/jwst/brick/mastDownload/jw02221-o001_t001_nircam_f405n-f444w_i2d.fits",
-    "f410m": "/orange/adamginsburg/jwst/brick/mastDownload/jw02221-o001_t001_nircam_clear-f410m_i2d.fits",
-    "f444w": "/orange/adamginsburg/jwst/brick/images/jw01182-o004_t001_nircam_clear-f444w-merged_i2d.fits",
-    "f466n": "/orange/adamginsburg/jwst/brick/mastDownload/jw02221-o001_t001_nircam_f444w-f466n_i2d.fits",
+    "f115w": "/orange/adamginsburg/jwst/brick/F115W/pipeline/jw01182-o004_t001_nircam_clear-f115w-merged_i2d.fits",
+    "f182m": "/orange/adamginsburg/jwst/brick/F182M/pipeline/jw02221-o001_t001_nircam_clear-f182m-merged_i2d.fits",
+    "f187n": "/orange/adamginsburg/jwst/brick/F187N/pipeline/jw02221-o001_t001_nircam_clear-f187n-merged_i2d.fits",
+    "f200w": "/orange/adamginsburg/jwst/brick/F200W/pipeline/jw01182-o004_t001_nircam_clear-f200w-merged_i2d.fits",
+    "f212n": "/orange/adamginsburg/jwst/brick/F212N/pipeline/jw02221-o001_t001_nircam_clear-f212n-merged_i2d.fits",
+    "f356w": "/orange/adamginsburg/jwst/brick/F356W/pipeline/jw01182-o004_t001_nircam_clear-f356w-merged_i2d.fits",
+    "f405n": "/orange/adamginsburg/jwst/brick/F405N/pipeline/jw02221-o001_t001_nircam_clear-f405n-merged_i2d.fits",
+    "f410m": "/orange/adamginsburg/jwst/brick/F410M/pipeline/jw02221-o001_t001_nircam_clear-f410m-merged_i2d.fits",
+    "f444w": "/orange/adamginsburg/jwst/brick/F444W/pipeline/jw01182-o004_t001_nircam_clear-f444w-merged_i2d.fits",
+    "f466n": "/orange/adamginsburg/jwst/brick/F466N/pipeline/jw02221-o001_t001_nircam_clear-f466n-merged_i2d.fits",
 }
 
 # Commenting out subtracted images for now to get basic functionality working
