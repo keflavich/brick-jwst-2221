@@ -116,12 +116,35 @@ def coarse_from_i2d(filt, rc, ref):
         return None
     sc = detect_i2d_sources(i2d)
     dra, ddec, n, peak, bg = coarse_xcorr(sc, ref)
-    if dra is None:
-        print(f"  [coarse] {filt}: too few i2d pairs"); return None
-    ratio = peak / bg if bg > 0 else np.inf
-    if ratio < COARSE_MIN_PEAK_RATIO:
-        print(f"  [coarse] {filt}: peak/bg {ratio:.1f} < {COARSE_MIN_PEAK_RATIO} -> ambiguous, refusing")
-        return None
+    ratio = (peak / bg) if (peak is not None and bg and bg > 0) else 0.0
+    if dra is None or ratio < COARSE_MIN_PEAK_RATIO:
+        # ALL-PAIRS histogram is density-biased: two catalogs tracing the same dense field
+        # make a non-uniform wrong-pair background that can bury the true peak (memory
+        # histogram-vs-samestar-offset-bias; measured cloudef obs005 F162M all-pairs pk/bg
+        # 1.8 while the tie is clean at -80,-30mas).  FALL BACK to a nearest-neighbour coarse
+        # (sparse VIRAC -> nearest bright i2d source, ONE pair per ref star -> no chance-pair
+        # pileup), safe here because the i2d detections are clean/high-SNR.
+        idx, sep, _ = ref.match_to_catalog_sky(sc)
+        mw = sep < COARSE_MAXSEP
+        if mw.sum() >= 50:
+            d_ra = (sc[idx[mw]].ra - ref[mw].ra).to(u.arcsec).value
+            d_de = (sc[idx[mw]].dec - ref[mw].dec).to(u.arcsec).value
+            mm = COARSE_MAXSEP.to(u.arcsec).value
+            bins = np.arange(-mm, mm + COARSE_BIN, COARSE_BIN)
+            H, xe, ye = np.histogram2d(d_ra, d_de, bins=[bins, bins])
+            i, j = np.unravel_index(H.argmax(), H.shape)
+            nbg = float(np.median(H[H > 0])) if (H > 0).any() else 0.0
+            nratio = (H.max() / nbg) if nbg > 0 else np.inf
+            if nratio >= COARSE_MIN_PEAK_RATIO:
+                dra = -(xe[i] + xe[i + 1]) / 2.0; ddec = -(ye[j] + ye[j + 1]) / 2.0
+                peak, bg, ratio, n = float(H.max()), nbg, nratio, int(mw.sum())
+                print(f"  [coarse] {filt}: all-pairs ambiguous -> NN coarse pk/bg={ratio:.1f}", flush=True)
+            else:
+                print(f"  [coarse] {filt}: all-pairs AND NN ambiguous (pk/bg {ratio:.1f}/{nratio:.1f}) -> refusing")
+                return None
+        else:
+            print(f"  [coarse] {filt}: peak/bg {ratio:.1f} ambiguous, too few NN pairs -> refusing")
+            return None
     # refine the histogram coarse (bin-limited ~half-bin) to mas precision with a fine NN
     # on the CLEAN i2d detections themselves (now within <SEARCH of VIRAC2, so the NN finds
     # real counterparts, not chance) -- removes the coarse-bin dependence of the final tie.
@@ -144,8 +167,22 @@ REGION = {
                    filts={'f182m': ('F182M', 2023.30, '_m3'), 'f187n': ('F187N', 2023.30, '_m3'),
                           'f212n': ('F212N', 2023.30, '_m3'), 'f405n': ('F405N', 2023.30, '_m3'),
                           'f410m': ('F410M', 2023.30, '_m3'), 'f466n': ('F466N', 2023.30, '_m3')}),
+    # cloudef (2092): Cloud E (obs 002) + Cloud F (obs 005), separate pointings ->
+    # separate region keys; combine their VIRAC2locked tables into one Offsets file after.
+    # Per-exposure catalogs are unstaged (f210m_nrcX_visit..._exp..._daophot_basic) -> mtag=''.
+    'cloudef2': dict(proposal='2092', field='002', basepath='/orange/adamginsburg/jwst/cloudef',
+                     filts={'f162m': ('F162M', 2023.21, '_m3'), 'f210m': ('F210M', 2023.21, '_m3'),
+                            'f360m': ('F360M', 2023.21, '_m3'), 'f480m': ('F480M', 2023.21, '_m3')}),
+    'cloudef5': dict(proposal='2092', field='005', basepath='/orange/adamginsburg/jwst/cloudef',
+                     filts={'f162m': ('F162M', 2023.21, '_m3'), 'f210m': ('F210M', 2023.21, '_m3'),
+                            'f360m': ('F360M', 2023.21, '_m3'), 'f480m': ('F480M', 2023.21, '_m3')}),
 }
-SW = {'f115w', 'f200w', 'f182m', 'f187n', 'f212n'}
+# NIRCam SW (nrca1-4/nrcb1-4) vs LW (nrcalong/nrcblong) split at ~2.4um: F070W..F212N are
+# SW, F250M+ are LW.  Membership by filter number so any GC field's bands classify right.
+def _is_sw(filt):
+    m = re.match(r'f(\d{3})', filt.lower())
+    return bool(m) and int(m.group(1)) < 240
+SW = {f for f in ('f115w', 'f150w', 'f162m', 'f182m', 'f187n', 'f200w', 'f210m', 'f212n')}
 SW_DETS = ['nrca1', 'nrca2', 'nrca3', 'nrca4', 'nrcb1', 'nrcb2', 'nrcb3', 'nrcb4']
 LW_DETS = ['nrcalong', 'nrcblong']
 
@@ -446,7 +483,7 @@ def lock_filter(filt, rc, per_module=False):
     print(f"=== per-exposure relock {filt} ({prop}/{field}, epoch {ep}) "
           f"[{'PER-MODULE' if per_module else 'module-locked'}] ===", flush=True)
     ref = virac2(ep, cache)
-    dets = SW_DETS if filt in SW else LW_DETS
+    dets = SW_DETS if (filt in SW or _is_sw(filt)) else LW_DETS
     # PER-FILTER coarse bulk tie, measured ONCE on the clean drizzled mosaic vs VIRAC2.
     # Seeds every visit; the per-visit/per-exposure fine NN below resolves the residual
     # (including any per-module <SEARCH difference).  FAIL LOUD if the mosaic tie is dirty.
