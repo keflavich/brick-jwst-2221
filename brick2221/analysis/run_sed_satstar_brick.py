@@ -152,7 +152,7 @@ for _filt in NIRCAM_FILTERS + ['f2550w']:
             try:
                 _pixar = _hdul[_ext].header.get('PIXAR_SR')
                 if _pixar is not None: break
-            except Exception:
+            except (KeyError, IndexError):
                 pass
         if _pixar is None:
             for _ext in [1, 0]:
@@ -160,7 +160,7 @@ for _filt in NIRCAM_FILTERS + ['f2550w']:
                     _ww = WCS(_hdul[_ext].header)
                     _pixar = float(_ww.proj_plane_pixel_area().to(u.sr).value)
                     break
-                except Exception:
+                except (KeyError, IndexError, ValueError):
                     pass
     if _pixar is not None:
         SATSTAR_PIX_SR[_filt] = float(_pixar)
@@ -183,9 +183,9 @@ for filt, path in IMAGE_FILES.items():
                         image_data[filt] = (arr.astype(float), wcs)
                         print(f'  Loaded {filt}: {arr.shape}')
                         break
-                except Exception:
+                except (KeyError, IndexError, ValueError):
                     pass
-    except Exception as e:
+    except (OSError, fits.VerifyError) as e:
         print(f'  {filt}: {e}')
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -224,7 +224,7 @@ def get_cutout(coord, filt):
         if np.all(~np.isfinite(arr)) or np.nansum(np.abs(arr)) == 0:
             return None, None
         return arr, ps_arcsec
-    except Exception:
+    except (ValueError,):
         return None, None
 
 def measure_flux_image(coord, filt):
@@ -436,7 +436,7 @@ print(f'\nGenerating {len(sources)} SEDs → {OUT_DIR}')
 for i in range(len(sources)):
     try:
         out = plot_source_sed(i)
-    except Exception as e:
+    except (ValueError, RuntimeError, KeyError, OSError, TypeError) as e:
         print(f'  ERROR rank {i+1}: {e}')
         continue
     if (i + 1) % 25 == 0 or (i + 1) == len(sources):

@@ -106,14 +106,14 @@ for _filt in NIRCAM_FILTERS + ['f2550w']:
             try:
                 _pixar = _hdul[_ext].header.get('PIXAR_SR')
                 if _pixar is not None: break
-            except Exception: pass
+            except (KeyError, IndexError): pass
         if _pixar is None:
             for _ext in [1, 0]:
                 try:
                     _ww = WCS(_hdul[_ext].header)
                     _pixar = float(_ww.proj_plane_pixel_area().to(u.sr).value)
                     break
-                except Exception: pass
+                except (KeyError, IndexError, ValueError): pass
     if _pixar is not None:
         SATSTAR_PIX_SR[_filt] = float(_pixar)
     print(f'  {_filt}: {len(_cat)} satstar, PIXAR_SR={SATSTAR_PIX_SR.get(_filt, float("nan")):.4e}')
@@ -153,8 +153,8 @@ for filt, path in IMAGE_FILES.items():
                         image_data[filt] = (arr.astype(float), wcs)
                         print(f'  Loaded {filt}: {arr.shape}')
                         break
-                except Exception: pass
-    except Exception as e:
+                except (KeyError, IndexError, ValueError): pass
+    except (OSError, fits.VerifyError) as e:
         print(f'  {filt}: {e}')
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ def get_cutout(coord, filt):
         arr[footprint < 0.5] = np.nan
         if np.all(~np.isfinite(arr)) or np.nansum(np.abs(arr)) == 0: return None, None
         return arr, ps_arcsec
-    except Exception: return None, None
+    except (ValueError,): return None, None
 
 def measure_flux_image(coord, filt):
     arr, ps = get_cutout(coord, filt)
@@ -395,7 +395,7 @@ print(f'\nGenerating {len(targets)} SEDs → {OUT_DIR}')
 for i in range(len(targets)):
     try:
         out = plot_source_sed(i)
-    except Exception as e:
+    except (ValueError, RuntimeError, KeyError, OSError, TypeError) as e:
         print(f'  ERROR ID {int(targets.iloc[i]["ID"])}: {e}')
         continue
     if (i + 1) % 25 == 0 or (i + 1) == len(targets):
