@@ -35,10 +35,13 @@ OUT_DIR = BRICK_BASE / 'sed_figures_f1500w_all'
 OUT_DIR.mkdir(exist_ok=True)
 
 IMAGE_FILES = {
-    'f115w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f115w-merged_i2d.fits',
-    'f200w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f200w-merged_i2d.fits',
-    'f356w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f356w-merged_i2d.fits',
-    'f444w': IMGS_DIR    / 'jw01182-o004_t001_nircam_clear-f444w-merged_i2d.fits',
+    # 1182 NIRCam: use the current drizzled pipeline mosaics, NOT the stale
+    # images/ copies -- those predate the astrometry corrections, so catalog
+    # positions land ~0.1" off the stars in the cutouts.
+    'f115w': BRICK_ORANGE / 'F115W' / 'pipeline' / 'jw01182-o004_t001_nircam_clear-f115w-merged_i2d.fits',
+    'f200w': BRICK_ORANGE / 'F200W' / 'pipeline' / 'jw01182-o004_t001_nircam_clear-f200w-merged_i2d.fits',
+    'f356w': BRICK_ORANGE / 'F356W' / 'pipeline' / 'jw01182-o004_t001_nircam_clear-f356w-merged_i2d.fits',
+    'f444w': BRICK_ORANGE / 'F444W' / 'pipeline' / 'jw01182-o004_t001_nircam_clear-f444w-merged_i2d.fits',
     'f182m': BRICK_ORANGE / 'F182M' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f182m-merged_i2d.fits',
     'f187n': BRICK_ORANGE / 'F187N' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f187n-merged_i2d.fits',
     'f212n': BRICK_ORANGE / 'F212N' / 'pipeline' / 'jw02221-o001_t001_nircam_clear-f212n-merged_i2d.fits',
