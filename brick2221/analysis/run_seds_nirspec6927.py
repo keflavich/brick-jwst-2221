@@ -339,9 +339,12 @@ def plot_source_sed(i):
             ax.imshow(arr, norm=norm, origin='lower', cmap='inferno')
             cx_s, cy_s = arr.shape[1] / 2, arr.shape[0] / 2
             ap_pix = PHOT_APER_ARCSEC.get(filt, 0.5) / pix_scale
-            ax.add_patch(plt.Circle((cx_s, cy_s), ap_pix, color='cyan', fill=False, lw=0.8))
-            ax.axhline(cy_s, color='cyan', lw=0.4, alpha=0.5)
-            ax.axvline(cx_s, color='cyan', lw=0.4, alpha=0.5)
+            ax.add_patch(plt.Circle((cx_s, cy_s), ap_pix, color='cyan', fill=False, lw=0.5))
+            _gap = ap_pix + 2; _arm = max(3, ap_pix * 0.4)
+            ax.plot([cx_s - _gap - _arm, cx_s - _gap], [cy_s, cy_s], color='cyan', lw=0.5, alpha=0.7)
+            ax.plot([cx_s + _gap, cx_s + _gap + _arm], [cy_s, cy_s], color='cyan', lw=0.5, alpha=0.7)
+            ax.plot([cx_s, cx_s], [cy_s - _gap - _arm, cy_s - _gap], color='cyan', lw=0.5, alpha=0.7)
+            ax.plot([cx_s, cx_s], [cy_s + _gap, cy_s + _gap + _arm], color='cyan', lw=0.5, alpha=0.7)
         else:
             ax.set_facecolor('#111')
             ax.text(0.5, 0.5, 'no data', ha='center', va='center',
