@@ -116,7 +116,7 @@ tag="${4:-V9}"
 extra_dep="${5:-}"
 
 PYTHON=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-SCRIPT=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+SCRIPT=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 
 python_target=""
 
@@ -126,7 +126,7 @@ case "$target" in
     # obs 003 is the BRICK MIRI field (not the sickle): catalog it with
     # target=brick (proposal_id 3958, field 003) so it lands in brick/ and does
     # not clash with sickle/ products.  The basepath split is handled by
-    # field_to_reg_mapping in crowdsource_catalogs_long.py (3958/003 -> brick).
+    # field_to_reg_mapping in catalog_long.py (3958/003 -> brick).
     basepath=/orange/adamginsburg/jwst/sickle ; proposal_id=3958
     fields=(007)
     logdir=/blue/adamginsburg/adamginsburg/logs/sickle_jwst/ ;;

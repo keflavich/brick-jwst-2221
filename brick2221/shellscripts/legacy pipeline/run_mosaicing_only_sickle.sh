@@ -79,7 +79,7 @@ submit_residual_mosaic_only() {
         --nodes=1 \
         --mem=24gb \
         --time=24:00:00 \
-        --wrap "FILTER=${filter} MODULE=${module} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} KINDS=${kinds_csv} ${python_exec} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=${bgsub_py}, epsf=False, blur=False, group=False, pupil='clear', iteration_label=${iter_py}) for kind in os.environ['KINDS'].split(',')]\""
+        --wrap "FILTER=${filter} MODULE=${module} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} KINDS=${kinds_csv} ${python_exec} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import catalog_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=${bgsub_py}, epsf=False, blur=False, group=False, pupil='clear', iteration_label=${iter_py}) for kind in os.environ['KINDS'].split(',')]\""
 
     echo "Submitted mosaicing-only job for ${filter} ${module} ${bgsub_flag} ${iteration_label} kinds=${kinds_csv}"
 }

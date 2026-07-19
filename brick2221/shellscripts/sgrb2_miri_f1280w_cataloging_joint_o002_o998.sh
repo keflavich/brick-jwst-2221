@@ -23,7 +23,7 @@ rm -f F1280W/pipeline/jw05365*_mirimage_*o[09][09][28]_crf*satstar_catalog.fits 
       F1280W/pipeline/jw05365*_mirimage_*o[09][09][28]_crf*satstar_flags*.fits \
       F1280W/pipeline/jw05365*_mirimage_*o[09][09][28]_crf*satstar_residual*.fits 2>/dev/null
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
-    "$WT/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py" \
+    "$WT/jwst_gc_pipeline/photometry/catalog_long.py" \
     --filternames=F1280W --modules=mirimage --each-exposure \
     --proposal_id=5365 --field=002-998 --target=sgrb2 \
     --each-suffix=o002_crf \

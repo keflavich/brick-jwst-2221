@@ -25,7 +25,7 @@ rm -f F770W/pipeline/jw06151*_mirimage_*o002_crf*satstar_catalog.fits \
       F770W/pipeline/jw06151*_mirimage_*o002_crf*satstar_flags*.fits \
       F770W/pipeline/jw06151*_mirimage_*o002_crf*satstar_residual*.fits 2>/dev/null
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
-    "$WT/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py" \
+    "$WT/jwst_gc_pipeline/photometry/catalog_long.py" \
     --filternames=F770W --modules=mirimage --each-exposure \
     --proposal_id=6151 --field=002 --target=w51 \
     --each-suffix=o002_crf \
