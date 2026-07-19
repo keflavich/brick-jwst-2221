@@ -36,8 +36,8 @@ import directly from `jwst_gc_pipeline`.
 After the JWST pipeline (`PipelineRerunNIRCAM-LONG.py` etc.) produces
 per-frame `*_destreak_o<NNN>_crf.fits` images, photometry is built up
 across four iterative passes.  Every pass runs the same script
-(`jwst_gc_pipeline.photometry.crowdsource_catalogs_long` /
-`brick2221.analysis.crowdsource_catalogs_long`) on a per-frame basis,
+(`jwst_gc_pipeline.photometry.catalog_long` /
+`brick2221.analysis.catalog_long`) on a per-frame basis,
 but with different inputs and goals.
 
 > **New default photometry pipeline (2026-06-09):** the manual-iteration
@@ -67,7 +67,7 @@ but with different inputs and goals.
 > The legacy iter1/iter2/iter3/iter4 description below is retained for
 > reference and remains accurate for the (now-retired) legacy path.
 
- 1. **iter1 — basic per-frame DAO seed.** `crowdsource_catalogs_long.py
+ 1. **iter1 — basic per-frame DAO seed.** `catalog_long.py
     --each-exposure --daophot --skip-crowdsource` (no `--iteration-label`).
     Finds peaks above noise on each per-frame destreak/crf image and runs
     one DAOPHOT PSF-fit pass.  Output is the seed catalog used downstream.
@@ -82,7 +82,7 @@ but with different inputs and goals.
  3. **iter3 — cross-band union-seeded fit.**
     `build_union_seed_catalog.py` unions the iter2 per-filter merged
     catalogs into a single `seed_union_iter3_<target>.fits`, then
-    `crowdsource_catalogs_long.py --iteration-label=iter3
+    `catalog_long.py --iteration-label=iter3
     --seed-catalog=<union> --postprocess-residuals` is run per frame.
     This is the canonical "all filters, all frames" simultaneous fit and
     produces the final per-frame iter3 photometry + residual mosaics.
@@ -184,11 +184,11 @@ Catalog it with `--target=brick --proposal_id=3958 --field=003`.
   * `destreak.py` runs "Massimo's Destriper", which is a simple percentile-subtraction across the X-axis of each horizontal quadrant of each detector (this is run by the pipeline)
   * `align_to_catalogs.py` includes some post-facto re-alignment tools.  One function runs only on the final processed data & matches it to VVV. (this is run by the pipeline)
   * `saturated_star_finding.py` performs PSF fitting on saturated stars and removes them.  (this is run by the pipeline)
-  * `crowdsource_catalogs_long.py` runs the crowsource extraction algorithm.  This must be run on the long-wavelength channels before running the short-wavelength pipeline to provide the reference catalog we use for the shortwave data.
+  * `catalog_long.py` runs the crowsource extraction algorithm.  This must be run on the long-wavelength channels before running the short-wavelength pipeline to provide the reference catalog we use for the shortwave data.
   * `merge_catalogs.py` merges the multiwavelength catalogs.
   * `make_reftable.py` makes the reference table from the long-wavelength (F410M) data to be used on the short-wavelength data (this is run by merge_catalogs) - note that this is in analysis/
   * `PipelineRerunNIRCAM-SHORT.py` run the JWST pipeline with modifications to the tweakwcs stage including a reference catalog generated from F410M
-  * `crowdsource_catalogs_long.py` on the short data (it has _long in the name, but I merged both into this one; the _short version is deprecated)  - note that this is in analysis/
+  * `catalog_long.py` on the short data (it has _long in the name, but I merged both into this one; the _short version is deprecated)  - note that this is in analysis/
   * `merge_catalogs.py` again to finally merge wavelengths - note that this is in analysis/
 
  2. Notebooks.  There are a lot of these.
@@ -367,7 +367,7 @@ Validated mapping locations in the codebase (these must be coherent for any new 
    * proposal/field -> target mapping in `field_to_reg_mapping`
    * proposal/field -> reference catalog mapping in `REFERENCE_ASTROMETRIC_CATALOG_BY_FIELD`
    * optional target -> fov region mapping in `fov_regname`
- * `brick2221/analysis/crowdsource_catalogs_long.py`
+ * `brick2221/analysis/catalog_long.py`
    * proposal/field/target mapping in `field_to_reg_mapping`
    * visit-count policy in `nvisits`
  * `brick2221/analysis/merge_catalogs.py`
@@ -386,7 +386,7 @@ The "full pipeline" for one target is the end-to-end dependency tree:
  1. First-pass pipeline jobs for all configured filters (no refcat).
  2. Reference-catalog build via `make_reference_from_pipeline_catalogs.py`.
  3. Second-pass pipeline jobs with `--skip_step1and2`.
- 4. Per-exposure iter1 DAO cataloging arrays via `crowdsource_catalogs_long.py`.
+ 4. Per-exposure iter1 DAO cataloging arrays via `catalog_long.py`.
  5. Cross-filter merge via `merge_catalogs.py --merge-singlefields`.
 
 Iter2/iter3/iter4 are NOT included — run `submit_full_chain.sh` /

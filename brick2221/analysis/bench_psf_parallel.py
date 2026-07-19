@@ -282,7 +282,7 @@ def main():
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "ccl",
-            "/blue/adamginsburg/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py",
+            "/blue/adamginsburg/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/photometry/catalog_long.py",
         )
         # Skip the heavy import side-effects: load only the parallel-helpers
         # by extracting the top of the module.  But the file is ~3800 lines
@@ -329,7 +329,7 @@ def main():
         # but is necessary for fork-based workers to find the function.
         import sys as _sys
         _sys.path.insert(0, "/blue/adamginsburg/adamginsburg/repos/jwst-gc-pipeline")
-        from jwst_gc_pipeline.photometry import crowdsource_catalogs_long as _ccl
+        from jwst_gc_pipeline.photometry import catalog_long as _ccl
         finder = DAOStarFinder(
             threshold=args.nsigma * _std_for_finder(sci, mask),
             fwhm=args.fwhm_pix, roundlo=-1.0, roundhi=1.0,
