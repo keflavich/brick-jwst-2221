@@ -13,10 +13,11 @@ Run with the photutils-allframe fork on PYTHONPATH::
         python test_offset_psf_wrapper.py
 """
 
+import os
 import sys
 import numpy as np
 
-sys.path.insert(0, '/orange/adamginsburg/jwst/sickle')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from allframe_cutout_demo import OffsetGriddedPSF  # noqa: E402
 
 from photutils.psf import GriddedPSFModel  # noqa: E402
