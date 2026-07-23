@@ -188,6 +188,24 @@ esac
 python_target="${python_target:-${target}}"
 mkdir -p "$logdir"
 
+# --- m2 correction-floor default (brick campaign) -------------------------
+# The m2 astrometry checkpoint's correcting stage records an exposure as a
+# CORRECTION when it sits > EXPOSURE_CONSENSUS_TOL (2 mas) off the visit
+# consensus, and raises AstrometryCorrectionRequiredError (stop-for-regen) if
+# it makes ANY.  The code default of ASTROM_M2_CORRECTION_FLOOR_MAS is 0, so
+# the bluest/sparsest brick filter (F115W, intrinsic per-exposure scatter
+# 2.0-3.3 mas that is IDENTICAL at every stage) trips it on a plain re-run and
+# kills the job.  The brick V13 campaign runs with the (authorized) 4 mas RMS
+# buffering; default it here for brick targets so a manual restart cannot
+# silently drop it (a dropped floor cost job 37614271, 2026-07-20).  Respects
+# an explicit override; only brick/brick-1182 are buffered -- other fields keep
+# the code default (0) so a real 2-4 mas issue is NOT masked.
+case "$target" in
+  brick|brick-1182)
+    export ASTROM_M2_CORRECTION_FLOOR_MAS="${ASTROM_M2_CORRECTION_FLOOR_MAS:-4.0}"
+    echo "brick m2 correction floor: ASTROM_M2_CORRECTION_FLOOR_MAS=${ASTROM_M2_CORRECTION_FLOOR_MAS} mas" >&2 ;;
+esac
+
 DEP=""
 if [[ -n "$extra_dep" ]]; then DEP="--dependency=afterok:$extra_dep"; fi
 
