@@ -24,9 +24,17 @@
 #     for sgrb2 (LW uses align_o<NNN>_crf, SW uses destreak_o<NNN>_crf).
 #     Other targets use the same suffix family so SW/LW in one call works.
 #
-# Resource env-var overrides (defaults: 32 CPUs / 256 GB / 96h):
+# Resource env-var overrides (defaults: ~1 CPU/frame up to 128 / 6 GB/CPU / 96h):
 #   MANUAL_CPUS=64 MANUAL_MEM=512gb MANUAL_TIME=72:00:00 \
 #     submit_manual_pipeline.sh <target> <filter> <module>
+#   MANUAL_CPU_CAP (default 128), MANUAL_FALLBACK_CPUS (default 32, used only
+#   when no crf frames are on disk at submit time), MANUAL_MEM_PER_CPU_GB (6).
+#
+# SPLIT_FILTERS=1 (opt-in, multi-filter only): submit one single-filter job per
+# filter (m12..m6, concurrent, each self-sized) + one afterok m7 cross-band
+# finalize, instead of one monolithic node running all filters serially.  Cuts
+# wall clock ~Nx on everything but m7.  EXPERIMENTAL -- validate on one field.
+#   SPLIT_FILTERS=1 submit_manual_pipeline.sh brick-1182 F115W,F200W,F356W,F444W merged
 #
 # ----- Per-target examples -----
 #
@@ -210,6 +218,26 @@ get_each_suffix() {
   fi
 }
 
+# crf frame count on disk for one (field, filter).
+_count_frames() {
+  local fld="$1" filt="$2" sfx
+  sfx=$(get_each_suffix "$fld" "$filt")
+  (shopt -s nullglob; a=( "${basepath}/${filt^^}/pipeline/"*"${sfx}.fits" ); echo ${#a[@]})
+}
+
+# CPUS for a frame count: MANUAL_CPUS override > ~1-CPU-per-frame (capped) >
+# fallback.  ``--parallel-workers=CPUS`` fits this many frames at once, so a
+# too-low value serializes the per-frame fits into multiple waves.
+_cpus_for_frames() {
+  local nframes="$1"
+  if [[ -n "${MANUAL_CPUS:-}" ]]; then echo "$MANUAL_CPUS"; return; fi
+  if (( nframes > 0 )); then
+    (( nframes < CPU_CAP )) && echo "$nframes" || echo "$CPU_CAP"
+  else
+    echo "${MANUAL_FALLBACK_CPUS:-32}"
+  fi
+}
+
 # Per-target resource defaults; override via env vars.
 # Phases are sequential, but per-frame fits within a phase parallelize via
 # --parallel-workers (one worker per detector-exposure).  To get the full
@@ -221,18 +249,21 @@ get_each_suffix() {
 CPU_CAP=${MANUAL_CPU_CAP:-128}
 _max_frames=0
 for _f in ${filter//,/ }; do
-  _sfx=$(get_each_suffix "${fields[0]}" "$_f")
-  _n=$( (shopt -s nullglob; a=( "${basepath}/${_f^^}/pipeline/"*"${_sfx}.fits" ); echo ${#a[@]}) )
+  _n=$(_count_frames "${fields[0]}" "$_f")
   (( _n > _max_frames )) && _max_frames=$_n
 done
-if [[ -n "${MANUAL_CPUS:-}" ]]; then
-  CPUS=$MANUAL_CPUS
-elif (( _max_frames > 0 )); then
-  CPUS=$(( _max_frames < CPU_CAP ? _max_frames : CPU_CAP ))
-else
-  CPUS=32
-fi
+CPUS=$(_cpus_for_frames "$_max_frames")
 (( CPUS < 1 )) && CPUS=1
+# Frame-based autosizing silently fell back (no crf on disk at submit time --
+# e.g. cataloging queued before/independently of the reduction).  A 32-wide
+# job runs the 192-frame SW filters in ~6 serial waves per phase; warn loudly
+# so it is not mistaken for a full-width run.
+if [[ -z "${MANUAL_CPUS:-}" ]] && (( _max_frames == 0 )); then
+  echo "WARNING: no crf frames matched ${basepath}/<FILTER>/pipeline/*<suffix>.fits" >&2
+  echo "         at submit time -> frame-based CPU autosizing FAILED, using CPUS=${CPUS}." >&2
+  echo "         SW (192-frame) filters will then run ${CPUS}-wide waves, not one batch." >&2
+  echo "         Fix: set MANUAL_CPUS=128, or resubmit once the crf files exist." >&2
+fi
 # ~6 GB/worker (a SW 75k-source fit holds the 2048^2 frame + fit state); capped
 # by node RAM via Slurm.  Override with MANUAL_MEM.
 MEM=${MANUAL_MEM:-$(( CPUS * ${MANUAL_MEM_PER_CPU_GB:-6} ))gb}
@@ -240,8 +271,59 @@ WALLTIME=${MANUAL_TIME:-96:00:00}
 PARTITION=${MANUAL_PARTITION:-hpg-default}
 echo "resources: ${_max_frames} frames (heaviest filter) -> CPUS=${CPUS} (cap ${CPU_CAP}) MEM=${MEM} partition=${PARTITION}" >&2
 
+# Submit one manual-pipeline sbatch.  Used by the SPLIT_FILTERS path (below);
+# the default single-job path keeps its own inline sbatch call unchanged.
+#   args: fld filters_csv cpus mem depflag extra_flags jobsuffix
+_submit_manual() {
+  local fld="$1" filters="$2" cpus="$3" mem="$4" depflag="$5" extra="$6" jsuf="$7"
+  local es; es=$(get_each_suffix "$fld" "${filters%%,*}")
+  sbatch --parsable $depflag \
+    --account=astronomy-dept --qos=${SLURM_QOS:-astronomy-dept-b} \
+    --partition=${PARTITION} \
+    --ntasks=1 --cpus-per-task=${cpus} --nodes=1 \
+    --mem=${mem} --time=${WALLTIME} \
+    --job-name=webb-manual-${target}-o${fld}-${filters//,/+}-${module}-${tag}${jsuf} \
+    --output=${logdir}/webb-manual-${target}-o${fld}-${filters//,/+}-${module}-${tag}${jsuf}_%j.log \
+    --wrap "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1; \
+      ${PYTHON} ${SCRIPT} \
+        --filternames=${filters} --modules=${module} \
+        --proposal_id=${proposal_id} --field=${fld} \
+        --target=${python_target} --each-suffix=${es} \
+        --each-exposure --daophot --skip-crowdsource --skip-if-done \
+        --max-group-size=${MANUAL_MAX_GROUP_SIZE:-10} \
+        --parallel-workers=${cpus} ${extra}"
+}
+
 submitted=()
 for fld in "${fields[@]}"; do
+  # SPLIT_FILTERS=1 (opt-in, multi-filter only): instead of one monolithic job
+  # that runs all filters x all phases serially on ONE node, submit one
+  # single-filter job per filter (each runs m12..m6 -- a single-filter run has
+  # no cross-filter m7 phase, so it naturally stops at m6 -- sized to ITS OWN
+  # frame count) CONCURRENTLY, then ONE multifilter --manual-start-phase=m7
+  # finalize that depends afterok on all of them and reuses their m12..m6
+  # products.  The per-filter jobs' drizzles/renders overlap across nodes
+  # instead of running one-after-another, cutting wall clock ~Nx on everything
+  # but the (inherently cross-filter) m7 step.  EXPERIMENTAL: validate the m7
+  # finalize reuses the per-filter products on one field before trusting it.
+  if [[ "${SPLIT_FILTERS:-0}" == "1" && "${filter}" == *,* ]]; then
+    echo "SPLIT_FILTERS=1: per-filter jobs + afterok m7 finalize for o${fld}" >&2
+    pf_jobs=()
+    for _f in ${filter//,/ }; do
+      _nf=$(_count_frames "$fld" "$_f")
+      _pc=$(_cpus_for_frames "$_nf"); (( _pc < 1 )) && _pc=1
+      _pm=${MANUAL_MEM:-$(( _pc * ${MANUAL_MEM_PER_CPU_GB:-6} ))gb}
+      _j=$(_submit_manual "$fld" "$_f" "$_pc" "$_pm" "$DEP" "--manual-stop-after-phase=m6" "-pf")
+      pf_jobs+=("$_j")
+      echo "  per-filter ${_f}: ${_nf} frames -> CPUS=${_pc} MEM=${_pm} job=${_j}" >&2
+    done
+    _dep="--dependency=afterok:$(IFS=:; echo "${pf_jobs[*]}")"
+    _j7=$(_submit_manual "$fld" "$filter" "$CPUS" "$MEM" "$_dep" "--manual-start-phase=m7" "-m7")
+    submitted+=("${pf_jobs[@]}" "$_j7")
+    echo "submitted split manual ${target}/o${fld}/${filter}/${module}: per-filter=[${pf_jobs[*]}] m7-finalize=${_j7}"
+    continue
+  fi
+
   # For multi-filter input, suffix is taken from the first filter for the
   # CLI flag; the script's per-frame loop reads --each-suffix verbatim per
   # filter from the same value, so multi-filter calls must use a single
