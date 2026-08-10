@@ -25,7 +25,7 @@ rm -f F2550W/pipeline/jw02221*_mirimage_*o002_crf*satstar_catalog.fits \
       F2550W/pipeline/jw02221*_mirimage_*o002_crf*satstar_flags*.fits \
       F2550W/pipeline/jw02221*_mirimage_*o002_crf*satstar_residual*.fits 2>/dev/null
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
-    "$WT/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py" \
+    "$WT/jwst_gc_pipeline/photometry/catalog_long.py" \
     --filternames=F2550W --modules=mirimage --each-exposure \
     --proposal_id=2221 --field=002 --target=brick \
     --each-suffix=o002_crf \

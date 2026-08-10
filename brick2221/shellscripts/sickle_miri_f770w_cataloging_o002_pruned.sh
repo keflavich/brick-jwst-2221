@@ -16,7 +16,7 @@
 # not sickle/).  There is intentionally no sickle o003 cataloging script.
 cd /orange/adamginsburg/jwst/sickle
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
-    /orange/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py \
+    /orange/adamginsburg/repos/jwst-gc-pipeline/jwst_gc_pipeline/photometry/catalog_long.py \
     --filternames=F770W --modules=mirimage --each-exposure \
     --proposal_id=3958 --field=002 --target=sickle \
     --each-suffix=o002_crf \

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Final F115W catalog on the Gaia/VIRAC2 frame, from the NEW (seed-reduced) crf.
 
-Runs after recatalog (crowdsource_catalogs_long --each-exposure --daophot on the
+Runs after recatalog (catalog_long --each-exposure --daophot on the
 new crf). Steps:
   1. Measure per-frame offset (new crf catalogs) -> VIRAC2, build offsets table.
   2. merge_individual_frames(dao/basic) with that offsets table.

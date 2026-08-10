@@ -78,7 +78,7 @@ rm -f F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_catalog.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_flags*.fits \
       F770W/pipeline/jw02526021001_*_mirimage_*o021_crf*satstar_residual*.fits 2>/dev/null
 /blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python \
-    "$WT/jwst_gc_pipeline/photometry/crowdsource_catalogs_long.py" \
+    "$WT/jwst_gc_pipeline/photometry/catalog_long.py" \
     --filternames=F770W --modules=mirimage --each-exposure \
     --proposal_id=2526 --field=021 --target=cloudc \
     --each-suffix=o021_crf \

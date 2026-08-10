@@ -22,11 +22,11 @@ Many outputs share tokenized suffixes:
 - ``{exposure_}`` is ``_expNNNNN`` for per-exposure runs.
 
 
-crowdsource_catalogs_long
+catalog_long
 -------------------------
 
 Module:
-``brick2221/analysis/crowdsource_catalogs_long.py``
+``brick2221/analysis/catalog_long.py``
 
 Input image patterns
 ~~~~~~~~~~~~~~~~~~~~

@@ -2,7 +2,7 @@
 
 As of **2026-06-16** the cataloging stage is the **manual-iteration
 pipeline** (`jwst_gc_pipeline.photometry.cataloging.run_manual_pipeline`),
-which is the default of `crowdsource_catalogs_long.py` (pass
+which is the default of `catalog_long.py` (pass
 `--legacy-iterations` for the old `IterativePSFPhotometry` path). The legacy
 iter1→iter2→merge→iter3→iter4 shell chain has been retired to
 [`legacy pipeline/`](./legacy%20pipeline/); those scripts `exit 1` with a

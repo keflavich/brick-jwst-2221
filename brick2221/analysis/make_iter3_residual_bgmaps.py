@@ -11,7 +11,7 @@ Output: ``...-merged_iter3_daophot_iterative_residual_smoothed_bg_i2d.fits``
         (median-filter of the input).  Same WCS/header.
 
 This file is consumed by the iter*-residbg photometry runs
-(``crowdsource_catalogs_long.py --use-iter3-residual-bg``), which
+(``catalog_long.py --use-iter3-residual-bg``), which
 reproject it onto each exposure's pixel grid and use it as the
 background estimate (in place of running ``Background2D`` on the data
 itself).  The rationale: the iter3 model already accounts for every
@@ -48,7 +48,7 @@ TARGET_BASEPATHS = {
 
 # Suffix inserted into the merged residual mosaic filename to produce the
 # smoothed background filename.  Mirror this token in the consumer
-# (crowdsource_catalogs_long.py --use-iter3-residual-bg path), which
+# (catalog_long.py --use-iter3-residual-bg path), which
 # rebuilds the same name to find this file.
 SMOOTHED_BG_SUFFIX = '_smoothed_bg'
 
@@ -57,7 +57,7 @@ SMOOTHED_BG_SUFFIX = '_smoothed_bg'
 # single detector name it after that detector (e.g. sickle LW = 'nrcb');
 # multi-detector co-adds use 'merged'.  The trailing ``_residual_i2d.fits``
 # excludes the ``_infilled_i2d`` / ``_i2d_smoothed`` / ``_smoothed_bg_i2d``
-# variants.  The consumer (crowdsource_catalogs_long.py
+# variants.  The consumer (catalog_long.py
 # --use-iter3-residual-bg) selects which module's smoothed bg to read via
 # --resbg-mosaic-module.
 RESIDUAL_MOSAIC_GLOB = '*_iter3_daophot_iterative_residual_i2d.fits'

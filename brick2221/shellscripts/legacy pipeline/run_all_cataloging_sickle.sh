@@ -66,7 +66,7 @@ if [[ ${#filters[@]} -eq 0 ]]; then
 fi
 
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
 basepath=/orange/adamginsburg/jwst/sickle
 each_suffix=destreak_o007_crf
@@ -151,7 +151,7 @@ submit_local_mosaic() {
     local dao="$3"
 
     if [[ "${dao}" == *"--daophot"* ]]; then
-        FILTER="${filter}" MODULE="${module}" BASEPATH="${basepath}" ANALYSIS_DIR="${analysis_dir}" "${python_exec}" -c "import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear') for kind in ('basic', 'iterative')]"
+        FILTER="${filter}" MODULE="${module}" BASEPATH="${basepath}" ANALYSIS_DIR="${analysis_dir}" "${python_exec}" -c "import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import catalog_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear') for kind in ('basic', 'iterative')]"
         echo "Completed local residual mosaics for ${filter} ${module}"
     fi
 }
@@ -262,7 +262,7 @@ submit_catalog_and_residual_mosaic() {
     fi
 
     if [[ "${dao}" == *"--daophot"* ]]; then
-        sbatch --dependency=afterok:${array_jobid} --job-name=webb-mosaic-sickle-${filter}-${module} --output=${logdir}/webb-mosaic-sickle-${filter}-${module}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exec} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear') for kind in ('basic', 'iterative')]\""
+        sbatch --dependency=afterok:${array_jobid} --job-name=webb-mosaic-sickle-${filter}-${module} --output=${logdir}/webb-mosaic-sickle-${filter}-${module}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exec} -c \"import os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import catalog_long as c; [c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id='${proposal_id}', field='${field}', module=os.environ['MODULE'], residual_kind=kind, desat=False, bgsub=False, epsf=False, blur=False, group=False, pupil='clear') for kind in ('basic', 'iterative')]\""
         echo "Will submit residual mosaic job after array job ${array_jobid} completes"
     fi
 }

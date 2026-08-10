@@ -54,7 +54,7 @@ tag="${4:-V8}"
 extra_dep="${5:-}"
 
 PYTHON=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-SCRIPT=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+SCRIPT=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 MERGE_SCRIPT=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/merge_catalogs.py
 ITER3_LAUNCHER=/blue/adamginsburg/adamginsburg/repos/brick-jwst-2221/brick2221/shellscripts/run_iter3_cataloging.sh
 

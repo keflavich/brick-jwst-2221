@@ -24,10 +24,10 @@ Analysis and reduction pipelines for JWST Cycle 1 projects 2221 (and 1182) obser
 
 ### Pipeline Execution Order (Critical Dependencies)
 1. **Long-wavelength first**: `PipelineRerunNIRCAM-LONG.py` for F405N, F410M, F466N
-   - Generates reference catalog from F410M via `crowdsource_catalogs_long.py` → `make_reftable.py`
+   - Generates reference catalog from F410M via `catalog_long.py` → `make_reftable.py`
 2. **Short-wavelength second**: `PipelineRerunNIRCAM-SHORT.py` for F182M, F187N, F212N
    - Depends on F410M reference catalog for astrometric alignment
-3. **Cataloging**: Run `crowdsource_catalogs_long.py` (used for both long/short despite name) for photometry extraction
+3. **Cataloging**: Run `catalog_long.py` (used for both long/short despite name) for photometry extraction
 4. **Merging**: `merge_catalogs.py` combines multi-wavelength catalogs with cross-matching
 
 ### HPC Job Submission Pattern

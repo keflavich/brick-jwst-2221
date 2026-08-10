@@ -27,7 +27,7 @@ logdir=/blue/adamginsburg/adamginsburg/logs/sgrb2_jwst/
 mkdir -p "${logdir}"
 
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
 proposal_id=5365; target=sgrb2; field=001
 basepath=/orange/adamginsburg/jwst/sgrb2

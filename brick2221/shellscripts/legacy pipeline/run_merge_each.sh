@@ -31,7 +31,7 @@ submit_residual_mosaic_backstop() {
 		return
 	fi
 
-	sbatch --job-name=webb-mosaic-backstop-${filter}-${module}-${target} --output=${logdir}/webb-mosaic-backstop-${filter}-${module}-${target}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import glob, os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; pipeline_dir=f'{os.environ['BASEPATH']}/{os.environ['FILTER']}/pipeline';
+	sbatch --job-name=webb-mosaic-backstop-${filter}-${module}-${target} --output=${logdir}/webb-mosaic-backstop-${filter}-${module}-${target}_%j.log --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 --wrap "FILTER=${filter} MODULE=${module} PROPOSAL_ID=${proposal_id} FIELD=${field} BASEPATH=${basepath} ANALYSIS_DIR=${analysis_dir} ${python_exe} -c \"import glob, os, sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import catalog_long as c; pipeline_dir=f'{os.environ['BASEPATH']}/{os.environ['FILTER']}/pipeline';
 for iteration_label in (None, 'iter2'):
 	iter_suffix = '' if iteration_label is None else f'_{iteration_label}'
 	iter_name = 'iter0' if iteration_label is None else iteration_label

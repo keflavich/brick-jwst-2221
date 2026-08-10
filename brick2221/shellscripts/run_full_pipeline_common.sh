@@ -36,7 +36,7 @@ mkdir -p "${logdir}"
 
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 pipeline_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/reduction/PipelineRerunNIRCAM-LONG.py
-catalog_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+catalog_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 merge_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/merge_catalogs.py
 refcat_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/make_reference_from_pipeline_catalogs.py
 fov_script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/reduction/make_fov_region_from_mast_i2d.py

@@ -38,7 +38,7 @@ set -euo pipefail
 export STPSF_PATH=/orange/adamginsburg/repos/webbpsf/data/
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
-script=${analysis_dir}/crowdsource_catalogs_long.py
+script=${analysis_dir}/catalog_long.py
 bgmap_builder=${analysis_dir}/make_iter3_residual_bgmaps.py
 BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 ITER_LABEL=iter4resbgrefit
@@ -154,7 +154,7 @@ if [[ ${skip_mosaic} -eq 0 ]]; then
             --output=${logdir}/webb-mosaic-${target}-iter3-${filter}-${bg_mod}_%j.log \
             --account=astronomy-dept --qos=astronomy-dept-b \
             --ntasks=1 --nodes=1 --mem=64gb --time=8:00:00 \
-            --wrap "${python_exec} -c \"import os,sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import crowdsource_catalogs_long as c; c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind='iterative', iteration_label='iter3')\"")
+            --wrap "${python_exec} -c \"import os,sys; sys.path.insert(0, os.environ['ANALYSIS_DIR']); import catalog_long as c; c.mosaic_each_exposure_residuals(basepath=os.environ['BASEPATH'], filtername=os.environ['FILTER'], proposal_id=os.environ['PROPOSAL_ID'], field=os.environ['FIELD'], module=os.environ['MODULE'], residual_kind='iterative', iteration_label='iter3')\"")
         echo "Submitted mosaic job ${job} for ${target} ${filter} (module=${bg_mod})" >&2
         mosaic_jobs+=("${job}")
     done

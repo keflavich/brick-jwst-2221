@@ -31,7 +31,7 @@ logdir=/blue/adamginsburg/adamginsburg/logs/sgrb2_jwst/
 mkdir -p "${logdir}"
 
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
 proposal_id=5365; target=sgrb2; field=001
 basepath=/orange/adamginsburg/jwst/sgrb2
@@ -119,7 +119,7 @@ submit_mosaics() {
             --account=astronomy-dept --qos=astronomy-dept-b \
             --ntasks=1 --nodes=1 --mem=24gb --time=24:00:00 \
             --wrap "${python_exec} -c \"import sys; sys.path.insert(0,'${analysis_dir}'); \
-import crowdsource_catalogs_long as c; \
+import catalog_long as c; \
 [c.mosaic_each_exposure_residuals(basepath='${basepath}', \
   filtername='${filter}', proposal_id='${proposal_id}', field='${field}', \
   module='${agg_mod}', residual_kind=kind, desat=False, bgsub=False, \

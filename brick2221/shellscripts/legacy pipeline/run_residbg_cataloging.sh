@@ -24,7 +24,7 @@ exit 1
 #
 #   1. Build per-frame ``*_iter3_daophot_iterative_residual_smoothed_bg.fits``
 #      via brick2221/analysis/make_iter3_residual_bgmaps.py (3x3 median).
-#   2. Submit per-frame array jobs that call crowdsource_catalogs_long.py
+#   2. Submit per-frame array jobs that call catalog_long.py
 #      with ``--use-iter3-residual-bg --iteration-label=iter2residbg``
 #      (uses iter1 basic per-frame catalog as the seed; same logic as
 #      iter2 but with the residual-derived background subtraction).
@@ -42,7 +42,7 @@ set -euo pipefail
 export STPSF_PATH=/orange/adamginsburg/repos/webbpsf/data/
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
-script=${analysis_dir}/crowdsource_catalogs_long.py
+script=${analysis_dir}/catalog_long.py
 bgmap_builder=${analysis_dir}/make_iter3_residual_bgmaps.py
 BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 
