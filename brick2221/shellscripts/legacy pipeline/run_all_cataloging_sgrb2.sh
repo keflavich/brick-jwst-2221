@@ -24,7 +24,7 @@ logdir=/blue/adamginsburg/adamginsburg/logs/sgrb2_jwst/
 mkdir -p "${logdir}"
 
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/crowdsource_catalogs_long.py
+script=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis/catalog_long.py
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
 proposal_id=5365
 target=sgrb2
@@ -153,7 +153,7 @@ for filter in F150W F182M F187N F210M F212N F300M F360M F405N F410M F466N F480M;
 
     # Aggregate all plain iter1/iter2 deps for the per-filter residual mosaics.
     # Mosaics for SW use 'nrca' and 'nrcb' aggregate modules (expanded in the
-    # mosaic function via the sgrb2 branch added to crowdsource_catalogs_long.py).
+    # mosaic function via the sgrb2 branch added to catalog_long.py).
     # Mosaics for LW use 'nrcalong' and 'nrcblong' directly.
     iter1_dep=$(IFS=:; echo "${plain_iter1_ids[*]}")
     iter2_dep=$(IFS=:; echo "${plain_iter2_ids[*]}")

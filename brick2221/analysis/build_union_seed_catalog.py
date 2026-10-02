@@ -13,7 +13,7 @@ Per-frame ``_satstar_catalog.fits`` rows are folded in as well so the
 union seed list reproduces the satstar handling end-to-end.
 
 The output catalog is consumed by the iter3 entry point in
-``crowdsource_catalogs_long.do_photometry_step`` via
+``catalog_long.do_photometry_step`` via
 ``--seed-catalog=<this file>``.
 
 Schema
@@ -356,7 +356,7 @@ def build_union(target):
     out['source_id_union'] = np.arange(len(head), dtype=np.int64)
     # Store sky coords as plain ra/dec floats *and* as an object-dtype
     # ``skycoord_ref`` column holding SkyCoord instances. The latter is
-    # what ``_resolve_seed_skycoords`` in crowdsource_catalogs_long.py
+    # what ``_resolve_seed_skycoords`` in catalog_long.py
     # looks for; naming it 'skycoord_ref' (instead of 'skycoord') means
     # the augmentation routine builds a fresh object-dtype 'skycoord'
     # column at runtime, matching what the per-frame detection_table has

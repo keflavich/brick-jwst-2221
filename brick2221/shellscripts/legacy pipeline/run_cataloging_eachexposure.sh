@@ -25,7 +25,7 @@ bundle_size=${BUNDLE_SIZE:-1}
 export STPSF_PATH=/orange/adamginsburg/repos/webbpsf/data/
 logdir=/blue/adamginsburg/adamginsburg/brick_logs/
 python_exe=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
-analysis_script=/blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py
+analysis_script=/blue/adamginsburg/adamginsburg/jwst/brick/analysis/catalog_long.py
 analysis_dir=/blue/adamginsburg/adamginsburg/jwst/brick/analysis
 basepath=/blue/adamginsburg/adamginsburg/jwst/brick
 

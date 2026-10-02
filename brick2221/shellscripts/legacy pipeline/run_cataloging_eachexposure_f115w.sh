@@ -14,7 +14,7 @@ daoloop=("--daophot --skip-crowdsource" " ")
 bundle_size=${BUNDLE_SIZE:-1}
 
 python_exe=/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python
-analysis_script=/blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py
+analysis_script=/blue/adamginsburg/adamginsburg/jwst/brick/analysis/catalog_long.py
 
 compute_array_range() {
     local filter="$1" module="$2" dao="$3" iter_label="$4"
@@ -62,7 +62,7 @@ done
 # for filter in F410M F405N F466N; do
 #     for module in nrca nrcb; do
 #         for dao in "--daophot --skip-crowdsource" " "; do
-#             sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
+#             sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/catalog_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
 #         done
 #     done
 # done
@@ -71,7 +71,7 @@ done
 #     for modnum in 1 2 3 4; do
 #         for module in nrca${modnum} nrcb${modnum}; do
 #             for dao in "--daophot --skip-crowdsource" " "; do
-#                 sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/crowdsource_catalogs_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
+#                 sbatch --array=0-23 --job-name=webb-cat-${filter}-${module}-eachexp-cloudc --output=webb-cat-${filter}-${module}-eachexp-cloudc_%j-%A_%a.log  --account=astronomy-dept --qos=astronomy-dept-b --ntasks=1 --nodes=1 --mem=${mem} --time=96:00:00 --wrap "/blue/adamginsburg/adamginsburg/miniconda3/envs/python312/bin/python /blue/adamginsburg/adamginsburg/jwst/brick/analysis/catalog_long.py --filternames=${filter} --modules=${module} --each-exposure ${dao} --target=cloudc --each-suffix=destreak_o002_crf"
 #             done
 #         done
 #     done

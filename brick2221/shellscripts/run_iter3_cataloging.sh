@@ -30,7 +30,7 @@ set -euo pipefail
 export STPSF_PATH=/orange/adamginsburg/repos/webbpsf/data/
 python_exec=/blue/adamginsburg/adamginsburg/miniconda3/envs/python313/bin/python
 analysis_dir=/orange/adamginsburg/repos/brick-jwst-2221/brick2221/analysis
-script=${analysis_dir}/crowdsource_catalogs_long.py
+script=${analysis_dir}/catalog_long.py
 seed_builder=${analysis_dir}/build_union_seed_catalog.py
 BUNDLE_SIZE=${BUNDLE_SIZE:-1}
 ITER3_CPUS_PER_TASK=${ITER3_CPUS_PER_TASK:-4}
@@ -179,12 +179,12 @@ case "${target}" in
     cloudc)
         basepath=/blue/adamginsburg/adamginsburg/jwst/cloudc
         # cloudc data is on proposal 2221 field 002 (per
-        # field_to_reg_mapping in crowdsource_catalogs_long.py and
+        # field_to_reg_mapping in catalog_long.py and
         # obs_filters in merge_catalogs.py).  The earlier values
         # (proposal_id=1182, field=004) collided with brick's
         # proposal-1182 identifier and made the script silently
         # skip cloudc -- compute_array_range got an empty list
-        # because crowdsource_catalogs_long.py raised KeyError on
+        # because catalog_long.py raised KeyError on
         # ``reg_to_field_mapping['cloudc']``.
         proposal_id=2221
         field=002
@@ -459,7 +459,7 @@ submit_catalog_array() {
     # The manual-iteration pipeline (current default) runs ALL of a
     # (filter, module[, chunk])'s exposures sequentially in ONE in-process job
     # and REFUSES to run under a SLURM array (SLURM_ARRAY_TASK_ID set -> SystemExit;
-    # see crowdsource_catalogs_long.py "cannot be split across a SLURM array").
+    # see catalog_long.py "cannot be split across a SLURM array").
     # So submit a single non-array job and defensively unset the array env in the
     # wrap.  ${range} is now only a skip-gate (empty -> nothing missing -> skip);
     # --skip-if-done makes the in-process loop skip the already-done frames.
