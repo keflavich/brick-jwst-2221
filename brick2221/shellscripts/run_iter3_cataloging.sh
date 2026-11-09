@@ -177,7 +177,7 @@ case "${target}" in
         mem_long=64gb
         ;;
     cloudc)
-        basepath=/blue/adamginsburg/adamginsburg/jwst/cloudc
+        basepath=/orange/adamginsburg/jwst/cloudc
         # cloudc data is on proposal 2221 field 002 (per
         # field_to_reg_mapping in crowdsource_catalogs_long.py and
         # obs_filters in merge_catalogs.py).  The earlier values

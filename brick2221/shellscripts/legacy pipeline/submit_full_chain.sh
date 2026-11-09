@@ -86,7 +86,7 @@ case "$target" in
     logdir=/blue/adamginsburg/adamginsburg/brick_logs
     array_range="0-23" ;;
   cloudc)
-    basepath=/blue/adamginsburg/adamginsburg/jwst/cloudc ; proposal_id=2221
+    basepath=/orange/adamginsburg/jwst/cloudc ; proposal_id=2221
     field=002 ; fields=(002) ; ref_filter=f405n
     logdir=/blue/adamginsburg/adamginsburg/cloudc_logs
     array_range="0-23" ;;

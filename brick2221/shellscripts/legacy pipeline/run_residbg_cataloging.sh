@@ -115,7 +115,7 @@ case "${target}" in
         mem_short=96gb; mem_long=64gb
         ;;
     cloudc)
-        basepath=/blue/adamginsburg/adamginsburg/jwst/cloudc
+        basepath=/orange/adamginsburg/jwst/cloudc
         proposal_id=2221
         field=002
         each_suffix=destreak_o002_crf

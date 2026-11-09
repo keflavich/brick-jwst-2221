@@ -70,10 +70,10 @@ TARGETS = {
         'output_path': '/blue/adamginsburg/adamginsburg/jwst/brick/catalogs/seed_union_iter3_brick.fits',
     },
     'cloudc': {
-        'catalog_dir': '/blue/adamginsburg/adamginsburg/jwst/cloudc/catalogs',
+        'catalog_dir': '/orange/adamginsburg/jwst/cloudc/catalogs',
         'catalog_pattern': '%s_merged_indivexp_merged_daoiterative_iterative.fits',
-        'satstar_glob': '/blue/adamginsburg/adamginsburg/jwst/cloudc/*/pipeline/*destreak*_iter2_satstar_catalog.fits',
-        'output_path': '/blue/adamginsburg/adamginsburg/jwst/cloudc/catalogs/seed_union_iter3_cloudc.fits',
+        'satstar_glob': '/orange/adamginsburg/jwst/cloudc/*/pipeline/*destreak*_iter2_satstar_catalog.fits',
+        'output_path': '/orange/adamginsburg/jwst/cloudc/catalogs/seed_union_iter3_cloudc.fits',
     },
     'sgrb2': {
         'catalog_dir': '/orange/adamginsburg/jwst/sgrb2/catalogs',
