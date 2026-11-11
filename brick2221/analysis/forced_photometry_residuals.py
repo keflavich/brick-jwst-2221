@@ -86,7 +86,7 @@ TARGETS = {
                     'F356W', 'F405N', 'F410M', 'F444W', 'F466N'],
     ),
     'cloudc': dict(
-        basepath = '/blue/adamginsburg/adamginsburg/jwst/cloudc',
+        basepath = '/orange/adamginsburg/jwst/cloudc',
         filters  = ['F182M', 'F187N', 'F212N', 'F405N', 'F410M', 'F466N'],
     ),
     'sgrb2': dict(

@@ -42,7 +42,7 @@ from scipy.ndimage import median_filter
 TARGET_BASEPATHS = {
     'sickle': '/orange/adamginsburg/jwst/sickle',
     'brick':  '/blue/adamginsburg/adamginsburg/jwst/brick',
-    'cloudc': '/blue/adamginsburg/adamginsburg/jwst/cloudc',
+    'cloudc': '/orange/adamginsburg/jwst/cloudc',
     'sgrb2':  '/orange/adamginsburg/jwst/sgrb2',
 }
 

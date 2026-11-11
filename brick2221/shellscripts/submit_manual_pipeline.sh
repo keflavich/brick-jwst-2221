@@ -147,7 +147,7 @@ case "$target" in
     fields=(004) ; python_target=brick
     logdir=/blue/adamginsburg/adamginsburg/brick_logs ;;
   cloudc)
-    basepath=/blue/adamginsburg/adamginsburg/jwst/cloudc ; proposal_id=2221
+    basepath=/orange/adamginsburg/jwst/cloudc ; proposal_id=2221
     fields=(002)
     logdir=/blue/adamginsburg/adamginsburg/cloudc_logs ;;
   sgrb2)
